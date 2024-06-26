@@ -1,3 +1,5 @@
+// https://eigen.tuxfamily.org/dox/group__TutorialArrayClass.html
+
 #include <iostream>
 #include "../Eigen/Dense"
 
