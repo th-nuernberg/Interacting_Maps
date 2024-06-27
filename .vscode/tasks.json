@@ -11,9 +11,9 @@
 				"${file}",
 				"-o",
 				"${fileDirname}/output/${fileBasenameNoExtension}.out",
-				"-I ${fileDirname}/eigen/",
+				"-I${workspaceFolder}/eigen/",
 				"-Wall",
-				"-Wextra"
+				"-Wextra",
 			],
 			"options": {
 				"cwd": "${fileDirname}"

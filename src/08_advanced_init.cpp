@@ -1,6 +1,6 @@
 // https://eigen.tuxfamily.org/dox/group__TutorialAdvancedInitialization.html
 #include <iostream>
-#include "../Eigen/Dense"
+#include <Eigen/Dense>
 
 using namespace Eigen;
 
