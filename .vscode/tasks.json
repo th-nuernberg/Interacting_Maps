@@ -10,10 +10,10 @@
 				"-g",
 				"${file}",
 				"-o",
-				"${fileDirname}/output/${fileBasenameNoExtension}.out",
-				"-I${workspaceFolder}/eigen/",
+				"${workspaceFolder}/output/${fileBasenameNoExtension}.out",
+				"-I${workspaceFolder}/eigen/Eigen",
 				"-Wall",
-				"-Wextra",
+				"-Wextra"
 			],
 			"options": {
 				"cwd": "${fileDirname}"
@@ -25,7 +25,7 @@
 				"kind": "build",
 				"isDefault": true
 			},
-			"detail": "compiler: /usr/bin/g++",
+			"detail": "compiler: /usr/bin/g++"
 		}
 	]
 }
