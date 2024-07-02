@@ -73,6 +73,8 @@
         "*.inc": "cpp",
         "future": "cpp",
         "dense": "cpp",
-        "tensor": "cpp"
+        "tensor": "cpp",
+        "codecvt": "cpp",
+        "alignedvector3": "cpp"
     }
 }

@@ -10,7 +10,7 @@
 				"-g",
 				"${file}",
 				"-o",
-				"${workspaceFolder}/output/${fileBasenameNoExtension}.out",
+				"${workspaceFolder}/output/${fileBasenameNoExtension}",
 				"-I${workspaceFolder}/eigen/Eigen",
 				"-Wall",
 				"-Wextra"
