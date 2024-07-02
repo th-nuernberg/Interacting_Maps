@@ -9,8 +9,10 @@ using namespace Eigen;
 
 struct Event{
     float time;
-    std::vector<float> coordinates;
+    std::vector<int> coordinates;
     int polarity;
+
+    std::string toString() const;
 };
 
 struct Parameters{
@@ -30,9 +32,9 @@ void read_calib(const std::string file, std::vector<float>& calibration_data);
 
 void read_events(const std::string, float start_time, float end_time, std::vector<Event>& events);
 
-void bin_events(std::vector<Event>& events, std::unordered_map<float, std::vector<Event>>& bucketed_events);
+std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bucketsize);
 
-void create_frames(std::unordered_map<float, std::vector<Event>>& bucketed_events, Tensor<float,2>& frames);
+void create_frames(std::vector<std::vector<Event>>& bucketed_events, Tensor<float,2>& frames);
 
 void create_sparse_matrix(int N, Tensor<float,2> V);
 
