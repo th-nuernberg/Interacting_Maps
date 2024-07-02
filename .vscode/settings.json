@@ -76,5 +76,6 @@
         "tensor": "cpp",
         "codecvt": "cpp",
         "alignedvector3": "cpp"
-    }
+    },
+    "CodeGPT.apiKey": "CodeGPT Plus Beta"
 }

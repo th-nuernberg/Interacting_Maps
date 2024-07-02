@@ -7,6 +7,8 @@
 #include "../eigen/unsupported/Eigen/CXX11/Tensor"
 using namespace Eigen;
 
+typedef SparseMatrix<float> SpMat;
+
 struct Event{
     float time;
     std::vector<int> coordinates;
@@ -34,9 +36,9 @@ void read_events(const std::string, float start_time, float end_time, std::vecto
 
 std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bucketsize);
 
-void create_frames(std::vector<std::vector<Event>>& bucketed_events, Tensor<float,2>& frames);
+void create_frames(std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor<float,2>>& frames, int camera_height, int camera_width);
 
-void create_sparse_matrix(int N, Tensor<float,2> V);
+void create_sparse_matrix(int N, Tensor<float,2>& V, SpMat& result);
 
 void undistort_image(Tensor<float,2>& image, int height, int width, Tensor<float,2>& camera_matrix, std::vector<float> distortion_parameters);
 

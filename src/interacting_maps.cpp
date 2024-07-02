@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <string>
 #include <sstream>
+#include <cassert>
 
 namespace fs = std::filesystem;
 
@@ -153,6 +154,50 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float buc
     return buckets;
 }
 
+void create_frames(std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor<float,2>>& frames, int camera_height, int camera_width){
+    for (std::vector<Event> event_vector : bucketed_events){
+        Tensor<float,2> frame(camera_height, camera_width);
+        Tensor<float,2> cum_frame(camera_height, camera_width);
+        for (Event event : event_vector){
+            frame(event.coordinates.at(0), event.coordinates.at(1)) = event.polarity;
+            cum_frame(event.coordinates.at(0), event.coordinates.at(1)) += event.polarity;
+        }
+        frames.push_back(frame);
+    }
+}
+
+void create_sparse_matrix(int N, Tensor<float,2>& V, SpMat& result){
+
+    // Step 1: Create the repeated identity matrix part
+    std::vector<Triplet<float>> tripletList;
+    tripletList.reserve(N*3*2);
+    for (int i = 0; i<N*3; i++){
+        tripletList.push_back(Triplet<float>(i,i%3,1.0));
+    }
+
+    // Step 2: Create the diagonal and off-diagonal values from V
+    int j = 3;
+    array<int,1> one_dim{{V.size()}};
+    Tensor<float,1> k = V.reshape(one_dim);
+    for (int i = 0; i<N*3; i++){
+        std::cout << " i: " << i << " j: " << j << ", " << std::endl;
+        tripletList.push_back(Triplet<float>(i,j,k(i)));
+        if (i%3 == 2){
+            j++;
+        }
+    }
+
+    result.setFromTriplets(tripletList.begin(), tripletList.end());
+}
+
+void find_c(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3>& calibration_matrix){
+    float height = tan(view_angle_x/2);
+    float width = tan(view_angle_y/2);
+    N = N_x*N_y;
+    
+}
+
+
 int main() {
     // Create results_folder
     std::string folder_name = "results";
@@ -178,6 +223,18 @@ int main() {
     // Bin events
     std::vector<std::vector<Event>> bucketed_events;
     bucketed_events = bin_events(event_data, 0.05);
+
+    // Create frames
+    std::vector<Tensor<float,2>> frames;
+    create_frames(bucketed_events, frames, 180, 240);
+    
+    // Test Sparsematrix creation
+    int M = 100;
+    int N = M*M;
+    SpMat m(N*3,N+3);
+    Tensor<float,2> V(N,3);
+    V.setRandom();
+    create_sparse_matrix(N, V, m);
 
     return 0;
 }
