@@ -54,7 +54,7 @@ void vectorfield2image(Tensor<float,3> vectorfield);
 
 void create_VIFG_image(Tensor<float,2>& V, Tensor<float,2>& I, Tensor<float,3>& F, Tensor<float,3>& G, Tensor<float,2>& VIFG);
 
-void find_c(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3>& calibration_matrix);
+void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3>& C, Tensor<float,3>& dxdC, Tensor<float,3>& dydC);
 
 void update_F_from_G(Tensor<float,3>& F, Tensor<float,2>& V, Tensor<float,3>& G, float lr, float weight_FG);
 

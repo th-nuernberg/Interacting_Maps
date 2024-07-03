@@ -75,7 +75,10 @@
         "dense": "cpp",
         "tensor": "cpp",
         "codecvt": "cpp",
-        "alignedvector3": "cpp"
+        "alignedvector3": "cpp",
+        "*.traits": "cpp",
+        "fft": "cpp",
+        "mprealsupport": "cpp"
     },
     "CodeGPT.apiKey": "CodeGPT Plus Beta"
 }
