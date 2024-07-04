@@ -12,8 +12,13 @@
 				"-o",
 				"${workspaceFolder}/output/${fileBasenameNoExtension}",
 				"-I${workspaceFolder}/eigen/Eigen",
+				"-L/usr/lib/x86_64-linux-gnu/",
+				"-lopenblas",
+				"-lpthread",
+				"-llapacke",
 				"-Wall",
-				"-Wextra"
+				"-Wextra",
+				"-O3"
 			],
 			"options": {
 				"cwd": "${fileDirname}"
