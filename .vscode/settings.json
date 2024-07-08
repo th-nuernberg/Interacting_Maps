@@ -78,7 +78,8 @@
         "alignedvector3": "cpp",
         "*.traits": "cpp",
         "fft": "cpp",
-        "mprealsupport": "cpp"
+        "mprealsupport": "cpp",
+        "sparse": "cpp"
     },
     "CodeGPT.apiKey": "CodeGPT Plus Beta"
 }

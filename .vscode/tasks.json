@@ -18,7 +18,9 @@
 				"-llapacke",
 				"-Wall",
 				"-Wextra",
-				"-O3"
+				"-O3",
+				"-march=native",
+				"-fopenmp"
 			],
 			"options": {
 				"cwd": "${fileDirname}"
