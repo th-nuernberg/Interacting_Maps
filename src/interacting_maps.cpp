@@ -237,7 +237,27 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
     std::cout << dydC << std::endl;
 }
 
-void update_F_from_G(Tensor<float,3>& F, Tensor<float,2>& V, Tensor<float,3>& G, float lr, float weight_FG){
+void update_F_from_G(Tensor<float,3>& F, const Tensor<float,2>& V, const Tensor<float,3>& G, const float lr, const float weight_FG){
+    
+    array<IndexPair<int>, 1>dot_prod_dims = {IndexPair<int>(2,2)};
+    Eigen::Tensor<float, 2> dot_prod = F.contract(G, dot_prod_dims);
+    Eigen::Tensor<float, 2> norm_G = G.contract(G, dot_prod_dims);
+
+    int dim1 = 180;
+    int dim2 = 240;
+    int dim3 = 3;
+
+    for (int i = 0; i<dim1)
+
+
+
+
+
+
+
+
+
+
     const auto& dimensions = F.dimensions();
     Tensor<float, 2> G_norm(dimensions[0], dimensions[1]);
     norm_tensor_along_dim3(G, G_norm);
