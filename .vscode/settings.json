@@ -79,7 +79,20 @@
         "*.traits": "cpp",
         "fft": "cpp",
         "mprealsupport": "cpp",
-        "sparse": "cpp"
+        "sparse": "cpp",
+        "iterativelinearsolvers": "cpp",
+        "core": "cpp",
+        "superlusupport": "cpp",
+        "*.evaluator": "cpp",
+        "adolcforward": "cpp",
+        "autodiff": "cpp",
+        "bvh": "cpp",
+        "eulerangles": "cpp",
+        "kroneckerproduct": "cpp",
+        "numericaldiff": "cpp",
+        "openglsupport": "cpp",
+        "specialfunctions": "cpp",
+        "splines": "cpp"
     },
     "CodeGPT.apiKey": "CodeGPT Plus Beta"
 }
