@@ -16,11 +16,39 @@ std::vector<double> GenerateRandomVector(int NumberCount,int minimum, int maximu
     return values;
 }
 
+// void update_R(Eigen::MatrixXd &V, Eigen::VectorXd &R_extended, Eigen::VectorXd &points, int N){
+//     // Initialize the matrix with random sparse entries
+//     // Flatten the matrix to a vector
+//     Eigen::SparseMatrix<double> A(N*3, N+3);
+//     Eigen::VectorXd V_flat = Eigen::Map<Eigen::VectorXd>(V.data(), V.size());
+//     std::vector<Eigen::Triplet<double>> tripletList;
+//     tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
+//     int j = 3;
+//     for (int i = 0; i < N*3; i++) {
+//         tripletList.emplace_back(i, i%3, static_cast<double>(1.0)); // Diagonal element
+//         tripletList.emplace_back(i, j, static_cast<double>(V_flat[i]));
+//         if (i%3 == 2){
+//             j++;
+//         }
+//     }
+    
+//     A.setFromTriplets(tripletList.begin(), tripletList.end());
+
+//     // Perform the computation and measure the time
+//     // Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
+//     Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver;
+//     // solver.setTolerance(1e-6);
+//     solver.setTolerance(1e-4);
+//     solver.compute(A);
+//     R_extended = solver.solveWithGuess(points, R_extended);
+// }
+
 int main() {
+    std::cout << "test" << std::endl;
     int n_threads = 1;
     Eigen::setNbThreads(n_threads);
     constexpr int N = 180*240;
-    constexpr int M = 1000;
+    constexpr int M = 1;
     Eigen::SparseMatrix<double> A(N*3, N+3);
     Eigen::VectorXd b(N*3);
     Eigen::VectorXd x = Eigen::VectorXd::Zero(N+3);
@@ -32,13 +60,11 @@ int main() {
     std::vector<double> b_data = GenerateRandomVector(N*3, -10, 10);
     std::vector<double> iteration_data = GenerateRandomVector(N*3*2*M, -10, 10);
 
-    
+    std::cout << "test" << std::endl;
+
     auto start = std::chrono::high_resolution_clock::now();
     
     for (int k = 0; k<M; k++){
-        // Define the sparse matrix and the right-hand side vector
-
-
         // Initialize the matrix with random sparse entries
         std::vector<Eigen::Triplet<double>> tripletList;
         tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
@@ -63,7 +89,7 @@ int main() {
         Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver;
         // solver.setTolerance(1e-6);
         solver.setTolerance(1e-4);
-
+        std::cout << "A rows: " << A.rows() << " cols: " << A.cols() << std::endl;
         solver.compute(A);
         if(solver.info() != Eigen::Success) {
             std::cerr << "Decomposition failed during iteration " << k << std::endl;
@@ -72,6 +98,8 @@ int main() {
         }
 
         // x = solver.solve(b);
+        std::cout << "b rows: " << b.rows() << " cols: " << b.cols() << std::endl;
+        std::cout << "x rows: " << x.rows() << " cols: " << x.cols() << std::endl;
         x = solver.solveWithGuess(b, x);
         if(solver.info() != Eigen::Success) {
             std::cerr << "Solving failed during iteration " << k << std::endl;
