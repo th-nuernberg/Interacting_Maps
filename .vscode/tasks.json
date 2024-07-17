@@ -3,7 +3,7 @@
 	"tasks": [
 		{
 			"type": "cppbuild",
-			"label": "C/C++: g++ build active file for pybind11",
+			"label": "Build with Pybind11",
 			"command": "/usr/bin/g++",
 			"args": [
 				"-fdiagnostics-color=always",
@@ -56,7 +56,7 @@
 		},
 		{
 			"type": "cppbuild",
-			"label": "C/C++: g++ build active file",
+			"label": "Standard Build with Eigen",
 			"command": "/usr/bin/g++",
 			"args": [
 				"-fdiagnostics-color=always",
@@ -74,10 +74,49 @@
 				"-llapacke",
 				"-Wall",
 				"-Wextra",
+				"-ffast-math",
 				// "-shared",
 				"-O3",
 				"-march=native",
 				"-fopenmp"
+			],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "compiler: /usr/bin/g++"
+		},
+		{
+			"type": "cppbuild",
+			"label": "Debug Build g++",
+			"command": "/usr/bin/g++",
+			"args": [
+				"-fdiagnostics-color=always",
+				"-I${workspaceFolder}/eigen/",
+				// "-fPIC",
+				// "-I/usr/include/python3.10",
+				// "-I/home/daniel/Code/Interacting_Maps_cpp/.venv/lib/python3.10/site-packages/pybind11/include",
+				"-g",
+				"${file}",
+				"-L/usr/lib/x86_64-linux-gnu/",
+				"-o",
+				"${workspaceFolder}/output/${fileBasenameNoExtension}",
+				"-lopenblas",
+				"-lpthread",
+				"-llapacke",
+				"-Wall",
+				"-Wextra",
+				// "-ffast-math",
+				// "-shared",
+				// "-O3",
+				// "-march=native",
+				// "-fopenmp"
 			],
 			"options": {
 				"cwd": "${fileDirname}"
