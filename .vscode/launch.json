@@ -28,7 +28,7 @@
             ],
             "linux": {
                 "MIMode": "gdb",
-                "miDebuggerPath": "/usr/bing/gdb"
+                "miDebuggerPath": "/usr/bin/gdb"
               },
               "osx": {
                 "MIMode": "lldb"

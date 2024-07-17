@@ -4,7 +4,9 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/usr/lib/x86_64-linux-gnu/"
+                "/usr/lib/x86_64-linux-gnu/",
+                "${workspaceFolder}/eigen",
+                "${workspaceFolder}/autodiff"
             ],
             "defines": [],
             "cStandard": "c17",

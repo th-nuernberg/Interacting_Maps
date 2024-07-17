@@ -3,7 +3,7 @@
 	"tasks": [
 		{
 			"type": "cppbuild",
-			"label": "C/C++: g++ build active file",
+			"label": "Build with Eigen and autodiff",
 			"command": "/usr/bin/g++",
 			"args": [
 				"-fdiagnostics-color=always",
@@ -11,7 +11,8 @@
 				"${file}",
 				"-o",
 				"${workspaceFolder}/output/${fileBasenameNoExtension}",
-				"-I${workspaceFolder}/eigen/Eigen",
+				"-I${workspaceFolder}/eigen",
+				"-I${workspaceFolder}/autodiff",
 				"-L/usr/lib/x86_64-linux-gnu/",
 				"-lopenblas",
 				"-lpthread",
@@ -21,6 +22,40 @@
 				"-O3",
 				"-march=native",
 				"-fopenmp"
+			],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "compiler: /usr/bin/g++"
+		},
+		{
+			"type": "cppbuild",
+			"label": "Debug Build with Eigen and autodiff",
+			"command": "/usr/bin/g++",
+			"args": [
+				"-fdiagnostics-color=always",
+				"-g",
+				"${file}",
+				"-o",
+				"${workspaceFolder}/output/${fileBasenameNoExtension}",
+				"-I${workspaceFolder}/eigen",
+				"-I${workspaceFolder}/autodiff",
+				"-L/usr/lib/x86_64-linux-gnu/",
+				"-lopenblas",
+				"-lpthread",
+				"-llapacke",
+				"-Wall",
+				"-Wextra",
+				// "-O3",
+				// "-march=native",
+				// "-fopenmp"
 			],
 			"options": {
 				"cwd": "${fileDirname}"
