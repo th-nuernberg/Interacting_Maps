@@ -15,11 +15,11 @@ void update_R(Eigen::Ref<Eigen::MatrixXd> &V, Eigen::Ref<Eigen::VectorXd> &R_ext
     // std::cout << "V rows: " << V.rows() << " cols: " << V.cols() << std::endl;
 
     Eigen::SparseMatrix<double> A(N * 3, N + 3);
-    std::cout << "A rows: " << A.rows() << " cols: " << A.cols() << std::endl;
-    std::cout << "x rows: " << R_extended.rows() << " cols: " << R_extended.cols() << std::endl;
-    std::cout << "b rows: " << points.rows() << " cols: " << points.cols() << std::endl;
+    // std::cout << "A rows: " << A.rows() << " cols: " << A.cols() << std::endl;
+    // std::cout << "x rows: " << R_extended.rows() << " cols: " << R_extended.cols() << std::endl;
+    // std::cout << "b rows: " << points.rows() << " cols: " << points.cols() << std::endl;
     Eigen::VectorXd V_flat = Eigen::Map<Eigen::VectorXd>(V.data(), V.size());
-    std::cout << "Test1" << std::endl;
+    // std::cout << "Test1" << std::endl;
     std::vector<Eigen::Triplet<double>> tripletList;
     tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
     int j = 3;
@@ -30,16 +30,16 @@ void update_R(Eigen::Ref<Eigen::MatrixXd> &V, Eigen::Ref<Eigen::VectorXd> &R_ext
             j++;
         }
     }
-    std::cout << "Test2" << std::endl;
+    // std::cout << "Test2" << std::endl;
     
     A.setFromTriplets(tripletList.begin(), tripletList.end());
 
-    std::cout << "Test3" << std::endl;
+    // std::cout << "Test3" << std::endl;
     // Create and configure the solver
     Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver;
     solver.setTolerance(1e-4); // Set tolerance
     solver.compute(A);
-    std::cout << "Test4" << std::endl;
+    // std::cout << "Test4" << std::endl;
     // Solve for R_extended
     R_extended = solver.solveWithGuess(points, R_extended);
 }

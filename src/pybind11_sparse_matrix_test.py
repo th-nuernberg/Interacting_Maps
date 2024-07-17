@@ -5,7 +5,7 @@ import pybind11_sparse_matrix
 
 M = 5
 N = M*M
-V = np.asarray(np.random.random((M,M*3)), order='F')
+V = np.asarray(np.random.random((M*M,3)), order='F')
 R_extended = np.asarray(np.random.random((N+3)), order='F')
 points = np.asarray(np.random.random((N*3)), order='F')
 

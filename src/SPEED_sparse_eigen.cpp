@@ -48,7 +48,7 @@ int main() {
     int n_threads = 1;
     Eigen::setNbThreads(n_threads);
     constexpr int N = 180*240;
-    constexpr int M = 1;
+    constexpr int M = 1000;
     Eigen::SparseMatrix<double> A(N*3, N+3);
     Eigen::VectorXd b(N*3);
     Eigen::VectorXd x = Eigen::VectorXd::Zero(N+3);
@@ -89,7 +89,7 @@ int main() {
         Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver;
         // solver.setTolerance(1e-6);
         solver.setTolerance(1e-4);
-        std::cout << "A rows: " << A.rows() << " cols: " << A.cols() << std::endl;
+        // std::cout << "A rows: " << A.rows() << " cols: " << A.cols() << std::endl;
         solver.compute(A);
         if(solver.info() != Eigen::Success) {
             std::cerr << "Decomposition failed during iteration " << k << std::endl;
@@ -98,8 +98,8 @@ int main() {
         }
 
         // x = solver.solve(b);
-        std::cout << "b rows: " << b.rows() << " cols: " << b.cols() << std::endl;
-        std::cout << "x rows: " << x.rows() << " cols: " << x.cols() << std::endl;
+        // std::cout << "b rows: " << b.rows() << " cols: " << b.cols() << std::endl;
+        // std::cout << "x rows: " << x.rows() << " cols: " << x.cols() << std::endl;
         x = solver.solveWithGuess(b, x);
         if(solver.info() != Eigen::Success) {
             std::cerr << "Solving failed during iteration " << k << std::endl;
