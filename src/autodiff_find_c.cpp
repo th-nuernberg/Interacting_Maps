@@ -70,36 +70,36 @@ void find_c(int N_x, int N_y, float view_angle_x = 3.1415 / 4, float view_angle_
         C_y.push_back(row_Cy);
     }
 
-    // Output the results
-    std::cout << "Camera Calibration Map: \n";
-    for (const auto& vec : camera_calibration_map) {
-        for (const auto& vec1 : vec) {
-            for (const auto& val : vec1) {
-                std::cout << val << " ";
-            }
-            std::cout << std::endl;
-        }
-    }
+    // // Output the results
+    // std::cout << "Camera Calibration Map: \n";
+    // for (const auto& vec : camera_calibration_map) {
+    //     for (const auto& vec1 : vec) {
+    //         for (const auto& val : vec1) {
+    //             std::cout << val << " ";
+    //         }
+    //         std::cout << std::endl;
+    //     }
+    // }
 
-    std::cout << "\nC_x: \n";
-    for (const auto& vec : C_x) {
-        for (const auto& vec1 : vec) {
-            for (const auto& val : vec1) {
-                std::cout << val << " ";
-            }
-            std::cout << std::endl;
-        }
-    }
+    // std::cout << "\nC_x: \n";
+    // for (const auto& vec : C_x) {
+    //     for (const auto& vec1 : vec) {
+    //         for (const auto& val : vec1) {
+    //             std::cout << val << " ";
+    //         }
+    //         std::cout << std::endl;
+    //     }
+    // }
 
-    std::cout << "\nC_y: \n";
-    for (const auto& vec : C_y) {
-        for (const auto& vec1 : vec) {
-            for (const auto& val : vec1) {
-                std::cout << val << " ";
-            }
-            std::cout << std::endl;
-        }
-    }
+    // std::cout << "\nC_y: \n";
+    // for (const auto& vec : C_y) {
+    //     for (const auto& vec1 : vec) {
+    //         for (const auto& val : vec1) {
+    //             std::cout << val << " ";
+    //         }
+    //         std::cout << std::endl;
+    //     }
+    // }
 }
 
 int main() {
