@@ -54,7 +54,8 @@ void vectorfield2image(Tensor<float,3> vectorfield);
 
 void create_VIFG_image(Tensor<float,2>& V, Tensor<float,2>& I, Tensor<float,3>& F, Tensor<float,3>& G, Tensor<float,2>& VIFG);
 
-void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3>& C, Tensor<float,3>& dxdC, Tensor<float,3>& dydC);
+// void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3>& C, Tensor<float,3>& dxdC, Tensor<float,3>& dydC);
+void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3>& CCM, Tensor<float,3>& C_x, Tensor<float,3>& C_y);
 
 void update_F_from_G(Tensor<float,3>& F, Tensor<float,2>& V, Tensor<float,3>& G, float lr, float weight_FG);
 
@@ -70,13 +71,13 @@ void update_F_from_R(Tensor<float,3>& F, Tensor<float,3>& C, Tensor<float,3>& Cx
 
 void update_R_from_F(Tensor<float,1> R, Tensor<float,3>& F, Tensor<float,3>& C, Tensor<float,3>& Cx, Tensor<float,3>& Cy, float weight_RF, int N);
 
-float vector_distance(Tensor<float,1>& vec1, Tensor<float,1>& vec2);
+void vector_distance(Tensor<float,3> &vec1, Tensor<float,3> &vec2, Tensor<float,2> &distance);
 
-void m23(Tensor<float,3>& F, Tensor<float,3>& Cx, Tensor<float,3>& Cy, Tensor<float,3>& result);
+void m23(Tensor<float,3>& In, Tensor<float,3>& Cx, Tensor<float,3>& Cy, Tensor<float,3>& Out);
 
-void m32(Tensor<float,2>& V, Tensor<float,3>& Cx, Tensor<float,3>& Cy, Tensor<float,2>& result);
+void m32(Tensor<float,3>& In, Tensor<float,3>& Cx, Tensor<float,3>& Cy, Tensor<float,3>& Out);
 
-void interacting_maps_step(Tensor<float,2>& V, Tensor<float,2>& cum_V, Tensor<float,2>& I, Tensor<float,3>& F, Tensor<float,3>& G, Tensor<float,1>& R, Tensor<float,3>& C, Tensor<float,3>& Cx, Tensor<float,3>& Cy, std::unordered_map<std::string,float> weights, std::vector<int> permutation, int N);
+void interacting_maps_step(Tensor<float,2>& V, Tensor<float,2>& cum_V, Tensor<float,2>& I, Tensor<float,3>& F, Tensor<float,3>& G, Tensor<float,1>& R, Tensor<float,3>& CCM, Tensor<float,3>& dCdx, Tensor<float,3>& dCdy, std::unordered_map<std::string,float> weights, std::vector<int> permutation, int N);
 
 void interacting_maps(std::vector<Tensor<float,2>>& Vs, std::vector<Tensor<float,2>>& cum_Vs, std::unordered_map<std::string,float> weights, int iterations, std::string results_directory);
 
