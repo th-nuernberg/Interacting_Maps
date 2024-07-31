@@ -5,6 +5,7 @@
 #include "../eigen/Eigen/Dense"
 #include "../eigen/Eigen/Sparse"
 #include "../eigen/unsupported/Eigen/CXX11/Tensor"
+#include <opencv2/opencv.hpp>
 using namespace Eigen;
 
 typedef SparseMatrix<float> SpMat;
@@ -32,7 +33,7 @@ std::string  create_folder_and_update_gitignore(const std::string& foldername);
 
 void read_calib(const std::string file, std::vector<float>& calibration_data);
 
-void read_events(const std::string, float start_time, float end_time, std::vector<Event>& events);
+void read_events(const std::string file_path, std::vector<Event>& events, float start_time, float end_time, int max_events);
 
 std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bucketsize);
 
@@ -40,11 +41,11 @@ void create_frames(std::vector<std::vector<Event>>& bucketed_events, std::vector
 
 void create_sparse_matrix(int N, Tensor<float,2>& V, SpMat& result);
 
-void undistort_image(Tensor<float,2>& image, int height, int width, Tensor<float,2>& camera_matrix, std::vector<float> distortion_parameters);
+cv::Mat undistort_image(const cv::Mat& image, int height, int width, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters);
 
-void undistort_images(std::vector<Tensor<float,2>>& images, Tensor<float,2> camera_matrix, std::vector<float> distortion_parameters, int height, int width);
+// void undistort_images(std::vector<Tensor<float,2>>& images, Tensor<float,2> camera_matrix, std::vector<float> distortion_parameters, int height, int width);
 
-void undistort_frames(std::vector<Tensor<float,2>>& frames, Tensor<float,2> camera_matrix, std::vector<float> distortion_parameters, int height, int width);
+// void undistort_frames(std::vector<Tensor<float,2>>& frames, Tensor<float,2> camera_matrix, std::vector<float> distortion_parameters, int height, int width);
 
 void frame2grayscale(Tensor<float,2>& frame);
 

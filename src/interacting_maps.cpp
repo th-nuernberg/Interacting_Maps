@@ -9,6 +9,7 @@
 #include <autodiff/forward/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
 
+
 // Define a type for convenience
 // using namespace autodiff;
 
@@ -36,14 +37,8 @@ std::vector<std::string> split_string(std::stringstream sstream, char delimiter)
     return seglist;
 }
 
-// Eigen::VectorXf grab_vector_from_Tensor(const Eigen::Tensor<float,3>& input, Eigen::array<Eigen::Index, 3> offsets) {
-//     Eigen::array<Eigen::Index, 3> dims = input.dimensions();
-//     float page_offset = offsets[2] * dims[0] * dims[1];
-//     float col_offset = offsets[1] * dims[0];
-//     float elements_offset = page_offset + col_offset;
-//     Eigen::Map<Eigen::VectorXf> my_mapped_vec(input.data() + elements_offset, dims[0]);
-//     return my_mapped_vec;
-// }
+// GRADIENT CALCUATIONS
+
 Eigen::VectorXd gradient(const Eigen::VectorXd& x) {
     int n = x.size();
     Eigen::VectorXd grad(n);
@@ -79,7 +74,6 @@ Eigen::MatrixXf gradient_x(const Eigen::MatrixXf& mat) {
     return grad_x;
 }
 
-// Function to compute the gradient along the y-axis
 Eigen::MatrixXf gradient_y(const Eigen::MatrixXf& mat) {
     int rows = mat.rows();
     int cols = mat.cols();
@@ -96,6 +90,8 @@ Eigen::MatrixXf gradient_y(const Eigen::MatrixXf& mat) {
 
     return grad_y;
 }
+
+// TENSOR CASTING
 
 Eigen::VectorXf Tensor2Vector(const Eigen::Tensor<float,1>& input) {
     Eigen::array<Eigen::Index, 1> dims = input.dimensions();
@@ -123,6 +119,100 @@ Eigen::Tensor<float,2> Matrix2Tensor(const Eigen::MatrixXf& input) {
     Eigen::TensorMap<const Eigen::Tensor<float,2>> result(data_ptr, input.rows(), input.cols());
     return result;
 }
+
+// OPENCV PART
+
+cv::Mat eigenToCvMat(const Eigen::MatrixXf& eigen_matrix) {
+    // Map Eigen matrix data to cv::Mat without copying
+    return cv::Mat(eigen_matrix.rows(), eigen_matrix.cols(), CV_32F, (void*)eigen_matrix.data());
+}
+
+cv::Mat eigenToCvMatCopy(const Eigen::MatrixXf& eigen_matrix) {
+    // Create a cv::Mat and copy Eigen matrix data into it
+    cv::Mat mat(eigen_matrix.rows(), eigen_matrix.cols(), CV_32F);
+    for (int i = 0; i < eigen_matrix.rows(); ++i) {
+        for (int j = 0; j < eigen_matrix.cols(); ++j) {
+            mat.at<float>(i, j) = eigen_matrix(i, j);
+        }
+    }
+    return mat;
+}
+
+Eigen::MatrixXf cvMatToEigenMap(const cv::Mat& mat) {
+    // Ensure the cv::Mat has the correct type
+    CV_Assert(mat.type() == CV_32F);
+    Eigen::array<Eigen::Index, 2> dims;
+    dims[0] = mat.rows;
+    dims[1] = mat.cols;
+    const float* data_ptr = mat.ptr<float>();
+    Eigen::Map<const Eigen::MatrixXf> result(data_ptr, dims[0], dims[1]);
+    return result;
+}
+
+Eigen::MatrixXf cvMatToEigenCopy(const cv::Mat& mat) {
+    // Ensure the cv::Mat has the correct type
+    CV_Assert(mat.type() == CV_32F);
+    Eigen::MatrixXf eigen_matrix(mat.rows, mat.cols);
+    for (int i = 0; i < mat.rows; ++i) {
+        for (int j = 0; j < mat.cols; ++j) {
+            eigen_matrix(i, j) = mat.at<float>(i, j);
+        }
+    }
+    return eigen_matrix;
+}
+
+cv::Mat convertToFloat(cv::Mat& mat) {
+    // Ensure the source matrix is of type CV_8U
+    CV_Assert(mat.type() == CV_8U);
+
+    // Convert the source matrix to CV_32F
+    mat.convertTo(mat, CV_32F, 1.0 / 255.0); // Scaling from [0, 255] to [0, 1]
+
+    return mat;
+}
+
+cv::Mat undistort_image(const cv::Mat& image, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
+    // cv::Mat new_camera_matrix;
+    // cv::Rect roi;
+    // new_camera_matrix = cv::getOptimalNewCameraMatrix(camera_matrix, distortion_parameters, cv::Size(width, height), 1, cv::Size(width, height), &roi);
+    cv::Mat undistorted_image;
+    cv::undistort(image, undistorted_image, camera_matrix, distortion_parameters, camera_matrix);
+    return undistorted_image;
+}
+
+std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const Eigen::MatrixXf& camera_matrix, const Eigen::MatrixXf& distortion_coefficients) {
+    std::vector<cv::Mat> undistorted_images;
+
+    // Convert Eigen matrices to cv::Mat
+    cv::Mat camera_matrix_cv = eigenToCvMat(camera_matrix);
+    cv::Mat distortion_coefficients_cv = eigenToCvMat(distortion_coefficients);
+
+    for (const auto& image : images) {
+        undistorted_images.push_back(undistort_image(image, camera_matrix_cv, distortion_coefficients_cv));
+    }
+    return undistorted_images;
+}
+
+// Function to convert Eigen::MatrixXf to grayscale image
+cv::Mat frame2grayscale(const Eigen::MatrixXf& frame) {
+    // Convert Eigen::MatrixXf to cv::Mat
+    cv::Mat frame_cv = eigenToCvMat(frame);
+
+    // Find min and max polarity
+    double min_polarity, max_polarity;
+    cv::minMaxLoc(frame_cv, &min_polarity, &max_polarity);
+
+    // Normalize the frame
+    cv::Mat normalized_frame;
+    frame_cv.convertTo(normalized_frame, CV_32F, 1.0 / (max_polarity - min_polarity), -min_polarity / (max_polarity - min_polarity));
+
+    // Scale to 0-255 and convert to CV_8U
+    cv::Mat grayscale_frame;
+    normalized_frame.convertTo(grayscale_frame, CV_8U, 255.0);
+
+    return grayscale_frame;
+}
+// INTERACTING MAPS
 
 std::vector<int> digitize(const std::vector<double>& input, const std::vector<double>& bins) {
     std::vector<int> indices;
@@ -225,14 +315,14 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float buc
 
     // Find the indices where each event belongs according to its time stamp
     // std::vector<int> indices;
-    int index = 0;
+    int index;
     for (const Event& event : events) {
         // Find the index where 'value' should be inserted to keep 'bins' sorted
         auto it = std::lower_bound(bins.begin(), bins.end(), event.time);
 
         // If the iterator points to the end, timeValue is greater than all bins
         if (it == bins.end()) {
-            index =  bins.size(); // timeValue is beyond the last bin
+            index = bins.size(); // timeValue is beyond the last bin
         }
 
         index = std::distance(bins.begin(), it);
@@ -542,8 +632,8 @@ void update_G_from_I(Tensor<float,3> &G, Tensor<float,3> &I_gradient, float weig
 void update_I_from_V(Tensor<float,2> &I, Tensor<float,2> &cum_V, float weight_IV=0.5, float time_step=0.05){
     I = (1 - weight_IV)*I + weight_IV*cum_V;
     const auto& dimensions = I.dimensions();
-    for (int i; i<dimensions[0]; i++){
-        for (int j; j<dimensions[1]; j++){
+    for (int i = 0; i<dimensions[0]; i++){
+        for (int j = 0; j<dimensions[1]; j++){
             if (I(i,j)>0){
                 if (I(i,j)>time_step){
                     I(i,j) -= time_step;
@@ -572,8 +662,8 @@ void update_I_from_G(Tensor<float,2> &I, Tensor<float,3> &I_gradient, Tensor<flo
     Tensor<float,3> temp_map = G - I_gradient;
     Tensor<float,2> x_update(dimensions);
     Tensor<float,2> y_update(dimensions);
-    for (int i; i<dimensions[0]-1; i++){
-        for (int j; j<dimensions[1]-1; j++){
+    for (int i = 0; i<dimensions[0]-1; i++){
+        for (int j = 0; j<dimensions[1]-1; j++){
             if (i==0){
                 x_update(i,j) = temp_map(i,j,0);
             }
@@ -883,10 +973,6 @@ int main() {
     std::cout << "Implemented transformation function m32" << std::endl;
     std::cout << A << std::endl;
     std::cout << A2 << std::endl;
-    return 0;
-
-
-
 
     std::unordered_map<std::string,float> weights;
     weights["weight_FG"] = 0.2;
@@ -902,5 +988,49 @@ int main() {
     std::vector<int> permutation {0,1,2,3,4,5,6};
 
     // interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, weights, permutation, NM);
-    std::cout << "Implemented interacting maps update step" << std::endl;
+    // std::cout << "Implemented interacting maps update step" << std::endl;
+
+    // TESTING OPENCV CONVERSION
+    Eigen::MatrixXf eigen_matrix = Eigen::MatrixXf::Constant(3, 3, 2.0);
+    cv::Mat mat = eigenToCvMat(eigen_matrix);
+    std::cout << "Implemented Eigen to CV map" << std::endl << mat << std::endl;
+
+    cv::Mat mat2(3, 3, CV_32F, cv::Scalar::all(1));
+    Eigen::MatrixXf eigen_matrix2 = cvMatToEigenMap(mat2);
+    std::cout << "Implemented Eigen to CV map" << std::endl << eigen_matrix2 << std::endl;
+
+    // Create an example Eigen matrix
+    Eigen::MatrixXf matrix = Eigen::MatrixXf::Random(100,100);
+
+    // Convert to grayscale image
+    cv::Mat grayscale_image = frame2grayscale(matrix);
+
+    // Display the result
+    cv::imshow("Grayscale Image", grayscale_image);
+    cv::waitKey(0);
+
+    // cv::Mat sample_image = (cv::Mat_<float>(3, 3) << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9);
+
+    // TESTING UNDISTORT IMAGE
+    // Camera matrix (3x3)
+    Eigen::MatrixXf camera_matrix_eigen(3, 3);
+    camera_matrix_eigen << 800, 0, 320,
+                            0, 800, 240,
+                            0, 0, 1;
+    cv::Mat camera_matrix_cv = eigenToCvMat(camera_matrix_eigen);
+
+    // Distortion coefficients (1x5)
+    Eigen::MatrixXf distortion_coefficients_eigen(1, 5);
+    distortion_coefficients_eigen << 0.1, -0.05, 0, 0, 0; // Simple distortion
+    cv::Mat distortion_coefficients_cv = eigenToCvMat(distortion_coefficients_eigen);
+
+    // Convert Eigen matrices to cv::Mat and back to Eigen
+    // Test undistort_image function
+    cv::Mat undistorted_image = undistort_image(grayscale_image, camera_matrix_cv, distortion_coefficients_cv);
+
+    // Print result
+    cv::imshow("Undistorted Image", undistorted_image);
+    cv::waitKey(0);
+
+
 }
