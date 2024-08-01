@@ -41,15 +41,15 @@ void create_frames(std::vector<std::vector<Event>>& bucketed_events, std::vector
 
 void create_sparse_matrix(int N, Tensor<float,2>& V, SpMat& result);
 
-cv::Mat undistort_image(const cv::Mat& image, int height, int width, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters);
+cv::Mat undistort_image(const cv::Mat& image, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters);
 
 // void undistort_images(std::vector<Tensor<float,2>>& images, Tensor<float,2> camera_matrix, std::vector<float> distortion_parameters, int height, int width);
 
 // void undistort_frames(std::vector<Tensor<float,2>>& frames, Tensor<float,2> camera_matrix, std::vector<float> distortion_parameters, int height, int width);
 
-void frame2grayscale(Tensor<float,2>& frame);
+cv::Mat frame2grayscale(const Eigen::MatrixXf& frame);
 
-void V2image(Tensor<float,2> V);
+cv::Mat V2image(const Eigen::MatrixXf& V);
 
 void vectorfield2image(Tensor<float,3> vectorfield);
 

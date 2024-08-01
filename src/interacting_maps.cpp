@@ -212,6 +212,93 @@ cv::Mat frame2grayscale(const Eigen::MatrixXf& frame) {
 
     return grayscale_frame;
 }
+
+cv::Mat V2image(const Eigen::MatrixXf& V) {
+    // Determine the shape of the image
+    int rows = V.rows();
+    int cols = V.cols();
+    
+    // Create an empty image with 3 channels (BGR)
+    cv::Mat image = cv::Mat::zeros(rows, cols, CV_8UC3);
+    
+    // Process on_events (V > 0)
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            if (V(i, j) > 0) {
+                image.at<cv::Vec3b>(i, j)[0] = 255; // Set blue channel
+            }
+        }
+    }
+    
+    // Process off_events (V < 0)
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            if (V(i, j) < 0) {
+                image.at<cv::Vec3b>(i, j)[2] = 255; // Set red channel
+            }
+        }
+    }
+    
+    return image;
+}
+
+
+cv::Mat vector_field2image(const Eigen::Tensor<float, 3>& vector_field) {
+    // oben rechts: blau
+    // oben links: pink
+    // unten rechts: grün
+    // unten links: gelb/orange
+
+
+    int rows = vector_field.dimension(0);
+    int cols = vector_field.dimension(1);
+
+    // Calculate angles and saturations
+    Eigen::MatrixXf angles(rows, cols);
+    Eigen::MatrixXf saturations(rows, cols);
+
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            float x = vector_field(i, j, 0);
+            float y = vector_field(i, j, 1);
+            angles(i, j) = std::atan2(y, x);
+            saturations(i, j) = std::sqrt(x * x + y * y);
+        }
+    }
+
+    // Normalize angles to [0, 179]
+    cv::Mat hue(rows, cols, CV_8U);
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            hue.at<uint8_t>(i, j) = static_cast<uint8_t>((angles(i, j) + M_PI) / (2 * M_PI) * 179);
+        }
+    }
+
+    // Normalize saturations to [0, 255]
+    float max_saturation = saturations.maxCoeff();
+    cv::Mat saturation(rows, cols, CV_8U);
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::min(saturations(i, j) / max_saturation * 255, 255.0f));
+        }
+    }
+
+    // Value channel (full brightness)
+    cv::Mat value(rows, cols, CV_8U, cv::Scalar(255));
+
+    // Merge HSV channels
+    std::vector<cv::Mat> hsv_channels = { hue, saturation, value };
+    cv::Mat hsv_image;
+    cv::merge(hsv_channels, hsv_image);
+
+    // Convert HSV image to BGR format
+    cv::Mat bgr_image;
+    cv::cvtColor(hsv_image, bgr_image, cv::COLOR_HSV2BGR);
+
+    return bgr_image;
+}
+
+
 // INTERACTING MAPS
 
 std::vector<int> digitize(const std::vector<double>& input, const std::vector<double>& bins) {
@@ -1000,10 +1087,10 @@ int main() {
     std::cout << "Implemented Eigen to CV map" << std::endl << eigen_matrix2 << std::endl;
 
     // Create an example Eigen matrix
-    Eigen::MatrixXf matrix = Eigen::MatrixXf::Random(100,100);
+    Eigen::MatrixXf grayscale_test = Eigen::MatrixXf::Random(100,100);
 
     // Convert to grayscale image
-    cv::Mat grayscale_image = frame2grayscale(matrix);
+    cv::Mat grayscale_image = frame2grayscale(grayscale_test);
 
     // Display the result
     cv::imshow("Grayscale Image", grayscale_image);
@@ -1032,5 +1119,23 @@ int main() {
     cv::imshow("Undistorted Image", undistorted_image);
     cv::waitKey(0);
 
+    // V to Image
+    Eigen::MatrixXf V2image_eigen = Eigen::MatrixXf::Random(100,100);
+    cv::Mat V2image_cv = V2image(V2image_eigen);
+    cv::imshow("V Image", V2image_cv);
+    cv::waitKey(0);
+
+    // Vectorfield to Image
+    Eigen::Tensor<float, 3> vector_field(1000,1000,2);
+    // Eigen::Tensor<float, 2> x_values(1000,1000);
+    // x_values.setConstant(-1.0);
+    // Eigen::Tensor<float, 2> y_values(1000,1000);
+    // y_values.setConstant(1.0);
+    // vector_field.chip(0,2) = x_values;
+    // vector_field.chip(1,2) = y_values;
+    vector_field.setRandom();
+    cv::Mat image = vector_field2image(vector_field);
+    cv::imshow("Vector Field Image", image);
+    cv::waitKey(0);
 
 }
