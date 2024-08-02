@@ -1,4 +1,4 @@
-#include "interacting_maps.h"
+#include <interacting_maps.h>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -173,7 +173,7 @@ cv::Mat convertToFloat(cv::Mat& mat) {
 
 Eigen::MatrixXf undistort_frame(const Eigen::MatrixXf& frame, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
     cv::Mat image = eigenToCvMat(frame);
-    return cvMatToEigen(undistort_image(image));
+    return cvMatToEigen(undistort_image(image, camera_matrix, distortion_parameters));
 }
 
 cv::Mat undistort_image(const cv::Mat& image, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
@@ -472,7 +472,7 @@ void create_sparse_matrix(int N, Tensor<float,2>& V, SpMat& result){
 
     // Step 2: Create the diagonal and off-diagonal values from V
     int j = 3;
-    array<int,1> one_dim{{V.size()}};
+    array<long,1> one_dim{{V.size()}};
     Tensor<float,1> k = V.reshape(one_dim);
     for (int i = 0; i<N*3; i++){
         // std::cout << " i: " << i << " j: " << j << ", " << std::endl;
