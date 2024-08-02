@@ -138,7 +138,7 @@ cv::Mat eigenToCvMatCopy(const Eigen::MatrixXf& eigen_matrix) {
     return mat;
 }
 
-Eigen::MatrixXf cvMatToEigenMap(const cv::Mat& mat) {
+Eigen::MatrixXf cvMatToEigen(const cv::Mat& mat) {
     // Ensure the cv::Mat has the correct type
     CV_Assert(mat.type() == CV_32F);
     Eigen::array<Eigen::Index, 2> dims;
@@ -169,6 +169,11 @@ cv::Mat convertToFloat(cv::Mat& mat) {
     mat.convertTo(mat, CV_32F, 1.0 / 255.0); // Scaling from [0, 255] to [0, 1]
 
     return mat;
+}
+
+Eigen::MatrixXf undistort_frame(const Eigen::MatrixXf& frame, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
+    cv::Mat image = eigenToCvMat(frame);
+    return cvMatToEigen(undistort_image(image));
 }
 
 cv::Mat undistort_image(const cv::Mat& image, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
@@ -1106,7 +1111,7 @@ int main() {
     std::cout << "Implemented Eigen to CV map" << std::endl << mat << std::endl;
 
     cv::Mat mat2(3, 3, CV_32F, cv::Scalar::all(1));
-    Eigen::MatrixXf eigen_matrix2 = cvMatToEigenMap(mat2);
+    Eigen::MatrixXf eigen_matrix2 = cvMatToEigen(mat2);
     std::cout << "Implemented Eigen to CV map" << std::endl << eigen_matrix2 << std::endl;
 
     // Create an example Eigen matrix
