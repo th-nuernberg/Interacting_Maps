@@ -298,6 +298,29 @@ cv::Mat vector_field2image(const Eigen::Tensor<float, 3>& vector_field) {
     return bgr_image;
 }
 
+cv::Mat create_VIFG(const MatrixXf& V, const MatrixXf& I, const Tensor<float, 3>& F, const Tensor<float, 3>& G, const std::string& name = "VIFG", bool save = false) {
+    cv::Mat V_img = V2image(V);
+    cv::Mat I_img = frame2grayscale(I);
+    cv::Mat F_img = vector_field2image(F);
+    cv::Mat G_img = vector_field2image(G);
+
+    int rows = V.rows();
+    int cols = V.cols();
+    cv::Mat image(rows * 2 + 20, cols * 2 + 20, CV_8UC3, cv::Scalar(0, 0, 0));
+
+    V_img.copyTo(image(cv::Rect(5, 5, cols, rows)));
+    cvtColor(I_img, I_img, cv::COLOR_GRAY2BGR);
+    I_img.copyTo(image(cv::Rect(cols + 10, 5, cols, rows)));
+    G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
+    F_img.copyTo(image(cv::Rect(cols + 10, rows + 10, cols, rows)));
+
+    if (save && !name.empty()) {
+        imwrite(name, image);
+    }
+
+    return image;
+}
+
 
 // INTERACTING MAPS
 
@@ -1138,4 +1161,25 @@ int main() {
     cv::imshow("Vector Field Image", image);
     cv::waitKey(0);
 
+
+
+    // Example usage of the functions
+    Eigen::MatrixXf Vimage = Eigen::MatrixXf::Random(100, 100);  // Example data
+    Eigen::MatrixXf IImage = Eigen::MatrixXf::Random(100, 100);  // Example data
+    Eigen::Tensor<float, 3> Fimage(100, 100, 2);          // Example data
+    Eigen::Tensor<float, 3> Gimage(100, 100, 2);          // Example data
+
+    // Fill example tensor data (normally you would have real data)
+    for (int i = 0; i < 100; ++i) {
+        for (int j = 0; j < 100; ++j) {
+            F(i, j, 0) = std::sin(i * 0.1);
+            F(i, j, 1) = std::cos(j * 0.1);
+            G(i, j, 0) = std::cos(i * 0.1);
+            G(i, j, 1) = std::sin(j * 0.1);
+        }
+    }
+
+    cv::Mat result = create_VIFG(Vimage, IImage, Fimage, Gimage, "output.png", true);
+    cv::imshow("Result", result);
+    cv::waitKey(0);
 }

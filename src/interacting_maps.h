@@ -51,7 +51,7 @@ cv::Mat frame2grayscale(const Eigen::MatrixXf& frame);
 
 cv::Mat V2image(const Eigen::MatrixXf& V);
 
-void vectorfield2image(Tensor<float,3> vectorfield);
+cv::Mat vector_field2image(const Eigen::Tensor<float, 3>& vector_field);
 
 void create_VIFG_image(Tensor<float,2>& V, Tensor<float,2>& I, Tensor<float,3>& F, Tensor<float,3>& G, Tensor<float,2>& VIFG);
 
