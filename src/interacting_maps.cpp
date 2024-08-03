@@ -15,6 +15,15 @@
 
 namespace fs = std::filesystem;
 
+namespace Eigen{
+    typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXfRowMajor;
+    typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRowMajor;
+    typedef Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXiRowMajor;
+}
+
+
+
+
 std::ostream& operator << (std::ostream &os, const Event &e) {
     return (os << "Time: " << e.time << " Coords: " << e.coordinates[0] << " " << e.coordinates[1] << " Polarity: " << e.polarity);
 }
@@ -57,10 +66,10 @@ Eigen::VectorXd gradient(const Eigen::VectorXd& x) {
     return grad;
 }
 
-Eigen::MatrixXf gradient_x(const Eigen::MatrixXf& mat) {
+Eigen::MatrixXfRowMajor gradient_x(const Eigen::MatrixXfRowMajor& mat) {
     int rows = mat.rows();
     int cols = mat.cols();
-    Eigen::MatrixXf grad_x(rows, cols);
+    Eigen::MatrixXfRowMajor grad_x(rows, cols);
 
     // Compute central differences for interior points
     grad_x.block(1, 0, rows - 2, cols) = (mat.block(2, 0, rows - 2, cols) - mat.block(0, 0, rows - 2, cols)) / 2.0;
@@ -74,10 +83,10 @@ Eigen::MatrixXf gradient_x(const Eigen::MatrixXf& mat) {
     return grad_x;
 }
 
-Eigen::MatrixXf gradient_y(const Eigen::MatrixXf& mat) {
+Eigen::MatrixXfRowMajor gradient_y(const Eigen::MatrixXfRowMajor& mat) {
     int rows = mat.rows();
     int cols = mat.cols();
-    Eigen::MatrixXf grad_y(rows, cols);
+    Eigen::MatrixXfRowMajor grad_y(rows, cols);
 
     // Compute central differences for interior points
     grad_y.block(0, 1, rows, cols - 2) = (mat.block(0, 2, rows, cols - 2) - mat.block(0, 0, rows, cols - 2)) / 2.0;
@@ -107,27 +116,40 @@ Eigen::Tensor<float,1> Vector2Tensor(const Eigen::VectorXf& input) {
     return result;
 }
 
-Eigen::MatrixXf Tensor2Matrix(const Eigen::Tensor<float,2>& input){
+Eigen::MatrixXfRowMajor Tensor2Matrix(const Eigen::Tensor<float,2>& input){
     Eigen::array<Eigen::Index, 2> dims = input.dimensions();
-    const float* data_ptr = input.data();
-    Eigen::Map<const Eigen::MatrixXf> result(data_ptr, dims[0], dims[1]);
+
+    // As OpenCV uses a RowMajor layout, all Eigen::Matrix are also RowMajor. Tensors are ColMajor by default and it is
+    // recommended to only uses ColMajor Tensors. So at conversion the layout needs to be considered.
+    Eigen::Tensor<float,2,RowMajor> row_major(dims[0], dims[1]);
+    // Swap the layout and preserve the order of the dimensions; https://eigen.tuxfamily.org/dox/unsupported/eigen_tensors.html
+    Eigen::array<int, 2> shuffle(1, 0);
+    row_major = input.swap_layout().shuffle(shuffle);
+    const float* data_ptr = &row_major(0); // Points to beginning of array;
+    Eigen::Map<const Eigen::MatrixXfRowMajor> result(data_ptr, dims[0], dims[1]);
     return result;
 }
 
-Eigen::Tensor<float,2> Matrix2Tensor(const Eigen::MatrixXf& input) {
-    const float* data_ptr = input.data();
-    Eigen::TensorMap<const Eigen::Tensor<float,2>> result(data_ptr, input.rows(), input.cols());
+Eigen::Tensor<float,2> Matrix2Tensor(Eigen::MatrixXfRowMajor& input) {
+    // Get Pointer to RowMajor data
+    float *data_ptr = &input(0);
+    // Create ColMajor Matrix which references RowMajor data
+    Eigen::Map<Eigen::MatrixXf> ColMajor(data_ptr, input.rows(), input.cols());
+    // Get Pointer to ColMajor data (should be the same address, but can't hurt?)
+    data_ptr = &ColMajor(0);
+    // Map ColMajor to Tensor
+    Eigen::TensorMap<Eigen::Tensor<float,2>> result(data_ptr, input.rows(), input.cols());
     return result;
 }
 
 // OPENCV PART
 
-cv::Mat eigenToCvMat(const Eigen::MatrixXf& eigen_matrix) {
+cv::Mat eigenToCvMat(const Eigen::MatrixXfRowMajor& eigen_matrix) {
     // Map Eigen matrix data to cv::Mat without copying
     return cv::Mat(eigen_matrix.rows(), eigen_matrix.cols(), CV_32F, (void*)eigen_matrix.data());
 }
 
-cv::Mat eigenToCvMatCopy(const Eigen::MatrixXf& eigen_matrix) {
+cv::Mat eigenToCvMatCopy(const Eigen::MatrixXfRowMajor& eigen_matrix) {
     // Create a cv::Mat and copy Eigen matrix data into it
     cv::Mat mat(eigen_matrix.rows(), eigen_matrix.cols(), CV_32F);
     for (int i = 0; i < eigen_matrix.rows(); ++i) {
@@ -138,21 +160,21 @@ cv::Mat eigenToCvMatCopy(const Eigen::MatrixXf& eigen_matrix) {
     return mat;
 }
 
-Eigen::MatrixXf cvMatToEigen(const cv::Mat& mat) {
+Eigen::MatrixXfRowMajor cvMatToEigen(const cv::Mat& mat) {
     // Ensure the cv::Mat has the correct type
     CV_Assert(mat.type() == CV_32F);
     Eigen::array<Eigen::Index, 2> dims;
     dims[0] = mat.rows;
     dims[1] = mat.cols;
     const float* data_ptr = mat.ptr<float>();
-    Eigen::Map<const Eigen::MatrixXf> result(data_ptr, dims[0], dims[1]);
+    Eigen::Map<const Eigen::MatrixXfRowMajor> result(data_ptr, dims[0], dims[1]);
     return result;
 }
 
-Eigen::MatrixXf cvMatToEigenCopy(const cv::Mat& mat) {
+Eigen::MatrixXfRowMajor cvMatToEigenCopy(const cv::Mat& mat) {
     // Ensure the cv::Mat has the correct type
     CV_Assert(mat.type() == CV_32F);
-    Eigen::MatrixXf eigen_matrix(mat.rows, mat.cols);
+    Eigen::MatrixXfRowMajor eigen_matrix(mat.rows, mat.cols);
     for (int i = 0; i < mat.rows; ++i) {
         for (int j = 0; j < mat.cols; ++j) {
             eigen_matrix(i, j) = mat.at<float>(i, j);
@@ -171,7 +193,7 @@ cv::Mat convertToFloat(cv::Mat& mat) {
     return mat;
 }
 
-Eigen::MatrixXf undistort_frame(const Eigen::MatrixXf& frame, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
+Eigen::MatrixXfRowMajor undistort_frame(const Eigen::MatrixXfRowMajor& frame, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
     cv::Mat image = eigenToCvMat(frame);
     return cvMatToEigen(undistort_image(image, camera_matrix, distortion_parameters));
 }
@@ -185,7 +207,7 @@ cv::Mat undistort_image(const cv::Mat& image, const cv::Mat& camera_matrix, cons
     return undistorted_image;
 }
 
-std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const Eigen::MatrixXf& camera_matrix, const Eigen::MatrixXf& distortion_coefficients) {
+std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const Eigen::MatrixXfRowMajor& camera_matrix, const Eigen::MatrixXfRowMajor& distortion_coefficients) {
     std::vector<cv::Mat> undistorted_images;
 
     // Convert Eigen matrices to cv::Mat
@@ -198,9 +220,9 @@ std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const 
     return undistorted_images;
 }
 
-// Function to convert Eigen::MatrixXf to grayscale image
-cv::Mat frame2grayscale(const Eigen::MatrixXf& frame) {
-    // Convert Eigen::MatrixXf to cv::Mat
+// Function to convert Eigen::MatrixXfRowMajor to grayscale image
+cv::Mat frame2grayscale(const Eigen::MatrixXfRowMajor& frame) {
+    // Convert Eigen::MatrixXfRowMajor to cv::Mat
     cv::Mat frame_cv = eigenToCvMat(frame);
 
     // Find min and max polarity
@@ -218,10 +240,10 @@ cv::Mat frame2grayscale(const Eigen::MatrixXf& frame) {
     return grayscale_frame;
 }
 
-cv::Mat V2image(const Eigen::MatrixXf& V) {
+cv::Mat V2image(const Eigen::MatrixXfRowMajor& V) {
     // Determine the shape of the image
-    int rows = V.rows();
-    int cols = V.cols();
+    long rows = V.rows();
+    long cols = V.cols();
     
     // Create an empty image with 3 channels (BGR)
     cv::Mat image = cv::Mat::zeros(rows, cols, CV_8UC3);
@@ -255,12 +277,12 @@ cv::Mat vector_field2image(const Eigen::Tensor<float, 3>& vector_field) {
     // unten links: gelb/orange
 
 
-    int rows = vector_field.dimension(0);
-    int cols = vector_field.dimension(1);
+    const int rows = vector_field.dimension(0);
+    const int cols = vector_field.dimension(1);
 
     // Calculate angles and saturations
-    Eigen::MatrixXf angles(rows, cols);
-    Eigen::MatrixXf saturations(rows, cols);
+    Eigen::Matrix<float,Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> angles(rows, cols);
+    Eigen::Matrix<float,RowMajor> saturations(rows, cols);
 
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
@@ -272,7 +294,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float, 3>& vector_field) {
     }
 
     // Normalize angles to [0, 179]
-    cv::Mat hue(rows, cols, CV_8U);
+    cv::Mat hue(rows, cols, CV_8UC1);
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
             hue.at<uint8_t>(i, j) = static_cast<uint8_t>((angles(i, j) + M_PI) / (2 * M_PI) * 179);
@@ -281,7 +303,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float, 3>& vector_field) {
 
     // Normalize saturations to [0, 255]
     float max_saturation = saturations.maxCoeff();
-    cv::Mat saturation(rows, cols, CV_8U);
+    cv::Mat saturation(rows, cols, CV_8UC1);
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
             saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::min(saturations(i, j) / max_saturation * 255, 255.0f));
@@ -289,7 +311,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float, 3>& vector_field) {
     }
 
     // Value channel (full brightness)
-    cv::Mat value(rows, cols, CV_8U, cv::Scalar(255));
+    cv::Mat value(rows, cols, CV_8UC1, cv::Scalar(255));
 
     // Merge HSV channels
     std::vector<cv::Mat> hsv_channels = { hue, saturation, value };
@@ -309,8 +331,8 @@ cv::Mat create_VIFG(const MatrixXf& V, const MatrixXf& I, const Tensor<float, 3>
     cv::Mat F_img = vector_field2image(F);
     cv::Mat G_img = vector_field2image(G);
 
-    int rows = V.rows();
-    int cols = V.cols();
+    long rows = V.rows();
+    long cols = V.cols();
     cv::Mat image(rows * 2 + 20, cols * 2 + 20, CV_8UC3, cv::Scalar(0, 0, 0));
 
     V_img.copyTo(image(cv::Rect(5, 5, cols, rows)));
@@ -335,7 +357,7 @@ std::vector<int> digitize(const std::vector<double>& input, const std::vector<do
         // Find the index where 'value' should be inserted to keep 'bins' sorted
         auto it = std::upper_bound(bins.begin(), bins.end(), value);
         // Calculate the index
-        int index = it - bins.begin();
+        long index = it - bins.begin();
         indices.push_back(index);
     }
     return indices;
@@ -952,9 +974,9 @@ int main() {
     T2M.setConstant(1.0);
     T2V.setConstant(1.0);
 
-    Eigen::MatrixXf M2T (N,M);
+    Eigen::MatrixXfRowMajor M2T (N,M);
     Eigen::VectorXf V2T (N);
-    Eigen::MatrixXf T2M_res (N,M);
+    Eigen::MatrixXfRowMajor T2M_res (N,M);
     Eigen::VectorXf T2V_res (N);
     M2T.setConstant(2.0);
     V2T.setConstant(2.0);
@@ -1106,16 +1128,16 @@ int main() {
     // std::cout << "Implemented interacting maps update step" << std::endl;
 
     // TESTING OPENCV CONVERSION
-    Eigen::MatrixXf eigen_matrix = Eigen::MatrixXf::Constant(3, 3, 2.0);
+    Eigen::MatrixXfRowMajor eigen_matrix = Eigen::MatrixXfRowMajor::Constant(3, 3, 2.0);
     cv::Mat mat = eigenToCvMat(eigen_matrix);
     std::cout << "Implemented Eigen to CV map" << std::endl << mat << std::endl;
 
     cv::Mat mat2(3, 3, CV_32F, cv::Scalar::all(1));
-    Eigen::MatrixXf eigen_matrix2 = cvMatToEigen(mat2);
+    Eigen::MatrixXfRowMajor eigen_matrix2 = cvMatToEigen(mat2);
     std::cout << "Implemented Eigen to CV map" << std::endl << eigen_matrix2 << std::endl;
 
     // Create an example Eigen matrix
-    Eigen::MatrixXf grayscale_test = Eigen::MatrixXf::Random(100,100);
+    Eigen::MatrixXfRowMajor grayscale_test = Eigen::MatrixXfRowMajor::Random(100,100);
 
     // Convert to grayscale image
     cv::Mat grayscale_image = frame2grayscale(grayscale_test);
@@ -1128,14 +1150,14 @@ int main() {
 
     // TESTING UNDISTORT IMAGE
     // Camera matrix (3x3)
-    Eigen::MatrixXf camera_matrix_eigen(3, 3);
+    Eigen::MatrixXfRowMajor camera_matrix_eigen(3, 3);
     camera_matrix_eigen << 800, 0, 320,
                             0, 800, 240,
                             0, 0, 1;
     cv::Mat camera_matrix_cv = eigenToCvMat(camera_matrix_eigen);
 
     // Distortion coefficients (1x5)
-    Eigen::MatrixXf distortion_coefficients_eigen(1, 5);
+    Eigen::MatrixXfRowMajor distortion_coefficients_eigen(1, 5);
     distortion_coefficients_eigen << 0.1, -0.05, 0, 0, 0; // Simple distortion
     cv::Mat distortion_coefficients_cv = eigenToCvMat(distortion_coefficients_eigen);
 
@@ -1148,7 +1170,7 @@ int main() {
     cv::waitKey(0);
 
     // V to Image
-    Eigen::MatrixXf V2image_eigen = Eigen::MatrixXf::Random(100,100);
+    Eigen::MatrixXfRowMajor V2image_eigen = Eigen::MatrixXfRowMajor::Random(100,100);
     cv::Mat V2image_cv = V2image(V2image_eigen);
     cv::imshow("V Image", V2image_cv);
     cv::waitKey(0);
@@ -1169,8 +1191,8 @@ int main() {
 
 
     // Example usage of the functions
-    Eigen::MatrixXf Vimage = Eigen::MatrixXf::Random(100, 100);  // Example data
-    Eigen::MatrixXf IImage = Eigen::MatrixXf::Random(100, 100);  // Example data
+    Eigen::MatrixXfRowMajor Vimage = Eigen::MatrixXfRowMajor::Random(100, 100);  // Example data
+    Eigen::MatrixXfRowMajor IImage = Eigen::MatrixXfRowMajor::Random(100, 100);  // Example data
     Eigen::Tensor<float, 3> Fimage(100, 100, 2);          // Example data
     Eigen::Tensor<float, 3> Gimage(100, 100, 2);          // Example data
 
