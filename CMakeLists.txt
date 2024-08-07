@@ -19,6 +19,7 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 # Add source files
 set(SOURCES
         ${PROJECT_SOURCE_DIR}/src/interacting_maps.cpp
+        include/Instrumentor.h
         # Add more source files here if needed
 )
 

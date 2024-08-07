@@ -6,6 +6,9 @@
 #include <Eigen/Sparse>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <opencv2/opencv.hpp>
+#include <autodiff/forward/real.hpp>
+#include <autodiff/forward/real/eigen.hpp>
+
 using namespace Eigen;
 
 typedef SparseMatrix<float> SpMat;

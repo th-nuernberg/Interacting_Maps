@@ -6,8 +6,7 @@
 #include <sstream>
 #include <cassert>
 #include <numeric>
-#include <autodiff/forward/real.hpp>
-#include <autodiff/forward/real/eigen.hpp>
+#include "Instrumentor.h"
 
 
 // Define a type for convenience
@@ -24,9 +23,6 @@ namespace Eigen{
     typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRowMajor;
     typedef Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXiRowMajor;
 }
-
-
-
 
 std::ostream& operator << (std::ostream &os, const Event &e) {
     return (os << "Time: " << e.time << " Coords: " << e.coordinates[0] << " " << e.coordinates[1] << " Polarity: " << e.polarity);
@@ -248,7 +244,7 @@ cv::Mat frame2grayscale(const Eigen::MatrixXfRowMajor& frame) {
 
     // Scale to 0-255 and convert to CV_8U
     cv::Mat grayscale_frame;
-    normalized_frame.convertTo(grayscale_frame, CV_8U, 255.0);
+    normalized_frame.convertTo(grayscale_frame, CV_8UC1, 255.0);
 
     return grayscale_frame;
 }
@@ -520,7 +516,7 @@ void create_sparse_matrix(int N, Tensor<float,2,Eigen::RowMajor>& V, SpMat& resu
     result.setFromTriplets(tripletList.begin(), tripletList.end());
 }
 
-void norm_tensor_along_dim3(Tensor<float,3,Eigen::RowMajor>& T, Tensor<float,2,Eigen::RowMajor>& norm){
+void norm_tensor_along_dim3(const Tensor<float,3,Eigen::RowMajor>& T, Tensor<float,2,Eigen::RowMajor>& norm){
     array<int,1> dims({2});
     norm = T.square().sum(dims).sqrt();
 }
@@ -640,7 +636,7 @@ void crossProduct3x3_loop(const Eigen::Tensor<float,3,Eigen::RowMajor>& A, const
 // def vector_distance(vec1, vec2):
 //     return jnp.linalg.norm(jnp.cross(vec1, vec2), ord=2, axis=2)/jnp.linalg.norm(vec2, ord=2,axis=2)
 
-void vector_distance(Tensor<float,3,Eigen::RowMajor> &vec1, Tensor<float,3,Eigen::RowMajor> &vec2, Tensor<float,2,Eigen::RowMajor> &distance){
+void vector_distance(const Tensor<float,3,Eigen::RowMajor> &vec1, const Tensor<float,3,Eigen::RowMajor> &vec2, Tensor<float,2,Eigen::RowMajor> &distance){
     const auto& dimensions = vec1.dimensions();
     Tensor<float,3,Eigen::RowMajor> cross_product(dimensions);
     Tensor<float,2,Eigen::RowMajor> norm(dimensions[0], dimensions[1]);
@@ -682,7 +678,7 @@ void computeDotProductWithLoops(const Eigen::Tensor<float,3,Eigen::RowMajor>& A,
     }
 }
 
-void m32(Tensor<float,3,Eigen::RowMajor> &In, Tensor<float,3,Eigen::RowMajor> &C_x, Tensor<float,3,Eigen::RowMajor> &C_y, Tensor<float,3,Eigen::RowMajor> &Out){
+void m32(const Tensor<float,3,Eigen::RowMajor> &In, const Tensor<float,3,Eigen::RowMajor> &C_x, const Tensor<float,3,Eigen::RowMajor> &C_y, Tensor<float,3,Eigen::RowMajor> &Out){
     const auto& dimensions = In.dimensions();
     Tensor<float,3,Eigen::RowMajor> C1(dimensions);
     Tensor<float,3,Eigen::RowMajor> C2(dimensions);
@@ -715,7 +711,7 @@ void m32(Tensor<float,3,Eigen::RowMajor> &In, Tensor<float,3,Eigen::RowMajor> &C
     Out.chip(1,2) = sign * distance1/distance2;
 }
 
-void m23(Tensor<float,3,Eigen::RowMajor>& In, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, Tensor<float,3,Eigen::RowMajor>& Out) {
+void m23(const Tensor<float,3,Eigen::RowMajor>& In, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, Tensor<float,3,Eigen::RowMajor>& Out) {
     const auto& dimensions = Cx.dimensions();
     for (int i = 0; i < dimensions[0]; i++){
         for (int j = 0; j < dimensions[1]; j++){
@@ -761,7 +757,7 @@ void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::Row
 
 
 void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, float lr, float weight_FG){
-
+    InstrumentationTimer timer("update_F_from_G");
     const auto& dimensions = F.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_F(dimensions);
     for (int i = 0; i<dimensions[0]; i++){
@@ -774,7 +770,7 @@ void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::R
 }
 
 void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, float lr, float weight_GF){
-
+    InstrumentationTimer timer("update_G_from_F");
     const auto& dimensions = G.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
     for (int i = 0; i<dimensions[0]; i++){
@@ -787,10 +783,12 @@ void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::R
 }
 
 void update_G_from_I(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajor> &I_gradient, float weight_GI){
+    InstrumentationTimer timer("update_G_from_I");
     G = (1 - weight_GI) * G + weight_GI*I_gradient;
 }
 
 void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajor> &cum_V, float weight_IV=0.5, float time_step=0.05){
+    InstrumentationTimer timer("update_I_from_V");
     I = (1 - weight_IV)*I + weight_IV*cum_V;
     const auto& dimensions = I.dimensions();
     for (int i = 0; i<dimensions[0]; i++){
@@ -819,6 +817,7 @@ void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::R
 }
 
 void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajor> &I_gradient, Tensor<float,3,Eigen::RowMajor> &G, float weight_IG=0.5){
+    InstrumentationTimer timer("update_I_from_G");
     const auto& dimensions = I.dimensions();
     Tensor<float,3,Eigen::RowMajor> temp_map = G - I_gradient;
     Tensor<float,2,Eigen::RowMajor> x_update(dimensions);
@@ -857,45 +856,55 @@ void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::R
     // return (1 - weight_IG)*I + weight_IG*(I - x_update - y_update)
 }
 
-void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, const Tensor<float,1>& R, float weight_FR){
-    Tensor<float,3,Eigen::RowMajor> cross(F.dimensions());
-    const auto& dimensions = F.dimensions();
-    Tensor<float,3,Eigen::RowMajor> update(dimensions[0], dimensions[1], dimensions[2]);
+void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Tensor<float,1>& R, float weight_FR){
+    InstrumentationTimer timer("update_F_from_R");
+    Tensor<float,3,Eigen::RowMajor> cross(CCM.dimensions());
+//    const auto& dimensions = F.dimensions();
+    Tensor<float,3,Eigen::RowMajor> update(F.dimensions());
     crossProduct1x3(R, CCM, cross);
     m32(cross, Cx, Cy, update);
     F = (1 - weight_FR) * F + weight_FR * update;
 }
 
-void update_R_from_F(const Tensor<float,1>& R, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, float weight_RF, int N) {
-    Tensor<float,3,Eigen::RowMajor> transformed_F;
-    m23(F, Cx, Cy, transformed_F);
-    Tensor<float,3,Eigen::RowMajor> points;
-    crossProduct3x3(C, transformed_F, points);
+void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const float weight_RF, const int N) {
+    InstrumentationTimer timer1("update_R_from_F");
+    const auto &dimensions = F.dimensions();
+    Tensor<float, 3, Eigen::RowMajor> transformed_F(dimensions[0], dimensions[1], 3);
+    Tensor<float, 3, Eigen::RowMajor> points(dimensions[0], dimensions[1], 3);
+    Eigen::SparseMatrix<double> SpMat(N * 3, N + 3);
+    Eigen::VectorXd x(N + 3);
+    Eigen::array<Eigen::DenseIndex, 1> reshaper({N * 3});
+    Eigen::Tensor<float, 1, Eigen::RowMajor> reshaped_points;
+    Eigen::Tensor<float, 1, Eigen::RowMajor> reshaped_C;
+    Eigen::VectorXf points_vector;
 
-    Eigen::SparseMatrix<double> SpMat(N*3, N+3);
-    Eigen::VectorXd x(N+3);
-    x.setZero();
-
-    Eigen::array<Eigen::DenseIndex, 1> points_reshaper({N*3});
-    Eigen::Tensor<float,1,Eigen::RowMajor> reshaped_points = points.reshape(points_reshaper); // reshaped_points need to be Eigen::Vector for solver
-    Eigen::VectorXf points_vector = Tensor2VectorRM(reshaped_points);
-    
-    Eigen::array<Eigen::DenseIndex, 1> C_reshaper({N*3});
-    Eigen::Tensor<float,1,Eigen::RowMajor> reshaped_C = C.reshape(C_reshaper);
+    //{
+    //    InstrumentationTimer timer2("RF_Pre");
+        m23(F, Cx, Cy, transformed_F);
+        crossProduct3x3(C, transformed_F, points);
+        x.setZero();
+        reshaped_points = points.reshape(reshaper); // reshaped_points need to be Eigen::Vector for solver
+        points_vector = Tensor2VectorRM(reshaped_points);
+        reshaped_C = C.reshape(reshaper);
+    //}
 
     std::vector<Eigen::Triplet<double>> tripletList;
-    tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
-    int j = 3;
-    for (int i = 0; i < N*3; i++) {
-        tripletList.emplace_back(i, i%3, 1.0); // Diagonal element
-        tripletList.emplace_back(i, j, reshaped_C[i]);
-        if (i%3 == 2){
-            j++;
+    {
+        InstrumentationTimer timer3("RF Triplet");
+        tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
+        int j = 3;
+        for (int i = 0; i < N * 3; i++) {
+            tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
+            tripletList.emplace_back(i, j, reshaped_C[i]);
+            if (i % 3 == 2) {
+                j++;
+            }
         }
+        SpMat.setFromTriplets(tripletList.begin(), tripletList.end());
     }
-    
-    SpMat.setFromTriplets(tripletList.begin(), tripletList.end());
-    
+
+/*    {
+        InstrumentationTimer timer4("RF Solve");*/
     // Perform the computation and measure the time
     // Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
     Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver;
@@ -903,17 +912,22 @@ void update_R_from_F(const Tensor<float,1>& R, Tensor<float,3,Eigen::RowMajor>& 
     solver.setTolerance(1e-4);
 
     solver.compute(SpMat);
-    if(solver.info() != Eigen::Success) {
+    if (solver.info() != Eigen::Success) {
         std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
     }
 
     // x = solver.solve(b);
     x = solver.solveWithGuess(points_vector.cast<double>(), x);
-    if(solver.info() != Eigen::Success) {
+    if (solver.info() != Eigen::Success) {
         std::cerr << "Solving failed during update_R_from_C " << std::endl;
     }
+    //}
+    R(0) = (1-weight_RF)*R(0) + weight_RF*x(0);
+    R(1) = (1-weight_RF)*R(1) + weight_RF*x(1);
+    R(2) = (1-weight_RF)*R(2) + weight_RF*x(2);
 }
 
+// TODO: add return number
 void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& dCdx, Tensor<float,3,Eigen::RowMajor>& dCdy, std::unordered_map<std::string,float> weights, std::vector<int> permutation, int N){
      Eigen::array<Eigen::Index, 2> dimensions = I.dimensions();
      Eigen::Tensor<float,3,Eigen::RowMajor> delta_I(dimensions[0], dimensions[1], 2);
@@ -923,49 +937,67 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
      delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
      delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
 
-     for (auto & element : permutation){
-         switch(element) {
+     for (const auto& element : permutation){
+         switch( element ){
+             default:
+                 std::cout << "Unknown number in permutation" << std::endl;
              case 0:
-             update_F_from_G(F, V, G, weights["lr"], weights["weight_FG"]);
-             std::cout << "Case " << element << std::endl;
-
+                 update_F_from_G(F, V, G, weights["lr"], weights["weight_FG"]);
+                 std::cout << "Case " << element << std::endl;
+                 break;
              case 1:
-             update_F_from_R(F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
-             std::cout << "Case " << element << std::endl;
-
+                 update_F_from_R(F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
+                 std::cout << "Case " << element << std::endl;
+                 break;
              case 2:
-             update_G_from_F(G, V, F, weights["lr"], weights["weight_FG"]);
-             std::cout << "Case " << element << std::endl;
+                 update_G_from_F(G, V, F, weights["lr"], weights["weight_FG"]);
+                 std::cout << "Case " << element << std::endl;
+                 break;
              case 3:
-             update_G_from_I(G, delta_I, weights["weight_GI"]);
-             std::cout << "Case " << element << std::endl;
+                 update_G_from_I(G, delta_I, weights["weight_GI"]);
+                 std::cout << "Case " << element << std::endl;
+                 break;
              case 4:
-             update_I_from_G(I, delta_I, G, weights["weight_IG"]);
-             delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-             delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-             std::cout << "Case " << element << std::endl;
+                 update_I_from_G(I, delta_I, G, weights["weight_IG"]);
+                 delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                 delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                 std::cout << "Case " << element << std::endl;
+                 break;
              case 5:
-             update_I_from_V(I, V, weights["weight_IV"], weights["timestep"]);
-             delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-             delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-             std::cout << "Case " << element << std::endl;
+                 update_I_from_V(I, V, weights["weight_IV"], weights["timestep"]);
+                 delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                 delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                 std::cout << "Case " << element << std::endl;
+                 break;
              case 6:
-             update_R_from_F(R, F, CCM, dCdx, dCdy, weights["weight_RF"], N);
-             std::cout << "Case " << element << std::endl;
+                 update_R_from_F(R, F, CCM, dCdx, dCdy, weights["weight_RF"], N);
+                 std::cout << "Case " << element << std::endl;
+                 break;
          }
      }
  }
 
-
-int main() {
-
+int test(){
+    //##################################################################################################################
     // TEST PARAMETERS
     int n = 5;
     int m = 7;
+    int nm = n*m;
     int N = 50;
     int M = 70;
     int NM = N*M;
+    bool test_conversion = true;
+    bool test_update = true;
+    bool test_helper = true;
+    bool test_file = true;
+    bool test_step = true;
+    bool test_cv = true;
 
+    if (test_step){
+        test_helper = true;
+    }
+
+    //##################################################################################################################
     // Camera calibration matrix (C/CCM) and dCdx/dCdy
     Tensor<float,3,Eigen::RowMajor> CCM(n,m,3);
     CCM.setZero();
@@ -974,6 +1006,7 @@ int main() {
     Tensor<float,3,Eigen::RowMajor> dCdy(n,m,3);
     dCdy.setZero();
 
+    //##################################################################################################################
     // Optic flow F, temporal derivative V, spatial derivative G
     Tensor<float,3,Eigen::RowMajor> F(n,m,2);
     F.setConstant(1.0);
@@ -982,164 +1015,311 @@ int main() {
     Tensor<float,3,Eigen::RowMajor> G(n,m,2);
     G.setConstant(3.0);
 
+    //##################################################################################################################
     // Intesity I
     Tensor<float,2,Eigen::RowMajor> I(n,m);
     I.setRandom();
     Tensor<float,3,Eigen::RowMajor> I_gradient(n,m,2);
     I_gradient.setRandom();
 
+    //##################################################################################################################
     // Rotation Vector R
     Tensor<float,1> R(3);
     R.setRandom();
 
+    //##################################################################################################################
     // Vector distance function
     Tensor<float,2,Eigen::RowMajor> distance;
     distance.setZero();
 
-    // Test Tensor casts
-    Tensor<float,2,Eigen::RowMajor> T2M (N,M);
-    Tensor<float,1> T2V (N);
-    Tensor<float,2> M2T_res (N,M);
-    Tensor<float,1> V2T_res (N);
-    T2M.setConstant(1.0);
-    T2V.setConstant(1.0);
+    if (test_conversion){
+        std::cout << "TESTING CONVERSION" << std::endl;
+        //##################################################################################################################
+        // Test Tensor casts
+        Tensor<float,2,Eigen::RowMajor> T2M (N,M);
+        Tensor<float,1> T2V (N);
+        Tensor<float,2> M2T_res (N,M);
+        Tensor<float,1> V2T_res (N);
+        T2M.setConstant(1.0);
+        T2V.setConstant(1.0);
+        Eigen::MatrixXfRowMajor M2T (N,M);
+        Eigen::VectorXf V2T (N);
+        Eigen::MatrixXfRowMajor T2M_res (N,M);
+        Eigen::VectorXf T2V_res (N);
+        M2T.setConstant(2.0);
+        V2T.setConstant(2.0);
+        T2M_res = Tensor2Matrix(T2M);
+        T2V_res = Tensor2Vector(T2V);
+        M2T_res = Matrix2Tensor(M2T);
+        V2T_res = Vector2Tensor(V2T);
+        std::cout << "Implemented Tensor/Matrix/Vector casts" << std::endl;
 
-    Eigen::MatrixXfRowMajor M2T (N,M);
-    Eigen::VectorXf V2T (N);
-    Eigen::MatrixXfRowMajor T2M_res (N,M);
-    Eigen::VectorXf T2V_res (N);
-    M2T.setConstant(2.0);
-    V2T.setConstant(2.0);
+        //##################################################################################################################
+        // TESTING OPENCV CONVERSION
+        Eigen::MatrixXfRowMajor eigen_matrix = Eigen::MatrixXfRowMajor::Constant(3, 3, 2.0);
+        cv::Mat mat = eigenToCvMat(eigen_matrix);
+        std::cout << "Implemented Eigen to CV" << std::endl << mat << std::endl;
 
-    T2M_res = Tensor2Matrix(T2M);
-    T2V_res = Tensor2Vector(T2V);
-    M2T_res = Matrix2Tensor(M2T);
-    V2T_res = Vector2Tensor(V2T);
+        cv::Mat mat2(3, 3, CV_32F, cv::Scalar::all(1));
+        Eigen::MatrixXfRowMajor eigen_matrix2 = cvMatToEigen(mat2);
+        std::cout << "Implemented CV to eigen" << std::endl << eigen_matrix2 << std::endl;
 
-    std::cout << "Implemented Tensor/Matrix/Vector casts" << std::endl;
+        std::cout << "CONVERSION TEST PASSED" << std::endl;
+    }
 
-    // Create results_folder
+    if (test_update) {
+        std::cout << "TESTING UPDATE FUNCTIONS" << std::endl;
+        //##################################################################################################################
+        // Update F/G from G/F
+        update_F_from_G(F, V, G, 1.0, 0.5);
+        std::cout << "Implemented update_F_from_G/update_G_from_F" << std::endl;
+        std::cout << "F after update" << std::endl;
+        std::cout << F << std::endl;
+
+        //##################################################################################################################
+        // Update I from G
+        update_I_from_G(I, I_gradient, G, 0.2f);
+        std::cout << "Implemented update_I_from_G" << std::endl;
+        std::cout << "I after update" << std::endl;
+        std::cout << I << std::endl;
+
+        //##################################################################################################################
+        // Update I from V
+        update_I_from_V(I, V, 0.2f, 0.05f);
+        std::cout << "Implemented update_I_from_V" << std::endl;
+        std::cout << "I after update" << std::endl;
+        std::cout << I << std::endl;
+
+        //##################################################################################################################
+        // Update G from I
+        update_G_from_I(G, I_gradient, 0.2f);
+        std::cout << "Implemented update_G_from_I" << std::endl;
+        std::cout << "G after update" << std::endl;
+        std::cout << G << std::endl;
+
+        std::cout << "UPDATE FUNCTIONS TEST PASSED" << std::endl;
+    }
+
+    if (test_file){
+        std::cout << "TESTING FILE READOUT AND EVENT HANDLING" << std::endl;
+        //##################################################################################################################
+        // Create results_folder
+        std::string folder_name = "results";
+        std::string folder_path = create_folder_and_update_gitignore(folder_name);
+        std::cout << "Implemented Folder creation" << std::endl;
+
+        //##################################################################################################################
+        // Read calibration file
+        std::string calib_path = "../res/shapes_rotation/calib.txt";
+        std::vector<float> calibration_data;
+        read_calib(calib_path, calibration_data);
+        std::cout << "Implemented calibration data readout" << std::endl;
+
+        //##################################################################################################################
+        // Read events file
+        std::string event_path = "../res/shapes_rotation/eventsshort.txt";
+        std::vector<Event> event_data;
+        read_events(event_path, event_data, 0.0, 1.0);
+        std::cout << "Implemented events readout" << std::endl;
+
+        //##################################################################################################################
+        // Bin events
+        std::vector<std::vector<Event>> bucketed_events;
+        bucketed_events = bin_events(event_data, 0.05);
+
+        //##################################################################################################################
+        // Create frames
+        std::vector<Tensor<float,2,Eigen::RowMajor>> frames;
+        create_frames(bucketed_events, frames, 180, 240);
+        std::cout << "Implemented event binning and event frame creation" << std::endl;
+
+        std::cout << "FILE READOUT AND EVENT HANDLING TEST PASSED" << std::endl;
+    }
+
+    if (test_helper){
+        std::cout << "TESTING HELPER FUNCTIONS" << std::endl;
+        //##################################################################################################################
+        // Test sparse matrix creation
+        SpMat sparse_m(NM*3,NM+3);
+        Tensor<float,2,Eigen::RowMajor> F_flat(NM,3);
+        F_flat.setRandom();
+        create_sparse_matrix(NM, F_flat, sparse_m);
+        std::cout << "Implemented sparse matrix creation for update_R" << std::endl;
+
+        //##################################################################################################################
+        // Camera calibration map
+        find_C(n, m, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
+        std::cout << "Implemented find_C function with autodiff" << std::endl;
+        std::cout << "C" << std::endl;
+        std::cout << CCM << std::endl;
+        std::cout << "dCdx" << std::endl;
+        std::cout << dCdx << std::endl;
+        std::cout << "dCdy" << std::endl;
+        std::cout << dCdy << std::endl;
+
+        //##################################################################################################################
+        // Tensor cross product
+        // Define the dimensions of the tensors
+        Eigen::array<Eigen::Index, 3> dimensions = {n, m, 3};
+        // Initialize tensors A and B with random values
+        Eigen::Tensor<float,3,Eigen::RowMajor> A(dimensions);
+        Eigen::Tensor<float,3,Eigen::RowMajor> B(dimensions);
+        Eigen::Tensor<float,3,Eigen::RowMajor> D(dimensions);
+        A.setRandom();
+        B.setRandom();
+
+        int iterations = 1000;
+
+        // Timing the chip-based implementation
+        std::cout << "Timing cross product for tensors implementations " << std::endl;
+        auto start_chip = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < iterations; ++i) {
+            crossProduct3x3(A, B, D);
+        }
+        auto end_chip = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration_chip = end_chip - start_chip;
+        std::cout << "Time for chip-based implementation: " << duration_chip.count()/iterations << " seconds\n";
+
+        // Timing the loop-based implementation
+        auto start_loop = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < iterations; ++i) {
+            crossProduct3x3_loop(A, B, D);
+        }
+        auto end_loop = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration_loop = end_loop - start_loop;
+        std::cout << "Time for loop-based implementation: " << duration_loop.count()/iterations << " seconds\n";
+        std::cout << "Implemented cross product for Tensors" << std::endl;
+        // Define the resulting tensor D with shape (m, n)
+        Eigen::Tensor<float,2,Eigen::RowMajor> E(n, m);
+        // Time the dot product computation using nested loops
+        std::cout << "Timing dot product computation with loops:" << std::endl;
+        timeDotProductComputation(computeDotProductWithLoops, A, B, E, 1000);
+        std::cout << "Implemented dot product for tensors" << std::endl;
+
+        // // Time the dot product computation using .chip() (CHATGPT USES CHIP JUST FOR FANCY INDEXING)
+        // std::cout << "Timing dot product computation with .chip():" << std::endl;
+        // timeDotProductComputation(computeDotProductWithChip, A, B, E, 1000);
+
+        //##################################################################################################################
+        // Test Vector distance function needed for M32
+        vector_distance(dCdx, dCdy, distance);
+        std::cout << "Implemented vector distance function for m32" << std::endl;
+        std::cout << distance << std::endl;
+
+        //##################################################################################################################
+        // M32 Test
+        Tensor<float,3,Eigen::RowMajor> A2(n,m,2);
+        m32(A, dCdx, dCdy, A2);
+        std::cout << "Implemented transformation function m32" << std::endl;
+        std::cout << A << std::endl;
+        std::cout << A2 << std::endl;
+        std::cout << "HELPER FUNCTIONS TEST PASSED" << std::endl;
+    }
+
+    if (test_step){
+        std::cout << "TESTING UPDATE STEP FUNCTION" << std::endl;
+        //##################################################################################################################
+        // Testing Interacting Maps step
+        std::unordered_map<std::string,float> weights;
+        weights["weight_FG"] = 0.2;
+        weights["weight_FR"] = 0.2;
+        weights["weight_GF"] = 0.2;
+        weights["weight_GI"] = 0.2;
+        weights["weight_IG"] = 0.2;
+        weights["weight_IV"] = 0.2;
+        weights["weight_RF"] = 0.2;
+        weights["lr"] = 0.9;
+        weights["timestep"] = 0.05f;
+        std::vector<int> permutation {0,1,2,3,4,5,6};
+        interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, weights, permutation, nm);
+        std::cout << "Implemented interacting maps update step" << std::endl;
+
+        std::cout << "UPDATE STEP FUNCTION TEST PASSED" << std::endl;
+    }
+
+    if (test_cv){
+        std::cout << "TESTING OPENCV FUNCTIONS" << std::endl;
+        //##################################################################################################################
+        // Convert to grayscale image
+        Eigen::MatrixXfRowMajor grayscale_test = Eigen::MatrixXfRowMajor::Random(100,100);
+        cv::Mat grayscale_image = frame2grayscale(grayscale_test);
+        cv::imshow("Grayscale Image", grayscale_image);
+        cv::waitKey(0);
+
+        //##################################################################################################################
+        // TESTING UNDISTORT IMAGE
+        // Camera matrix (3x3)
+        Eigen::MatrixXfRowMajor camera_matrix_eigen(3, 3);
+        camera_matrix_eigen << 800, 0, 320,
+                0, 800, 240,
+                0, 0, 1;
+        cv::Mat camera_matrix_cv = eigenToCvMat(camera_matrix_eigen);
+
+        // Distortion coefficients (1x5)
+        Eigen::MatrixXfRowMajor distortion_coefficients_eigen(1, 5);
+        distortion_coefficients_eigen << 0.1, -0.05, 0, 0, 0; // Simple distortion
+        cv::Mat distortion_coefficients_cv = eigenToCvMat(distortion_coefficients_eigen);
+
+        // Convert Eigen matrices to cv::Mat and back to Eigen
+        // Test undistort_image function
+        cv::Mat undistorted_image = undistort_image(grayscale_image, camera_matrix_cv, distortion_coefficients_cv);
+
+        // Print result
+        cv::imshow("Undistorted Image", undistorted_image);
+        cv::waitKey(0);
+
+        // V to Image
+        Eigen::MatrixXfRowMajor V2image_eigen = Eigen::MatrixXfRowMajor::Random(100,100);
+        cv::Mat V2image_cv = V2image(V2image_eigen);
+        cv::imshow("V Image", V2image_cv);
+        cv::waitKey(0);
+
+        // Vectorfield to Image
+        Eigen::Tensor<float,3,Eigen::RowMajor> vector_field(1000,1000,2);
+        vector_field.setRandom();
+        cv::Mat image = vector_field2image(vector_field);
+        cv::imshow("Vector Field Image", image);
+        cv::waitKey(0);
+
+        // Matrix V I F G to OpenCV Image
+        Eigen::MatrixXfRowMajor Vimage = Eigen::MatrixXfRowMajor::Random(100, 100);  // Example data
+        Eigen::MatrixXfRowMajor Iimage = Eigen::MatrixXfRowMajor::Random(100, 100);  // Example data
+        Eigen::Tensor<float,3,Eigen::RowMajor> Fimage(100, 100, 2);          // Example data
+        Eigen::Tensor<float,3,Eigen::RowMajor> Gimage(100, 100, 2);          // Example data
+
+        // Fill example tensor data (normally you would have real data)
+        for (int i = 0; i < 100; ++i) {
+            for (int j = 0; j < 100; ++j) {
+                Fimage(i, j, 0) = std::sin(i * 0.1);
+                Fimage(i, j, 1) = std::cos(j * 0.1);
+                Gimage(i, j, 0) = std::cos(i * 0.1);
+                Gimage(i, j, 1) = std::sin(j * 0.1);
+            }
+        }
+
+        cv::Mat result = create_VIFG(Vimage, Iimage, Fimage, Gimage, "output.png", true);
+        cv::imshow("Result", result);
+        cv::waitKey(0);
+
+        std::cout << "OPENCV TEST PASSED" << std::endl;
+    }
+    return 0;
+}
+
+int main() {
+    //##################################################################################################################
+    // Parameters
     std::string folder_name = "results";
-    std::string folder_path = create_folder_and_update_gitignore(folder_name);
-    std::cout << "Implemented Folder creation" << std::endl;
-
-    // Read calibration file
     std::string calib_path = "../res/shapes_rotation/calib.txt";
-    std::vector<float> calibration_data;
-    read_calib(calib_path, calibration_data);
-    std::cout << "Implemented calibration data readout" << std::endl;
-
-    // Read events file
     std::string event_path = "../res/shapes_rotation/eventsshort.txt";
-    std::vector<Event> event_data;
-    read_events(event_path, event_data, 0.0, 1.0);
-    std::cout << "Implemented events readout" << std::endl;
 
-    // Bin events
-    std::vector<std::vector<Event>> bucketed_events;
-    bucketed_events = bin_events(event_data, 0.05);
+    float start_time_events = 0.0; // in s
+    float end_time_events = 1.0; // in s
+    float time_bin_size_in_s = 0.05; // in s
+    int iterations = 10;
 
-    // Create frames
-    std::vector<Tensor<float,2,Eigen::RowMajor>> frames;
-    create_frames(bucketed_events, frames, 180, 240);
-    std::cout << "Implemented event binning and event frame creation" << std::endl;
-
-    // Test Sparsematrix creation
-    SpMat sparse_m(NM*3,NM+3);
-    Tensor<float,2,Eigen::RowMajor> F_flat(NM,3);
-    F_flat.setRandom();
-    create_sparse_matrix(NM, F_flat, sparse_m);
-    std::cout << "Implemented sparse matrix creation for update_R" << std::endl;
-
-    // Camera calibration map
-    find_C(n, m, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
-    std::cout << "Implemented find_C function with autodiff" << std::endl;
-    std::cout << "C" << std::endl;
-    std::cout << CCM << std::endl;
-    std::cout << "dCdx" << std::endl;
-    std::cout << dCdx << std::endl;
-    std::cout << "dCdy" << std::endl;
-    std::cout << dCdy << std::endl;
-
-    // Update F/G from G/F
-    update_F_from_G(F, V, G, 1.0, 0.5);
-    std::cout << "Implemented update_F_from_G/update_G_from_F" << std::endl;
-    std::cout << "F after update" << std::endl;
-    std::cout << F << std::endl;
-
-    // Update I from G
-    update_I_from_G(I, I_gradient, G, 0.2f);
-    std::cout << "Implemented update_I_from_G" << std::endl;
-    std::cout << "I after update" << std::endl;
-    std::cout << I << std::endl;
-
-    // Update I from V
-    update_I_from_V(I, V, 0.2f, 0.05f);
-    std::cout << "Implemented update_I_from_V" << std::endl;
-    std::cout << "I after update" << std::endl;
-    std::cout << I << std::endl;
-
-    // Update G from I
-    update_G_from_I(G, I_gradient, 0.2f);
-    std::cout << "Implemented update_G_from_I" << std::endl;
-    std::cout << "G after update" << std::endl;
-    std::cout << G << std::endl;
-
-    // // Tensor cross product
-    // // Define the dimensions of the tensors
-    Eigen::array<Eigen::Index, 3> dimensions = {n, m, 3};
-
-    // // Initialize tensors A and B with random values
-    Eigen::Tensor<float,3,Eigen::RowMajor> A(dimensions);
-    Eigen::Tensor<float,3,Eigen::RowMajor> B(dimensions);
-    Eigen::Tensor<float,3,Eigen::RowMajor> D(dimensions);
-    A.setRandom();
-    B.setRandom();
-
-    int iterations = 1000;
-
-    // Timing the chip-based implementation
-    std::cout << "Timing cross product for tensors implementations " << std::endl;
-    auto start_chip = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < iterations; ++i) {
-        crossProduct3x3(A, B, D);
-    }
-    auto end_chip = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_chip = end_chip - start_chip;
-    std::cout << "Time for chip-based implementation: " << duration_chip.count()/iterations << " seconds\n";
-
-    // Timing the loop-based implementation
-    auto start_loop = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < iterations; ++i) {
-        crossProduct3x3_loop(A, B, D);
-    }
-    auto end_loop = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration_loop = end_loop - start_loop;
-    std::cout << "Time for loop-based implementation: " << duration_loop.count()/iterations << " seconds\n";
-    std::cout << "Implemented cross product for Tensors" << std::endl;
-
-    // Define the resulting tensor D with shape (m, n)
-    Eigen::Tensor<float,2,Eigen::RowMajor> E(n, m);
-    // Time the dot product computation using nested loops
-    std::cout << "Timing dot product computation with loops:" << std::endl;
-    timeDotProductComputation(computeDotProductWithLoops, A, B, E, 1000);
-    std::cout << "Implemented dot product for tensors" << std::endl;
-
-    // // Time the dot product computation using .chip() (CHATGPT USES CHIP JUST FOR FANCY INDEXING)
-    // std::cout << "Timing dot product computation with .chip():" << std::endl;
-    // timeDotProductComputation(computeDotProductWithChip, A, B, E, 1000);
-
-    // Test Vector distance function needed for M32
-    vector_distance(dCdx, dCdy, distance);
-    std::cout << "Implemented vector distance function for m32" << std::endl;
-    std::cout << distance << std::endl;
-
-    // M32 Test    
-    Tensor<float,3,Eigen::RowMajor> A2(n,m,2);
-    m32(A, dCdx, dCdy, A2);
-    std::cout << "Implemented transformation function m32" << std::endl;
-    std::cout << A << std::endl;
-    std::cout << A2 << std::endl;
+    int height = 180; // in pixels
+    int width = 240; // in pixels
 
     std::unordered_map<std::string,float> weights;
     weights["weight_FG"] = 0.2;
@@ -1151,90 +1331,73 @@ int main() {
     weights["weight_RF"] = 0.2;
     weights["lr"] = 0.9;
     weights["timestep"] = 0.05f;
+    std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
 
-    std::vector<int> permutation {0,1,2,3,4,5,6};
+    //##################################################################################################################
+    // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
+    Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
+    F.setConstant(1.0);
+//    Tensor<float,2,Eigen::RowMajor> V(height, width);
+    Tensor<float,3,Eigen::RowMajor> G(height, width,2);
+    G.setConstant(3.0);
+    Tensor<float,2,Eigen::RowMajor> I(height, width);
+    I.setRandom();
+    Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
+    I_gradient.setRandom();
+    Tensor<float,1> R(3);
+    R.setRandom();
 
-     interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, weights, permutation, NM);
-     std::cout << "Implemented interacting maps update step" << std::endl;
 
-    // TESTING OPENCV CONVERSION
-    Eigen::MatrixXfRowMajor eigen_matrix = Eigen::MatrixXfRowMajor::Constant(3, 3, 2.0);
-    cv::Mat mat = eigenToCvMat(eigen_matrix);
-    std::cout << "Implemented Eigen to CV map" << std::endl << mat << std::endl;
+    //##################################################################################################################
+    // Create results_folder
+    std::string folder_path = create_folder_and_update_gitignore(folder_name);
+    std::cout << "Created Folder " << folder_name << std::endl;
 
-    cv::Mat mat2(3, 3, CV_32F, cv::Scalar::all(1));
-    Eigen::MatrixXfRowMajor eigen_matrix2 = cvMatToEigen(mat2);
-    std::cout << "Implemented Eigen to CV map" << std::endl << eigen_matrix2 << std::endl;
+    //##################################################################################################################
+    // Read calibration file
+    std::vector<float> calibration_data;
+    read_calib(calib_path, calibration_data);
+    std::cout << "Readout calibration file at " << calib_path << std::endl;
 
-    // Create an example Eigen matrix
-    Eigen::MatrixXfRowMajor grayscale_test = Eigen::MatrixXfRowMajor::Random(100,100);
+    //##################################################################################################################
+    // Read events file
+    std::vector<Event> event_data;
+    read_events(event_path, event_data, start_time_events, end_time_events);
+    std::cout << "Readout events at " << event_path << std::endl;
 
-    // Convert to grayscale image
-    cv::Mat grayscale_image = frame2grayscale(grayscale_test);
+    //##################################################################################################################
+    // Bin events
+    std::vector<std::vector<Event>> binned_events;
+    binned_events = bin_events(event_data, time_bin_size_in_s);
 
-    // Display the result
-    cv::imshow("Grayscale Image", grayscale_image);
-    cv::waitKey(0);
+    //##################################################################################################################
+    // Create frames
+    std::vector<Tensor<float,2,Eigen::RowMajor>> frames;
+    create_frames(binned_events, frames, height, width);
+    std::cout << "Created frames out of events" << std::endl;
 
-    // cv::Mat sample_image = (cv::Mat_<float>(3, 3) << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9);
+    //##################################################################################################################
+    // Camera calibration matrix (C/CCM) and dCdx/dCdy
+    Tensor<float,3,Eigen::RowMajor> CCM(height, width,3);
+    CCM.setZero();
+    Tensor<float,3,Eigen::RowMajor> dCdx(height, width,3);
+    dCdx.setZero();
+    Tensor<float,3,Eigen::RowMajor> dCdy(height, width,3);
+    dCdy.setZero();
 
-    // TESTING UNDISTORT IMAGE
-    // Camera matrix (3x3)
-    Eigen::MatrixXfRowMajor camera_matrix_eigen(3, 3);
-    camera_matrix_eigen << 800, 0, 320,
-                            0, 800, 240,
-                            0, 0, 1;
-    cv::Mat camera_matrix_cv = eigenToCvMat(camera_matrix_eigen);
+    find_C(height, width, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
 
-    // Distortion coefficients (1x5)
-    Eigen::MatrixXfRowMajor distortion_coefficients_eigen(1, 5);
-    distortion_coefficients_eigen << 0.1, -0.05, 0, 0, 0; // Simple distortion
-    cv::Mat distortion_coefficients_cv = eigenToCvMat(distortion_coefficients_eigen);
-
-    // Convert Eigen matrices to cv::Mat and back to Eigen
-    // Test undistort_image function
-    cv::Mat undistorted_image = undistort_image(grayscale_image, camera_matrix_cv, distortion_coefficients_cv);
-
-    // Print result
-    cv::imshow("Undistorted Image", undistorted_image);
-    cv::waitKey(0);
-
-    // V to Image
-    Eigen::MatrixXfRowMajor V2image_eigen = Eigen::MatrixXfRowMajor::Random(100,100);
-    cv::Mat V2image_cv = V2image(V2image_eigen);
-    cv::imshow("V Image", V2image_cv);
-    cv::waitKey(0);
-
-    // Vectorfield to Image
-    Eigen::Tensor<float,3,Eigen::RowMajor> vector_field(1000,1000,2);
-    // Eigen::Tensor<float,2,Eigen::RowMajor> x_values(1000,1000);
-    // x_values.setConstant(-1.0);
-    // Eigen::Tensor<float,2,Eigen::RowMajor> y_values(1000,1000);
-    // y_values.setConstant(1.0);
-    // vector_field.chip(0,2) = x_values;
-    // vector_field.chip(1,2) = y_values;
-    vector_field.setRandom();
-    cv::Mat image = vector_field2image(vector_field);
-    cv::imshow("Vector Field Image", image);
-    cv::waitKey(0);
-
-    // Example usage of the functions
-    Eigen::MatrixXfRowMajor Vimage = Eigen::MatrixXfRowMajor::Random(100, 100);  // Example data
-    Eigen::MatrixXfRowMajor IImage = Eigen::MatrixXfRowMajor::Random(100, 100);  // Example data
-    Eigen::Tensor<float,3,Eigen::RowMajor> Fimage(100, 100, 2);          // Example data
-    Eigen::Tensor<float,3,Eigen::RowMajor> Gimage(100, 100, 2);          // Example data
-
-    // Fill example tensor data (normally you would have real data)
-    for (int i = 0; i < 100; ++i) {
-        for (int j = 0; j < 100; ++j) {
-            F(i, j, 0) = std::sin(i * 0.1);
-            F(i, j, 1) = std::cos(j * 0.1);
-            G(i, j, 0) = std::cos(i * 0.1);
-            G(i, j, 1) = std::sin(j * 0.1);
+    Instrumentor::Get().BeginSession("Profile");
+    int counter = 0;
+    for (Tensor<float,2,Eigen::RowMajor> V : frames){
+        for (int iter = 0; iter < iterations; ++iter){
+            interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, weights, permutation, height*width);
         }
+        counter++;
+        std::cout << "Frame: " << counter << std::endl;
     }
-
-    cv::Mat result = create_VIFG(Vimage, IImage, Fimage, Gimage, "output.png", true);
-    cv::imshow("Result", result);
-    cv::waitKey(0);
+    Instrumentor::Get().EndSession();
 }
+
+
+
