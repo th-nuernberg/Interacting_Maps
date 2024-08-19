@@ -21,8 +21,10 @@
 #include <chrono>
 #include <algorithm>
 #include <fstream>
+#include <filesystem>
 
 #include <thread>
+namespace fs = std::filesystem;
 
 struct ProfileResult
 {
@@ -49,6 +51,13 @@ public:
     }
 
     void BeginSession(const std::string& name, const std::string& filepath = "results.json")
+    {
+        m_OutputStream.open(filepath);
+        WriteHeader();
+        m_CurrentSession = new InstrumentationSession{ name };
+    }
+
+    void BeginSession(const std::string& name, const fs::path& filepath)
     {
         m_OutputStream.open(filepath);
         WriteHeader();
