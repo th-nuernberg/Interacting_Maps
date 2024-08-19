@@ -8,6 +8,15 @@
 #include <numeric>
 #include "Instrumentor.h"
 
+#define PROFILING 1
+#if PROFILING
+#define PROFILE_SCOPE(name) InstrumentationTimer timer##__LINE__(name)
+#define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCTION__)
+// #define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCSIG__) (Includes call attributes, whole signature of function)
+#else
+#define PROFILE_SCOPE(name)
+#define PROFILE_FUNCTION()
+#endif
 
 // Define a type for convenience
 // using namespace autodiff;
@@ -334,7 +343,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
     return bgr_image;
 }
 
-cv::Mat create_VIFG(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float, 3, Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& G, const std::string& name = "VIFG", bool save = false) {
+cv::Mat create_VIFG(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& G, const std::string& name = "VIFG", bool save = false) {
     cv::Mat V_img = V2image(V);
     cv::Mat I_img = frame2grayscale(I);
     cv::Mat F_img = vector_field2image(F);
@@ -450,34 +459,47 @@ void read_events(const std::string file_path, std::vector<Event>& events, float 
     }
 }
 
-std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bucketsize = 0.05){
-    float min_time = events.front().time;
-    float max_time = events.back().time;
-    int n_buckets = int((max_time-min_time)/bucketsize);
-
-    Eigen::VectorXf bins = Eigen::VectorXf::LinSpaced(n_buckets, min_time, max_time);
-    std::vector<std::vector<Event>> buckets(n_buckets, std::vector<Event>());
-
-
-    // Find the indices where each event belongs according to its time stamp
-    // std::vector<int> indices;
-    int index;
-    for (const Event& event : events) {
-        // Find the index where 'value' should be inserted to keep 'bins' sorted
-        auto it = std::lower_bound(bins.begin(), bins.end(), event.time);
-
-        // If the iterator points to the end, timeValue is greater than all bins
-        if (it == bins.end()) {
-            index = bins.size(); // timeValue is beyond the last bin
-        }
-
-        index = std::distance(bins.begin(), it);
-
-        // std::cout << index << " ";
-        // indices.push_back(index);
-        buckets[*it].push_back(event);
+std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin_size = 0.05){
+    std::vector<std::vector<Event>> bins;
+    if (events.empty()) {
+        return bins;  // Return empty if the input vector is empty
     }
-    return buckets;
+
+    Event minVal = events.front();  // The lowest number in the sorted vector
+    float currentBinStart = minVal.time;
+
+    std::vector<Event> currentBin;
+
+    for (Event event : events) {
+        if (event.time >= currentBinStart && event.time < currentBinStart + bin_size) {
+            currentBin.push_back(event);
+        } else {
+            // Push the current bin into bins and start a new bin
+            bins.push_back(currentBin);
+            currentBin.clear();
+            currentBinStart += bin_size;
+            // Keep adjusting the currentBinStart if the number falls outside the current bin
+            while (event.time >= currentBinStart + bin_size) {
+                currentBinStart += bin_size;
+                bins.emplace_back(); // Add an empty bin for skipped bins
+            }
+            currentBin.push_back(event);
+        }
+    }
+
+    // Push the last bin
+    bins.push_back(currentBin);
+
+//    int i = 1;
+//    for (std::vector<Event> bin : bins){
+//        std::cout << "Bin " << i << std::endl;
+//        for (Event event : bin) {
+//            std::cout << event.time << std::endl;
+//        }
+//        std::cout << "####################" << std::endl;
+//        i++;
+//    }
+    return bins;
 }
 
 void create_frames(std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor<float,2,Eigen::RowMajor>>& frames, int camera_height, int camera_width){
@@ -857,85 +879,111 @@ void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::R
 }
 
 void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Tensor<float,1>& R, float weight_FR){
-    InstrumentationTimer timer("update_F_from_R");
+    PROFILE_FUNCTION();
     Tensor<float,3,Eigen::RowMajor> cross(CCM.dimensions());
 //    const auto& dimensions = F.dimensions();
     Tensor<float,3,Eigen::RowMajor> update(F.dimensions());
-    crossProduct1x3(R, CCM, cross);
-    m32(cross, Cx, Cy, update);
+    {
+        PROFILE_SCOPE("FR CROSSPRODUCT");
+        crossProduct1x3(R, CCM, cross);
+    }
+    {
+        PROFILE_SCOPE("FR M32");
+        m32(cross, Cx, Cy, update);
+    }
+
     F = (1 - weight_FR) * F + weight_FR * update;
 }
 
-void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const float weight_RF, const int N) {
-    InstrumentationTimer timer1("update_R_from_F");
+void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, Eigen::SparseMatrix<double>& SpMat, float weight_RF, const int N) {
+    //InstrumentationTimer timer1("update_R_from_F");
+//    PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
     Tensor<float, 3, Eigen::RowMajor> transformed_F(dimensions[0], dimensions[1], 3);
     Tensor<float, 3, Eigen::RowMajor> points(dimensions[0], dimensions[1], 3);
-    Eigen::SparseMatrix<double> SpMat(N * 3, N + 3);
+    //Eigen::SparseMatrix<double> SpMat(N * 3, N + 3);
     Eigen::VectorXd x(N + 3);
     Eigen::array<Eigen::DenseIndex, 1> reshaper({N * 3});
     Eigen::Tensor<float, 1, Eigen::RowMajor> reshaped_points;
     Eigen::Tensor<float, 1, Eigen::RowMajor> reshaped_C;
     Eigen::VectorXf points_vector;
 
-    //{
-    //    InstrumentationTimer timer2("RF_Pre");
+
+    {
+        PROFILE_SCOPE("RF Pre");
         m23(F, Cx, Cy, transformed_F);
         crossProduct3x3(C, transformed_F, points);
         x.setZero();
         reshaped_points = points.reshape(reshaper); // reshaped_points need to be Eigen::Vector for solver
         points_vector = Tensor2VectorRM(reshaped_points);
         reshaped_C = C.reshape(reshaper);
-    //}
-
-    std::vector<Eigen::Triplet<double>> tripletList;
-    {
-        InstrumentationTimer timer3("RF Triplet");
-        tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
-        int j = 3;
-        for (int i = 0; i < N * 3; i++) {
-            tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
-            tripletList.emplace_back(i, j, reshaped_C[i]);
-            if (i % 3 == 2) {
-                j++;
-            }
-        }
-        SpMat.setFromTriplets(tripletList.begin(), tripletList.end());
     }
 
-/*    {
-        InstrumentationTimer timer4("RF Solve");*/
-    // Perform the computation and measure the time
+
+    {
+        PROFILE_SCOPE("RF Set Entries");
+        int counter = 0;
+        double j;
+        for (int k=3; k<SpMat.outerSize(); ++k)
+            // Skip the first three cols as they stay the same
+            for (SparseMatrix<double>::InnerIterator it(SpMat,k); it; ++it)
+            {
+                // Iterate Columnwise through the matrix. Meaning the first entries are all 1 until the 4th column is reached
+                // This also happens exactly at have the contained values -> 3N ones, 3N reshaped_Cs
+                // j = it.value();
+                it.valueRef() = reshaped_C[counter];
+                counter++;
+            }
+    }
+
     // Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
     Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver;
-    // solver.setTolerance(1e-6);
     solver.setTolerance(1e-4);
+    {
+        // Perform the computation and measure the time
+        PROFILE_SCOPE("SOLVE");
 
-    solver.compute(SpMat);
-    if (solver.info() != Eigen::Success) {
-        std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
+        solver.compute(SpMat);
+        if (solver.info() != Eigen::Success) {
+            std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
+        }
+
+        // x = solver.solve(b);
+        x = solver.solveWithGuess(points_vector.cast<double>(), x);
+        if (solver.info() != Eigen::Success) {
+            std::cerr << "Solving failed during update_R_from_C " << std::endl;
+        }
+        else {
+            R(0) = (1-weight_RF)*R(0) + weight_RF*x(0);
+            R(1) = (1-weight_RF)*R(1) + weight_RF*x(1);
+            R(2) = (1-weight_RF)*R(2) + weight_RF*x(2);
+        }
     }
 
-    // x = solver.solve(b);
-    x = solver.solveWithGuess(points_vector.cast<double>(), x);
-    if (solver.info() != Eigen::Success) {
-        std::cerr << "Solving failed during update_R_from_C " << std::endl;
-    }
-    //}
-    R(0) = (1-weight_RF)*R(0) + weight_RF*x(0);
-    R(1) = (1-weight_RF)*R(1) + weight_RF*x(1);
-    R(2) = (1-weight_RF)*R(2) + weight_RF*x(2);
 }
 
 // TODO: add return number
 void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& dCdx, Tensor<float,3,Eigen::RowMajor>& dCdy, std::unordered_map<std::string,float> weights, std::vector<int> permutation, int N){
-     Eigen::array<Eigen::Index, 2> dimensions = I.dimensions();
-     Eigen::Tensor<float,3,Eigen::RowMajor> delta_I(dimensions[0], dimensions[1], 2);
-     Eigen::Tensor<float,2> delta_I_x = Matrix2Tensor(gradient_x(Tensor2Matrix(I)));
-     // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
-     array<int, 2> shuffle({1, 0});
-     delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-     delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+    PROFILE_FUNCTION();
+    Eigen::array<Eigen::Index, 2> dimensions = I.dimensions();
+    Eigen::Tensor<float,3,Eigen::RowMajor> delta_I(dimensions[0], dimensions[1], 2);
+    Eigen::Tensor<float,2> delta_I_x = Matrix2Tensor(gradient_x(Tensor2Matrix(I)));
+    // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
+    array<int, 2> shuffle({1, 0});
+    delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+    delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+
+    // Setup Sparse Matrix for update_R_from_F
+    std::vector<Eigen::Triplet<double>> tripletList;
+    Eigen::SparseMatrix<double> SpMat(N * 3, N + 3);
+    tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
+    int j = 3;
+    for (int i = 0; i < N * 3; i++) {
+        tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
+        j = int(i/3 + 3);
+        tripletList.emplace_back(i, j, 2.0); // Points
+    }
+    SpMat.setFromTriplets(tripletList.begin(), tripletList.end());
 
      for (const auto& element : permutation){
          switch( element ){
@@ -943,35 +991,35 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                  std::cout << "Unknown number in permutation" << std::endl;
              case 0:
                  update_F_from_G(F, V, G, weights["lr"], weights["weight_FG"]);
-                 std::cout << "Case " << element << std::endl;
+//                 std::cout << "Case " << element << std::endl;
                  break;
              case 1:
                  update_F_from_R(F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
-                 std::cout << "Case " << element << std::endl;
+//                 std::cout << "Case " << element << std::endl;
                  break;
              case 2:
                  update_G_from_F(G, V, F, weights["lr"], weights["weight_FG"]);
-                 std::cout << "Case " << element << std::endl;
+//                 std::cout << "Case " << element << std::endl;
                  break;
              case 3:
                  update_G_from_I(G, delta_I, weights["weight_GI"]);
-                 std::cout << "Case " << element << std::endl;
+//                 std::cout << "Case " << element << std::endl;
                  break;
              case 4:
                  update_I_from_G(I, delta_I, G, weights["weight_IG"]);
                  delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
                  delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-                 std::cout << "Case " << element << std::endl;
+//                 std::cout << "Case " << element << std::endl;
                  break;
              case 5:
                  update_I_from_V(I, V, weights["weight_IV"], weights["timestep"]);
                  delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
                  delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-                 std::cout << "Case " << element << std::endl;
+//                 std::cout << "Case " << element << std::endl;
                  break;
              case 6:
-                 update_R_from_F(R, F, CCM, dCdx, dCdy, weights["weight_RF"], N);
-                 std::cout << "Case " << element << std::endl;
+                 update_R_from_F(R, F, CCM, dCdx, dCdy, SpMat, weights["weight_RF"], N);
+//                 std::cout << "Case " << element << std::endl;
                  break;
          }
      }
@@ -1117,22 +1165,27 @@ int test(){
 
         //##################################################################################################################
         // Read events file
-        std::string event_path = "../res/shapes_rotation/eventsshort.txt";
+        std::string event_path = "../res/shapes_rotation/events.txt";
         std::vector<Event> event_data;
         read_events(event_path, event_data, 0.0, 1.0);
         std::cout << "Implemented events readout" << std::endl;
 
         //##################################################################################################################
         // Bin events
-        std::vector<std::vector<Event>> bucketed_events;
-        bucketed_events = bin_events(event_data, 0.05);
+//        std::vector<Event> test_events;
+//        for (int i = 0; i < 20; i++){
+//            Event event;
+//            event.time = float(i)/2.0-0.1;
+//            test_events.push_back(event);
+//        }
+        std::vector<std::vector<Event>> binned_events;
+        binned_events = bin_events(event_data, 0.05);
 
         //##################################################################################################################
         // Create frames
         std::vector<Tensor<float,2,Eigen::RowMajor>> frames;
-        create_frames(bucketed_events, frames, 180, 240);
+        create_frames(binned_events, frames, 180, 240);
         std::cout << "Implemented event binning and event frame creation" << std::endl;
-
         std::cout << "FILE READOUT AND EVENT HANDLING TEST PASSED" << std::endl;
     }
 
@@ -1306,12 +1359,17 @@ int test(){
     return 0;
 }
 
+
+
 int main() {
     //##################################################################################################################
     // Parameters
+
+//    test();
+
     std::string folder_name = "results";
     std::string calib_path = "../res/shapes_rotation/calib.txt";
-    std::string event_path = "../res/shapes_rotation/eventsshort.txt";
+    std::string event_path = "../res/shapes_rotation/events.txt";
 
     float start_time_events = 0.0; // in s
     float end_time_events = 1.0; // in s
@@ -1369,6 +1427,7 @@ int main() {
     // Bin events
     std::vector<std::vector<Event>> binned_events;
     binned_events = bin_events(event_data, time_bin_size_in_s);
+    std::cout << "Binned events" << std::endl;
 
     //##################################################################################################################
     // Create frames
@@ -1393,8 +1452,10 @@ int main() {
         for (int iter = 0; iter < iterations; ++iter){
             interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, weights, permutation, height*width);
         }
+
         counter++;
         std::cout << "Frame: " << counter << std::endl;
+        create_VIFG(Tensor2Matrix(V), Tensor2Matrix(I), F, G, "VIFG_" + std::to_string(counter) + ".png", true);
     }
     Instrumentor::Get().EndSession();
 }

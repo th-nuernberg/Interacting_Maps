@@ -33,3 +33,9 @@ target_link_libraries(Executable ${OpenCV_LIBS})
 set_target_properties(Executable PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/output
 )
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(Executable PRIVATE -g)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(Executable PRIVATE -O3)
+endif()
