@@ -381,7 +381,7 @@ std::vector<int> digitize(const std::vector<double>& input, const std::vector<do
     return indices;
 }
 
-std::string create_folder_and_update_gitignore(const std::string& folder_name) {
+fs::path create_folder_and_update_gitignore(const std::string& folder_name) {
     // Get the absolute path of the current working directory
     fs::path current_directory = fs::current_path();
     
@@ -421,10 +421,10 @@ std::string create_folder_and_update_gitignore(const std::string& folder_name) {
     }
     
     // Return the absolute path of the new folder
-    return folder_path.string();
+    return folder_path;
 }
 
-void read_calib(const std::string file_path, std::vector<float>& calibration_data){
+void read_calib(const std::string& file_path, std::vector<float>& calibration_data){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
@@ -436,7 +436,7 @@ void read_calib(const std::string file_path, std::vector<float>& calibration_dat
     }
 }
 
-void read_events(const std::string file_path, std::vector<Event>& events, float start_time, float end_time, int max_events = INT32_MAX){
+void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, int max_events = INT32_MAX){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
@@ -502,19 +502,23 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin
     return bins;
 }
 
-void create_frames(std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor<float,2,Eigen::RowMajor>>& frames, int camera_height, int camera_width){
+void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor<float,2,Eigen::RowMajor>>& frames, const int camera_height, const int camera_width){
+    int i = 0;
+    Tensor<float,2,Eigen::RowMajor> frame(camera_height, camera_width);
+    Tensor<float,2,Eigen::RowMajor> cum_frame(camera_height, camera_width);
     for (std::vector<Event> event_vector : bucketed_events){
-        Tensor<float,2,Eigen::RowMajor> frame(camera_height, camera_width);
-        Tensor<float,2,Eigen::RowMajor> cum_frame(camera_height, camera_width);
+        frame.setZero();
+        cum_frame.setZero();
         for (Event event : event_vector){
-            frame(event.coordinates.at(0), event.coordinates.at(1)) = event.polarity;
-            cum_frame(event.coordinates.at(0), event.coordinates.at(1)) += event.polarity;
+            frame(event.coordinates.at(0), event.coordinates.at(1)) = (float)event.polarity*2-1;
+//            cum_frame(event.coordinates.at(0), event.coordinates.at(1)) += (float)event.polarity;
         }
-        frames.push_back(frame);
+        frames[i] = frame;
+        i++;
     }
 }
 
-void create_sparse_matrix(int N, Tensor<float,2,Eigen::RowMajor>& V, SpMat& result){
+void create_sparse_matrix(const int N, const Tensor<float,2,Eigen::RowMajor>& V, SpMat& result){
 
     // Step 1: Create the repeated identity matrix part
     std::vector<Triplet<float>> tripletList;
@@ -778,7 +782,7 @@ void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::Row
 }
 
 
-void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, float lr, float weight_FG){
+void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, const float lr, const float weight_FG){
     InstrumentationTimer timer("update_F_from_G");
     const auto& dimensions = F.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_F(dimensions);
@@ -791,7 +795,7 @@ void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::R
     F = (1-weight_FG)*F + lr * weight_FG * update_F;
 }
 
-void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, float lr, float weight_GF){
+void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
     InstrumentationTimer timer("update_G_from_F");
     const auto& dimensions = G.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
@@ -804,12 +808,12 @@ void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::R
     G = (1-weight_GF)*G + lr * weight_GF * update_G;
 }
 
-void update_G_from_I(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajor> &I_gradient, float weight_GI){
+void update_G_from_I(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajor> &I_gradient, const float weight_GI){
     InstrumentationTimer timer("update_G_from_I");
     G = (1 - weight_GI) * G + weight_GI*I_gradient;
 }
 
-void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajor> &cum_V, float weight_IV=0.5, float time_step=0.05){
+void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajor> &cum_V, const float weight_IV=0.5, const float time_step=0.05){
     InstrumentationTimer timer("update_I_from_V");
     I = (1 - weight_IV)*I + weight_IV*cum_V;
     const auto& dimensions = I.dimensions();
@@ -838,7 +842,7 @@ void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::R
 
 }
 
-void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajor> &I_gradient, Tensor<float,3,Eigen::RowMajor> &G, float weight_IG=0.5){
+void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajor> &I_gradient, Tensor<float,3,Eigen::RowMajor> &G, const float weight_IG=0.5){
     InstrumentationTimer timer("update_I_from_G");
     const auto& dimensions = I.dimensions();
     Tensor<float,3,Eigen::RowMajor> temp_map = G - I_gradient;
@@ -878,7 +882,7 @@ void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::R
     // return (1 - weight_IG)*I + weight_IG*(I - x_update - y_update)
 }
 
-void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Tensor<float,1>& R, float weight_FR){
+void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Tensor<float,1>& R, const float weight_FR){
     PROFILE_FUNCTION();
     Tensor<float,3,Eigen::RowMajor> cross(CCM.dimensions());
 //    const auto& dimensions = F.dimensions();
@@ -895,14 +899,14 @@ void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Ei
     F = (1 - weight_FR) * F + weight_FR * update;
 }
 
-void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, Eigen::SparseMatrix<double>& SpMat, float weight_RF, const int N) {
+void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, SpMat& sparse_m, const float weight_RF, const int N) {
     //InstrumentationTimer timer1("update_R_from_F");
 //    PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
     Tensor<float, 3, Eigen::RowMajor> transformed_F(dimensions[0], dimensions[1], 3);
     Tensor<float, 3, Eigen::RowMajor> points(dimensions[0], dimensions[1], 3);
     //Eigen::SparseMatrix<double> SpMat(N * 3, N + 3);
-    Eigen::VectorXd x(N + 3);
+    Eigen::VectorXf x(N + 3);
     Eigen::array<Eigen::DenseIndex, 1> reshaper({N * 3});
     Eigen::Tensor<float, 1, Eigen::RowMajor> reshaped_points;
     Eigen::Tensor<float, 1, Eigen::RowMajor> reshaped_C;
@@ -924,9 +928,9 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
         PROFILE_SCOPE("RF Set Entries");
         int counter = 0;
         double j;
-        for (int k=3; k<SpMat.outerSize(); ++k)
+        for (int k=3; k<sparse_m.outerSize(); ++k)
             // Skip the first three cols as they stay the same
-            for (SparseMatrix<double>::InnerIterator it(SpMat,k); it; ++it)
+            for (SparseMatrix<float>::InnerIterator it(sparse_m,k); it; ++it)
             {
                 // Iterate Columnwise through the matrix. Meaning the first entries are all 1 until the 4th column is reached
                 // This also happens exactly at have the contained values -> 3N ones, 3N reshaped_Cs
@@ -937,19 +941,19 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
     }
 
     // Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
-    Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver;
+    Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>, Eigen::LeastSquareDiagonalPreconditioner<float>> solver;
     solver.setTolerance(1e-4);
     {
         // Perform the computation and measure the time
         PROFILE_SCOPE("SOLVE");
 
-        solver.compute(SpMat);
+        solver.compute(sparse_m);
         if (solver.info() != Eigen::Success) {
             std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
         }
 
         // x = solver.solve(b);
-        x = solver.solveWithGuess(points_vector.cast<double>(), x);
+        x = solver.solveWithGuess(points_vector.cast<float>(), x);
         if (solver.info() != Eigen::Success) {
             std::cerr << "Solving failed during update_R_from_C " << std::endl;
         }
@@ -963,7 +967,7 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
 }
 
 // TODO: add return number
-void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& dCdx, Tensor<float,3,Eigen::RowMajor>& dCdy, std::unordered_map<std::string,float> weights, std::vector<int> permutation, int N){
+void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, SpMat& sparse_m, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N){
     PROFILE_FUNCTION();
     Eigen::array<Eigen::Index, 2> dimensions = I.dimensions();
     Eigen::Tensor<float,3,Eigen::RowMajor> delta_I(dimensions[0], dimensions[1], 2);
@@ -972,18 +976,6 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
     array<int, 2> shuffle({1, 0});
     delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
     delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-
-    // Setup Sparse Matrix for update_R_from_F
-    std::vector<Eigen::Triplet<double>> tripletList;
-    Eigen::SparseMatrix<double> SpMat(N * 3, N + 3);
-    tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
-    int j = 3;
-    for (int i = 0; i < N * 3; i++) {
-        tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
-        j = int(i/3 + 3);
-        tripletList.emplace_back(i, j, 2.0); // Points
-    }
-    SpMat.setFromTriplets(tripletList.begin(), tripletList.end());
 
      for (const auto& element : permutation){
          switch( element ){
@@ -1018,7 +1010,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
 //                 std::cout << "Case " << element << std::endl;
                  break;
              case 6:
-                 update_R_from_F(R, F, CCM, dCdx, dCdy, SpMat, weights["weight_RF"], N);
+                 update_R_from_F(R, F, CCM, dCdx, dCdy, sparse_m, weights["weight_RF"], N);
 //                 std::cout << "Case " << element << std::endl;
                  break;
          }
@@ -1074,6 +1066,7 @@ int test(){
     // Rotation Vector R
     Tensor<float,1> R(3);
     R.setRandom();
+    SpMat sparse_m(NM*3,NM+3);
 
     //##################################################################################################################
     // Vector distance function
@@ -1153,7 +1146,7 @@ int test(){
         //##################################################################################################################
         // Create results_folder
         std::string folder_name = "results";
-        std::string folder_path = create_folder_and_update_gitignore(folder_name);
+        fs::path folder_path = create_folder_and_update_gitignore(folder_name);
         std::cout << "Implemented Folder creation" << std::endl;
 
         //##################################################################################################################
@@ -1193,7 +1186,7 @@ int test(){
         std::cout << "TESTING HELPER FUNCTIONS" << std::endl;
         //##################################################################################################################
         // Test sparse matrix creation
-        SpMat sparse_m(NM*3,NM+3);
+
         Tensor<float,2,Eigen::RowMajor> F_flat(NM,3);
         F_flat.setRandom();
         create_sparse_matrix(NM, F_flat, sparse_m);
@@ -1284,7 +1277,7 @@ int test(){
         weights["lr"] = 0.9;
         weights["timestep"] = 0.05f;
         std::vector<int> permutation {0,1,2,3,4,5,6};
-        interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, weights, permutation, nm);
+        interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, nm);
         std::cout << "Implemented interacting maps update step" << std::endl;
 
         std::cout << "UPDATE STEP FUNCTION TEST PASSED" << std::endl;
@@ -1366,27 +1359,29 @@ int main() {
     // Parameters
 
 //    test();
-
-    std::string folder_name = "results";
+    auto clock_time = std::chrono::system_clock::now();
+    std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
+    std::string results_name = "results ";
+    std::string folder_name = results_name + std::ctime(&time);
     std::string calib_path = "../res/shapes_rotation/calib.txt";
     std::string event_path = "../res/shapes_rotation/events.txt";
 
-    float start_time_events = 0.0; // in s
-    float end_time_events = 1.0; // in s
+    float start_time_events = 10.0; // in s
+    float end_time_events = 10.15; // in s
     float time_bin_size_in_s = 0.05; // in s
-    int iterations = 10;
+    int iterations = 100;
 
     int height = 180; // in pixels
     int width = 240; // in pixels
 
     std::unordered_map<std::string,float> weights;
     weights["weight_FG"] = 0.2;
-    weights["weight_FR"] = 0.2;
+    weights["weight_FR"] = 0.8;
     weights["weight_GF"] = 0.2;
     weights["weight_GI"] = 0.2;
     weights["weight_IG"] = 0.2;
     weights["weight_IV"] = 0.2;
-    weights["weight_RF"] = 0.2;
+    weights["weight_RF"] = 0.8;
     weights["lr"] = 0.9;
     weights["timestep"] = 0.05f;
     std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
@@ -1394,10 +1389,10 @@ int main() {
     //##################################################################################################################
     // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
     Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
-    F.setConstant(1.0);
+    F.setRandom();
 //    Tensor<float,2,Eigen::RowMajor> V(height, width);
     Tensor<float,3,Eigen::RowMajor> G(height, width,2);
-    G.setConstant(3.0);
+    G.setRandom();
     Tensor<float,2,Eigen::RowMajor> I(height, width);
     I.setRandom();
     Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
@@ -1408,7 +1403,7 @@ int main() {
 
     //##################################################################################################################
     // Create results_folder
-    std::string folder_path = create_folder_and_update_gitignore(folder_name);
+    fs::path folder_path = create_folder_and_update_gitignore(folder_name);
     std::cout << "Created Folder " << folder_name << std::endl;
 
     //##################################################################################################################
@@ -1431,7 +1426,8 @@ int main() {
 
     //##################################################################################################################
     // Create frames
-    std::vector<Tensor<float,2,Eigen::RowMajor>> frames;
+    size_t frame_count = binned_events.size();
+    std::vector<Tensor<float,2,Eigen::RowMajor>> frames(frame_count);
     create_frames(binned_events, frames, height, width);
     std::cout << "Created frames out of events" << std::endl;
 
@@ -1443,19 +1439,38 @@ int main() {
     dCdx.setZero();
     Tensor<float,3,Eigen::RowMajor> dCdy(height, width,3);
     dCdy.setZero();
-
     find_C(height, width, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
+    std::cout << "Calculated Camera Matrix" << std::endl;
 
-    Instrumentor::Get().BeginSession("Profile");
+    std::string profiler_name = "Profiler.json";
+    fs::path profiler_path = folder_path / profiler_name;
+    Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
+    std::cout << "Setup Profiler" << std::endl;
     int counter = 0;
+
+    // Setup Sparse Matrix for update_R_from_F
+    int N = height*width;
+    std::vector<Eigen::Triplet<float>> tripletList;
+    SpMat sparse_m(N * 3, N + 3);
+    tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
+    int j = 3;
+    for (int i = 0; i < N * 3; i++) {
+        tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
+        j = int(i/3 + 3);
+        tripletList.emplace_back(i, i % 3, 1.0); // Points
+    }
+    sparse_m.setFromTriplets(tripletList.begin(), tripletList.end());
     for (Tensor<float,2,Eigen::RowMajor> V : frames){
         for (int iter = 0; iter < iterations; ++iter){
-            interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, weights, permutation, height*width);
+            interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, N);
+            std::cout << iter << "/" << iterations << std::endl;
         }
 
         counter++;
         std::cout << "Frame: " << counter << std::endl;
-        create_VIFG(Tensor2Matrix(V), Tensor2Matrix(I), F, G, "VIFG_" + std::to_string(counter) + ".png", true);
+        std::string image_name = "VIFG_" + std::to_string(counter) + ".png";
+        fs::path image_path = folder_path / image_name;
+        create_VIFG(Tensor2Matrix(V), Tensor2Matrix(I), F, G, image_path, true);
     }
     Instrumentor::Get().EndSession();
 }
