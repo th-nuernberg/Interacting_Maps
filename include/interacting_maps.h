@@ -131,5 +131,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
 
 void interacting_maps(std::vector<Tensor<float,2,Eigen::RowMajor>>& Vs, std::vector<Tensor<float,2,Eigen::RowMajor>>& cum_Vs, std::unordered_map<std::string,float> weights, int iterations, std::string results_directory);
 
+bool isApprox(Tensor<float,3,Eigen::RowMajor>& t1, Tensor<float,2,Eigen::RowMajor>& t2, float precision);
 
+bool isApprox(Tensor<float,2,Eigen::RowMajor>& t1, Tensor<float,2,Eigen::RowMajor>& t2, float precision);
 
