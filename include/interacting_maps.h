@@ -14,7 +14,7 @@ namespace fs = std::filesystem;
 
 using namespace Eigen;
 
-typedef SparseMatrix<float> SpMat;
+typedef SparseMatrix<double> SpMat;
 
 struct Event{
     float time;
@@ -22,6 +22,13 @@ struct Event{
     int polarity;
 
     std::string toString() const;
+};
+
+struct Calibration_Data{
+    std::vector<float> focal_point;
+    Eigen::MatrixXf camera_matrix;
+    std::vector<float> distortion_coefficients;
+    std::vector<float> view_angles;
 };
 
 struct Parameters{
@@ -44,6 +51,8 @@ fs::path create_folder_and_update_gitignore(const std::string& foldername);
  * @param calibration_data Read out calibration data as float std::vector
  */
 void read_calib(const std::string& file_path, std::vector<float>& calibration_data);
+
+Calibration_Data get_calibration_data(const std::vector<float>& calibration_data, int height, int width);
 
 /**
  * @brief Read the events from a .txt-file.

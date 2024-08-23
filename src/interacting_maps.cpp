@@ -432,6 +432,18 @@ void read_calib(const std::string& file_path, std::vector<float>& calibration_da
     }
 }
 
+Calibration_Data get_calibration_data(const std::vector<float>& raw_data, int frame_height, int frame_width){
+    Calibration_Data data;
+    data.focal_point = std::vector<float>(raw_data.begin(), raw_data.begin()+2);
+    data.camera_matrix = Eigen::MatrixXf({{data.focal_point[0], 0, raw_data[2]},
+                                              {0, data.focal_point[1], raw_data[3]},
+                                              {0, 0, 1}});
+    data.distortion_coefficients = std::vector<float>(raw_data.begin()+4, raw_data.end());
+    data.view_angles = std::vector<float>({std::atan(frame_height/(2*data.focal_point[0])),
+                                            std::atan(frame_width/(2*data.focal_point[1]))});
+    return data;
+}
+
 void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, int max_events = INT32_MAX){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
@@ -896,74 +908,89 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
     PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
     Tensor<float, 3, Eigen::RowMajor> transformed_F(dimensions[0], dimensions[1], 3);
-    Tensor<float, 3, Eigen::RowMajor> points(dimensions[0], dimensions[1], 3);
-    Tensor<float, 1, Eigen::RowMajor> reshaped_points;
-    Tensor<float, 1, Eigen::RowMajor> reshaped_C;
-    Eigen::VectorXf solution(N * 3);
-    Eigen::array<Eigen::DenseIndex, 1> reshaper({N * 3});
-    Eigen::VectorXf points_vector;
-    Eigen::array<Eigen::DenseIndex, 1> offsets = {0};
-    Eigen::array<Eigen::DenseIndex, 1> extents = {3};
+    Tensor<float, 3, Eigen::RowMajor> points_tensor(dimensions[0], dimensions[1], 3);
+    Tensor<float, 3, Eigen::RowMajor> directions_tensor(dimensions[0], dimensions[1], 3);
+    Tensor<float, 2, Eigen::RowMajor> reshaped_points;
+    Tensor<float, 2, Eigen::RowMajor> reshaped_directions;
+    Eigen::Vector3f solution(3);
+    Eigen::array<int , 2> reshaper({N, 3});
+    Eigen::MatrixXf points;
+    Eigen::MatrixXf directions;
+
+    Matrix3f A = Matrix3f::Zero();
+    Vector3f B = Vector3f::Zero();
+    Matrix3f I = Matrix3f::Identity();
+    Matrix3f outerProduct;
+    Eigen::Vector<float,3,Eigen::RowMajor> p;
+    Eigen::Vector<float,3,Eigen::RowMajor> d;
 
     {
         PROFILE_SCOPE("RF Pre");
         m23(F, Cx, Cy, transformed_F);
-        crossProduct3x3(C, transformed_F, points);
-        solution.setZero();
-        reshaped_points = points.reshape(reshaper); // reshaped_points need to be Eigen::Vector for solver
-        points_vector = Tensor2VectorRM(reshaped_points);
-        reshaped_C = C.reshape(reshaper);
-        // These should all be the same. Corresponds to the vector at the first pixel
-//        std::cout << "points " << std::endl;
-//        std::cout << points.chip(0,0).chip(0,0) << std::endl;
-//        std::cout << "reshaped_points " << std::endl;
-//        std::cout << reshaped_points.slice(offsets, extents) << std::endl;
-//        std::cout << "points_vector " << std::endl;
-//        std::cout << points_vector({0,1,2}) << std::endl;
-    }
-
-    {
-        PROFILE_SCOPE("RF Set Entries");
-        int counter = 0;
-        for (int k=3; k<sparse_m.outerSize(); ++k)
-            // Skip the first three cols as they stay the same
-            for (SparseMatrix<float>::InnerIterator it(sparse_m,k); it; ++it)
-            {
-                // Iterate Columnwise through the matrix. Meaning the first entries are all 1 until the 4th column is reached
-                // This also happens exactly at have the contained values -> 3N ones, 3N reshaped_Cs
-                // j = it.value();
-                it.valueRef() = reshaped_C[counter];
-                counter++;
-            }
-    }
-
-    // Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>> solver;
-    Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>, Eigen::LeastSquareDiagonalPreconditioner<float>> solver;
-    solver.setTolerance(1e-4);
-    solver.setMaxIterations(1000);
-    {
-        // Perform the computation and measure the time
-        PROFILE_SCOPE("SOLVE");
-
-        solver.compute(sparse_m);
-        if (solver.info() != Eigen::Success) {
-            std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
-        }
-
-        // x = solver.solve(b);
-        solution = solver.solveWithGuess(points_vector.cast<float>(), solution);
-        if (solver.info() != Eigen::Success) {
-            std::cerr << "Solving failed during update_R_from_C " << std::endl;
-            std::cout << "Errenous vector RF: " <<  std::endl;
-            std::cout << points_vector({0,1,2,3,4,5,6,7,8}) << std::endl;
-        }
-        else {
-//            std::cout << "Solver took " << solver.iterations() << " steps." << std::endl;
-            R(0) = (1-weight_RF)*R(0) + weight_RF*solution(0);
-            R(1) = (1-weight_RF)*R(1) + weight_RF*solution(1);
-            R(2) = (1-weight_RF)*R(2) + weight_RF*solution(2);
+        crossProduct3x3(C, transformed_F, points_tensor);
+        reshaped_points = points_tensor.reshape(reshaper); // reshaped_points need to be Eigen::Vector for solver
+        points = Tensor2Matrix(reshaped_points);
+        reshaped_directions = directions_tensor.reshape(reshaper);
+        directions = Tensor2Matrix(reshaped_directions);
+        for (size_t i = 0; i < directions.rows(); ++i){
+            p = points.block<1,3>(i,0);
+            d = points.block<1,3>(i,0).normalized(); // Normalize direction vector
+            outerProduct = d * d.transpose();
+            A += I - outerProduct;
+            B += (I - outerProduct) * p;
         }
     }
+    solution = A.colPivHouseholderQr().solve(B);
+
+    R(0) = (1-weight_RF)*R(0) + weight_RF*solution(0);
+    R(1) = (1-weight_RF)*R(1) + weight_RF*solution(1);
+    R(2) = (1-weight_RF)*R(2) + weight_RF*solution(2);
+
+//    {
+//        PROFILE_SCOPE("RF Set Entries");
+//        int counter = 0;
+//        for (int k=3; k<sparse_m.outerSize(); ++k)
+//            // Skip the first three cols as they stay the same
+//            for (SparseMatrix<double>::InnerIterator it(sparse_m,k); it; ++it)
+//            {
+//                // Iterate Columnwise through the matrix. Meaning the first entries are all 1 until the 4th column is reached
+//                // This also happens exactly at have the contained values -> 3N ones, 3N reshaped_Cs
+//                // j = it.value();
+//                it.valueRef() = reshaped_C[counter];
+//                counter++;
+//            }
+//    }
+//
+//    Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver; // Tends to fail really often
+//    // The Paper Nearest approaches to multiple lines in n-dimensional space from Han and Bancroft mention not to use least square methods on the multiple lines
+//    // problem. Instead they recommend a SVD approach.
+//
+//    solver.setTolerance(1e-4);
+//    solver.setMaxIterations(1000);
+//    {
+//        // Perform the computation and measure the time
+//        PROFILE_SCOPE("SOLVE");
+//
+//        solver.analyzePattern(sparse_m); // TODO: Needs only to be executed once since sparsity pattern doe not change
+//        solver.factorize(sparse_m); // Needs to be done every iteration
+//        if (solver.info() != Eigen::Success) {
+//            std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
+//        }
+//
+//        // x = solver.solve(b);
+//        solution = solver.solveWithGuess(points_vector.cast<double>(), solution);
+//        if (solver.info() != Eigen::Success) {
+//            std::cerr << "Solving failed during update_R_from_C " << std::endl;
+//            std::cout << "Errenous vector RF: " <<  std::endl;
+//            std::cout << points_vector({0,1,2,3,4,5,6,7,8}) << std::endl;
+//        }
+//        else {
+////            std::cout << "Solver took " << solver.iterations() << " steps." << std::endl;
+//            R(0) = (1-weight_RF)*R(0) + weight_RF*solution(0);
+//            R(1) = (1-weight_RF)*R(1) + weight_RF*solution(1);
+//            R(2) = (1-weight_RF)*R(2) + weight_RF*solution(2);
+//        }
+//    }
 }
 
 // TODO: add return number
@@ -1474,8 +1501,8 @@ int main() {
     std::string calib_path = "../res/shapes_rotation/calib.txt";
     std::string event_path = "../res/shapes_rotation/events.txt";
 
-    float start_time_events = 20.0; // in s
-    float end_time_events = 20.20; // in s
+    float start_time_events = 10.0; // in s
+    float end_time_events = 10.05; // in s
     float time_bin_size_in_s = 0.05; // in s
     int iterations = 1000;
 
@@ -1492,19 +1519,19 @@ int main() {
     weights["weight_RF"] = 0.8;
     weights["lr"] = 0.9;
     weights["timestep"] = 0.05f;
-    std::vector<int> permutation {0,1,2,3,4,6}; // Which update steps to take
+    std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
 
     //##################################################################################################################
     // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
     Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
-    F.setRandom();
+//    F.setRandom();
     F.setConstant(.1);
 //    Tensor<float,2,Eigen::RowMajor> V(height, width);
     Tensor<float,3,Eigen::RowMajor> G(height, width,2);
-    G.setRandom();
+//    G.setRandom();
     G.setConstant(.1);
     Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
-    I.setZero();
+    I.setConstant(1.0);
     Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
     I_gradient.setZero();
     Tensor<float,1> R(3);
@@ -1518,8 +1545,9 @@ int main() {
 
     //##################################################################################################################
     // Read calibration file
-    std::vector<float> calibration_data;
-    read_calib(calib_path, calibration_data);
+    std::vector<float> raw_calibration_data;
+    read_calib(calib_path, raw_calibration_data);
+    Calibration_Data calibration_data = get_calibration_data(raw_calibration_data, height, width);
     std::cout << "Readout calibration file at " << calib_path << std::endl;
 
     //##################################################################################################################
@@ -1549,7 +1577,7 @@ int main() {
     dCdx.setZero();
     Tensor<float,3,Eigen::RowMajor> dCdy(height, width,3);
     dCdy.setZero();
-    find_C(height, width, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
+    find_C(height, width, calibration_data.view_angles[0], calibration_data.view_angles[1], 1.0f, CCM, dCdx, dCdy);
     std::cout << "Calculated Camera Matrix" << std::endl;
 
     std::string profiler_name = "Profiler.json";
@@ -1560,7 +1588,7 @@ int main() {
 
     // Setup Sparse Matrix for update_R_from_F
     int N = height*width;
-    std::vector<Eigen::Triplet<float>> tripletList;
+    std::vector<Eigen::Triplet<double>> tripletList;
     SpMat sparse_m(N * 3, N + 3);
     tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
     int j = 3;
