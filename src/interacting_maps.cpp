@@ -36,6 +36,8 @@ namespace Eigen{
     typedef Eigen::Tensor<float,3,Eigen::RowMajor> Tensor3d;
 }
 
+#define PI 3.14159265
+
 
 
 std::ostream& operator << (std::ostream &os, const Event &e) {
@@ -558,10 +560,13 @@ autodiff::Vector3real C(autodiff::real x, autodiff::real y, int N_x, int N_y, fl
     return c_star / norm;
 }
 
+// Jacobian for x value tested by hand
 void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& C_x, Tensor<float,3,Eigen::RowMajor>& C_y) {
     float height = tan(view_angle_x / 2);
     float width = tan(view_angle_y / 2);
 
+//    std::cout << "Height: " << height << std::endl;
+//    std::cout << "Width: " << width << std::endl;
     // Create grid of points
     Eigen::MatrixXd XX(N_x, N_y);
     Eigen::MatrixXd YY(N_x, N_y);
@@ -571,6 +576,9 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             YY(i, j) = j;
         }
     }
+//    std::cout << "X Grid: " << XX << std::endl;
+//    std::cout << "Y Grid: " << YY << std::endl;
+
 
     // Compute the camera calibration map (CCM) and the Jacobians
     // std::vector<std::vector<autodiff::Vector3real>> CCM;
@@ -588,8 +596,6 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             CCM(i,j,0) = static_cast<float>(c_val(0));
             CCM(i,j,1) = static_cast<float>(c_val(1));
             CCM(i,j,2) = static_cast<float>(c_val(2));
-
-
             // Compute the Jacobians
             // Vector3real dCdx;
             // Vector3real dCdy;
@@ -598,14 +604,16 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             Eigen::VectorXd dCdx = autodiff::jacobian(C, wrt(x), at(x,y,N_x, N_y, height, width, rs), F);
             Eigen::VectorXd dCdy = autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F);
 
-
-
             C_x(i,j,0) = dCdx(0);
             C_x(i,j,1) = dCdx(1);
             C_x(i,j,2) = dCdx(2);
             C_y(i,j,0) = dCdy(0);
             C_y(i,j,1) = dCdy(1);
             C_y(i,j,2) = dCdy(2);
+
+//            std::cout << "CCM (i: " << i << "), (j: " << j << "):" << CCM << std::endl;
+//            std::cout << "C_x (i: " << i << "), (j: " << j << "):" << C_x << std::endl;
+//            std::cout << "C_y (i: " << i << "), (j: " << j << "):" << C_y << std::endl;
 
             // C_x(i,j,0) = 1.0f;
             // C_x(i,j,1) = 1.0f;
@@ -1396,8 +1404,15 @@ int test(){
 
         //##################################################################################################################
         // Camera calibration map
-        find_C(n, m, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
+        find_C(n, m, PI/2, PI/2, 1.0f, CCM, dCdx, dCdy);
         std::cout << "Implemented find_C function with autodiff" << std::endl;
+        float epsilon = 1e-6;
+        if (std::abs(CCM(1,1,0) - 1/std::sqrt(3)) < epsilon and std::abs(dCdx(1,1,0) - 4*std::sqrt(3)/9) < epsilon and std::abs(dCdx(1,1,1) - 2/(std::sqrt(3)*3)) < epsilon){
+            std::cout << "HELPER FUNCTION FIND_C CORRECT" << std::endl;
+        }else{
+            std::cout << "HELPER FUNCTION FIND_C FALSE" << std::endl;
+        }
+
 
         //##################################################################################################################
         // Tensor cross product
@@ -1479,7 +1494,7 @@ int test(){
         dCdx.setZero();
         Tensor<float,3,Eigen::RowMajor> dCdy(n,m,3);
         dCdy.setZero();
-        find_C(n, m, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
+        find_C(n, m, PI/2, PI/2, 1.0f, CCM, dCdx, dCdy);
 
         //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G
@@ -1495,7 +1510,7 @@ int test(){
         //##################################################################################################################
         // Intesity I
         Tensor<float,2,Eigen::RowMajor> I(n+1,m+1);
-        I.setZero();
+        I.setValues({{1,4,0},{9,16,0},{0,0,0}});
         Tensor<float,3,Eigen::RowMajor> I_gradient(n,m,2);
         I_gradient.setZero();
 
@@ -1523,7 +1538,7 @@ int test(){
         weights["weight_RF"] = 0.2;
         weights["lr"] = 0.9;
         weights["timestep"] = 0.05f;
-        std::vector<int> permutation {0,1,2,3,4,5,6};
+        std::vector<int> permutation {0,2,3,4,5,6};
         interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, nm);
         std::cout << "Implemented interacting maps update step" << std::endl;
         std::cout << "UPDATE STEP FUNCTION TEST PASSED" << std::endl;
@@ -1600,122 +1615,131 @@ int main() {
     //##################################################################################################################
     // Parameters
 
-    test();
-    auto clock_time = std::chrono::system_clock::now();
-    std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-    std::string results_name = "results ";
-    std::string folder_name = results_name + std::ctime(&time);
-    std::string calib_path = "../res/shapes_rotation/calib.txt";
-    std::string event_path = "../res/shapes_rotation/events.txt";
 
-    float start_time_events = 11.0; // in s
-    float end_time_events = 11.05; // in s
-    float time_bin_size_in_s = 0.05; // in s
-    int iterations = 1000;
+    bool execute_main = false;
+    bool execute_test = true;
 
-    int height = 180; // in pixels
-    int width = 240; // in pixels
-
-    std::unordered_map<std::string,float> weights;
-    weights["weight_FG"] = 0.2;
-    weights["weight_FR"] = 0.8;
-    weights["weight_GF"] = 0.2;
-    weights["weight_GI"] = 0.2;
-    weights["weight_IG"] = 0.2;
-    weights["weight_IV"] = 0.2;
-    weights["weight_RF"] = 0.8;
-    weights["lr"] = 0.9;
-    weights["timestep"] = 0.05f;
-    std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
-
-    //##################################################################################################################
-    // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
-    Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
-    F.setConstant(.1);
-    Tensor<float,3,Eigen::RowMajor> G(height, width,2);
-    G.setConstant(.1);
-    Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
-    I.setConstant(0.0);
-    Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
-    I_gradient.setZero();
-    Tensor<float,1> R(3);
-    R.setConstant(0.1);
-
-
-    //##################################################################################################################
-    // Create results_folder
-    fs::path folder_path = create_folder_and_update_gitignore(folder_name);
-    std::cout << "Created Folder " << folder_name << std::endl;
-
-    //##################################################################################################################
-    // Read calibration file
-    std::vector<float> raw_calibration_data;
-    read_calib(calib_path, raw_calibration_data);
-    Calibration_Data calibration_data = get_calibration_data(raw_calibration_data, height, width);
-    std::cout << "Readout calibration file at " << calib_path << std::endl;
-
-    //##################################################################################################################
-    // Read events file
-    std::vector<Event> event_data;
-    read_events(event_path, event_data, start_time_events, end_time_events);
-    std::cout << "Readout events at " << event_path << std::endl;
-
-    //##################################################################################################################
-    // Bin events
-    std::vector<std::vector<Event>> binned_events;
-    binned_events = bin_events(event_data, time_bin_size_in_s);
-    std::cout << "Binned events" << std::endl;
-
-    //##################################################################################################################
-    // Create frames
-    size_t frame_count = binned_events.size();
-    std::vector<Tensor<float,2,Eigen::RowMajor>> frames(frame_count);
-    create_frames(binned_events, frames, height, width);
-    std::cout << "Created frames out of events" << std::endl;
-
-    //##################################################################################################################
-    // Camera calibration matrix (C/CCM) and dCdx/dCdy
-    Tensor<float,3,Eigen::RowMajor> CCM(height, width,3);
-    CCM.setZero();
-    Tensor<float,3,Eigen::RowMajor> dCdx(height, width,3);
-    dCdx.setZero();
-    Tensor<float,3,Eigen::RowMajor> dCdy(height, width,3);
-    dCdy.setZero();
-    find_C(height, width, calibration_data.view_angles[0], calibration_data.view_angles[1], 1.0f, CCM, dCdx, dCdy);
-    std::cout << "Calculated Camera Matrix" << std::endl;
-
-    std::string profiler_name = "Profiler.json";
-    fs::path profiler_path = folder_path / profiler_name;
-    Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
-    std::cout << "Setup Profiler" << std::endl;
-    int counter = 0;
-
-    // Setup Sparse Matrix for update_R_from_F
-    int N = height*width;
-    std::vector<Eigen::Triplet<double>> tripletList;
-    SpMat sparse_m(N * 3, N + 3);
-    tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
-    int j = 3;
-    for (int i = 0; i < N * 3; i++) {
-        tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
-        j = int(i/3 + 3);
-        tripletList.emplace_back(i, j, 1.0); // Points, Placeholder
+    if (execute_test){
+        test();
     }
-    sparse_m.setFromTriplets(tripletList.begin(), tripletList.end());
-    for (Tensor<float,2,Eigen::RowMajor> V : frames){
-        for (int iter = 0; iter < iterations; ++iter){
-            interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, N);
-            if (iter%100==0){
-                std::cout << iter << "/" << iterations << std::endl;
-            }
+    if (execute_main){
+        auto clock_time = std::chrono::system_clock::now();
+        std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
+        std::string results_name = "results ";
+        std::string folder_name = results_name + std::ctime(&time);
+        std::string calib_path = "../res/shapes_rotation/calib.txt";
+        std::string event_path = "../res/shapes_rotation/events.txt";
+
+        float start_time_events = 11.0; // in s
+        float end_time_events = 11.05; // in s
+        float time_bin_size_in_s = 0.05; // in s
+        int iterations = 1000;
+
+        int height = 180; // in pixels
+        int width = 240; // in pixels
+
+        std::unordered_map<std::string,float> weights;
+        weights["weight_FG"] = 0.2;
+        weights["weight_FR"] = 0.8;
+        weights["weight_GF"] = 0.2;
+        weights["weight_GI"] = 0.2;
+        weights["weight_IG"] = 0.2;
+        weights["weight_IV"] = 0.2;
+        weights["weight_RF"] = 0.8;
+        weights["lr"] = 0.9;
+        weights["timestep"] = 0.05f;
+        std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
+
+        //##################################################################################################################
+        // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
+        Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
+        F.setConstant(.1);
+        Tensor<float,3,Eigen::RowMajor> G(height, width,2);
+        G.setConstant(.1);
+        Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
+        I.setConstant(0.0);
+        Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
+        I_gradient.setZero();
+        Tensor<float,1> R(3);
+        R.setConstant(0.1);
+
+
+        //##################################################################################################################
+        // Create results_folder
+        fs::path folder_path = create_folder_and_update_gitignore(folder_name);
+        std::cout << "Created Folder " << folder_name << std::endl;
+
+        //##################################################################################################################
+        // Read calibration file
+        std::vector<float> raw_calibration_data;
+        read_calib(calib_path, raw_calibration_data);
+        Calibration_Data calibration_data = get_calibration_data(raw_calibration_data, height, width);
+        std::cout << "Readout calibration file at " << calib_path << std::endl;
+
+        //##################################################################################################################
+        // Read events file
+        std::vector<Event> event_data;
+        read_events(event_path, event_data, start_time_events, end_time_events);
+        std::cout << "Readout events at " << event_path << std::endl;
+
+        //##################################################################################################################
+        // Bin events
+        std::vector<std::vector<Event>> binned_events;
+        binned_events = bin_events(event_data, time_bin_size_in_s);
+        std::cout << "Binned events" << std::endl;
+
+        //##################################################################################################################
+        // Create frames
+        size_t frame_count = binned_events.size();
+        std::vector<Tensor<float,2,Eigen::RowMajor>> frames(frame_count);
+        create_frames(binned_events, frames, height, width);
+        std::cout << "Created frames out of events" << std::endl;
+
+        //##################################################################################################################
+        // Camera calibration matrix (C/CCM) and dCdx/dCdy
+        Tensor<float,3,Eigen::RowMajor> CCM(height, width,3);
+        CCM.setZero();
+        Tensor<float,3,Eigen::RowMajor> dCdx(height, width,3);
+        dCdx.setZero();
+        Tensor<float,3,Eigen::RowMajor> dCdy(height, width,3);
+        dCdy.setZero();
+        find_C(height, width, calibration_data.view_angles[0], calibration_data.view_angles[1], 1.0f, CCM, dCdx, dCdy);
+        std::cout << "Calculated Camera Matrix" << std::endl;
+
+        std::string profiler_name = "Profiler.json";
+        fs::path profiler_path = folder_path / profiler_name;
+        Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
+        std::cout << "Setup Profiler" << std::endl;
+        int counter = 0;
+
+        // Setup Sparse Matrix for update_R_from_F
+        int N = height*width;
+        std::vector<Eigen::Triplet<double>> tripletList;
+        SpMat sparse_m(N * 3, N + 3);
+        tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
+        int j = 3;
+        for (int i = 0; i < N * 3; i++) {
+            tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
+            j = int(i/3 + 3);
+            tripletList.emplace_back(i, j, 1.0); // Points, Placeholder
         }
-        counter++;
-        std::cout << "Frame: " << counter << std::endl;
-        std::string image_name = "VIFG_" + std::to_string(counter) + ".png";
-        fs::path image_path = folder_path / image_name;
-        create_VIFG(Tensor2Matrix(V), Tensor2Matrix(I), F, G, image_path, true);
+        sparse_m.setFromTriplets(tripletList.begin(), tripletList.end());
+        for (Tensor<float,2,Eigen::RowMajor> V : frames){
+            for (int iter = 0; iter < iterations; ++iter){
+                interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, N);
+                if (iter%100==0){
+                    std::cout << iter << "/" << iterations << std::endl;
+                }
+            }
+            counter++;
+            std::cout << "Frame: " << counter << std::endl;
+            std::string image_name = "VIFG_" + std::to_string(counter) + ".png";
+            fs::path image_path = folder_path / image_name;
+            create_VIFG(Tensor2Matrix(V), Tensor2Matrix(I), F, G, image_path, true);
+        }
+        Instrumentor::Get().EndSession();
     }
-    Instrumentor::Get().EndSession();
+
 }
 
 
