@@ -895,12 +895,14 @@ void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Ei
         PROFILE_SCOPE("FR CROSSPRODUCT");
         crossProduct1x3(R, CCM, cross);
     }
+    std::cout << cross << std::endl;
     {
         PROFILE_SCOPE("FR M32");
         m32(cross, Cx, Cy, update);
     }
+    std::cout << update << std::endl;
 
-    F = (1 - weight_FR) * F + weight_FR * update;
+    F = (1 - weight_FR)*F + weight_FR*update;
 }
 
 void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, SpMat& sparse_m, const float weight_RF, const int N) {
@@ -908,89 +910,113 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
     PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
     Tensor<float, 3, Eigen::RowMajor> transformed_F(dimensions[0], dimensions[1], 3);
-    Tensor<float, 3, Eigen::RowMajor> points_tensor(dimensions[0], dimensions[1], 3);
-    Tensor<float, 3, Eigen::RowMajor> directions_tensor(dimensions[0], dimensions[1], 3);
-    Tensor<float, 2, Eigen::RowMajor> reshaped_points;
-    Tensor<float, 2, Eigen::RowMajor> reshaped_directions;
-    Eigen::Vector3f solution(3);
-    Eigen::array<int , 2> reshaper({N, 3});
-    Eigen::MatrixXf points;
-    Eigen::MatrixXf directions;
+    Tensor<float, 3, Eigen::RowMajor> points_tensor_3(dimensions[0], dimensions[1], 3);
+    Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(dimensions[0], dimensions[1], 3);
+    Tensor<float, 2, Eigen::RowMajor> points_tensor_2;
+    Tensor<float, 2, Eigen::RowMajor> directions_tensor_2;
+    Tensor<float, 1, Eigen::RowMajor> points_tensor_1;
+    Tensor<float, 1, Eigen::RowMajor> directions_tensor_1;
+    Eigen::Vector3f solution_short(3);
+    Eigen::VectorXd solution_long(N*3);
+    Eigen::array<int , 2> reshaper_2({N, 3});
+    Eigen::array<int , 1> reshaper_1({N * 3});
+    Eigen::MatrixXf points_matrix;
+    Eigen::MatrixXf directions_matrix;
+    Eigen::VectorXf points_vector;
+    Eigen::VectorXf directions_vector;
+    bool new_method = false;
 
-    Matrix3f A = Matrix3f::Zero();
-    Vector3f B = Vector3f::Zero();
-    Matrix3f I = Matrix3f::Identity();
-    Matrix3f outerProduct;
-    Eigen::Vector<float,3,Eigen::RowMajor> p;
-    Eigen::Vector<float,3,Eigen::RowMajor> d;
+    if (new_method){
+        Matrix3f A = Matrix3f::Zero();
+        Vector3f B = Vector3f::Zero();
+        Matrix3f I = Matrix3f::Identity();
+        Matrix3f outerProduct;
+        Eigen::Vector<float,3> p;
+        Eigen::Vector<float,3> d;
+        {
+            PROFILE_SCOPE("RF Pre");
+            m23(F, Cx, Cy, transformed_F);
+            crossProduct3x3(C, transformed_F, points_tensor_3);
+            points_tensor_2 = points_tensor_3.reshape(reshaper_2); // reshaped_points need to be Eigen::Vector for solver
+            points_matrix = Tensor2Matrix(points_tensor_2);
+            directions_tensor_2 = directions_tensor_3.reshape(reshaper_2);
+            directions_matrix = Tensor2Matrix(directions_tensor_2);
+            for (size_t i = 0; i < directions_matrix.rows(); ++i){
+                p = points_matrix.block<1,3>(i,0);
+                d = points_matrix.block<1,3>(i,0).normalized(); // Normalize direction vector
+                outerProduct = d * d.transpose();
+                A += I - outerProduct;
+                B += (I - outerProduct) * p;
+            }
+        }
+        solution_short = A.colPivHouseholderQr().solve(B);
+        R(0) = (1-weight_RF)*R(0) + weight_RF*solution_short(0);
+        R(1) = (1-weight_RF)*R(1) + weight_RF*solution_short(1);
+        R(2) = (1-weight_RF)*R(2) + weight_RF*solution_short(2);
+    }
+    else{
+            {
+                PROFILE_SCOPE("RF PRE");
+                m23(F, Cx, Cy, transformed_F);
+                crossProduct3x3(C, transformed_F, points_tensor_3);
+                points_tensor_1 = points_tensor_3.reshape(reshaper_1); // reshaped_points need to be Eigen::Vector for solver
+                points_vector = Tensor2VectorRM(points_tensor_1);
+                directions_tensor_1 = directions_tensor_3.reshape(reshaper_1);
+                // directions_vector = Tensor2VectorRM(directions_tensor_1);
+            }
 
-    {
-        PROFILE_SCOPE("RF Pre");
-        m23(F, Cx, Cy, transformed_F);
-        crossProduct3x3(C, transformed_F, points_tensor);
-        reshaped_points = points_tensor.reshape(reshaper); // reshaped_points need to be Eigen::Vector for solver
-        points = Tensor2Matrix(reshaped_points);
-        reshaped_directions = directions_tensor.reshape(reshaper);
-        directions = Tensor2Matrix(reshaped_directions);
-        for (size_t i = 0; i < directions.rows(); ++i){
-            p = points.block<1,3>(i,0);
-            d = points.block<1,3>(i,0).normalized(); // Normalize direction vector
-            outerProduct = d * d.transpose();
-            A += I - outerProduct;
-            B += (I - outerProduct) * p;
+            {
+                PROFILE_SCOPE("RF Set Entries");
+                int counter = 0;
+                for (int k=3; k<sparse_m.outerSize(); ++k)
+                    // Skip the first three cols as they stay the same
+                    for (SparseMatrix<double>::InnerIterator it(sparse_m,k); it; ++it)
+                    {
+                        // Iterate Columnwise through the matrix. Meaning the first entries are all 1 until the 4th column is reached
+                        // This also happens exactly at have the contained values -> 3N ones, 3N reshaped_Cs
+                        // j = it.value();
+                        it.valueRef() = directions_tensor_1[counter];
+                        counter++;
+                    }
+            }
+
+        Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver; // Tends to fail really often
+        // The Paper Nearest approaches to multiple lines in n-dimensional space from Han and Bancroft mention not to use least square methods on the multiple lines
+        // problem. Instead they recommend a SVD approach.
+
+        solver.setTolerance(1e-4);
+//        solver.setMaxIterations(2000); // Set with no basis
+        {
+            // Perform the computation and measure the time
+            PROFILE_SCOPE("SOLVE");
+
+            solver.analyzePattern(sparse_m); // TODO: Needs only to be executed once since sparsity pattern doe not change
+            solver.factorize(sparse_m); // Needs to be done every iteration
+            if (solver.info() != Eigen::Success) {
+                std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
+            }
+
+            // x = solver.solve(b);
+            solution_long = solver.solveWithGuess(points_vector.cast<double>(), solution_long);
+            if (solver.info() != Eigen::Success) {
+                std::cerr << "Solving failed during update_R_from_C " << std::endl;
+                std::cout << "Errenous vector RF: " <<  std::endl;
+                std::cout << points_vector({0,1,2,3,4,5,6,7,8}) << std::endl;
+            }
+            else {
+//            std::cout << "Solver took " << solver.iterations() << " steps." << std::endl;
+                R(0) = (1-weight_RF)*R(0) + weight_RF*solution_long(0);
+                R(1) = (1-weight_RF)*R(1) + weight_RF*solution_long(1);
+                R(2) = (1-weight_RF)*R(2) + weight_RF*solution_long(2);
+            }
         }
     }
-    solution = A.colPivHouseholderQr().solve(B);
 
-    R(0) = (1-weight_RF)*R(0) + weight_RF*solution(0);
-    R(1) = (1-weight_RF)*R(1) + weight_RF*solution(1);
-    R(2) = (1-weight_RF)*R(2) + weight_RF*solution(2);
 
-//    {
-//        PROFILE_SCOPE("RF Set Entries");
-//        int counter = 0;
-//        for (int k=3; k<sparse_m.outerSize(); ++k)
-//            // Skip the first three cols as they stay the same
-//            for (SparseMatrix<double>::InnerIterator it(sparse_m,k); it; ++it)
-//            {
-//                // Iterate Columnwise through the matrix. Meaning the first entries are all 1 until the 4th column is reached
-//                // This also happens exactly at have the contained values -> 3N ones, 3N reshaped_Cs
-//                // j = it.value();
-//                it.valueRef() = reshaped_C[counter];
-//                counter++;
-//            }
-//    }
-//
-//    Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver; // Tends to fail really often
-//    // The Paper Nearest approaches to multiple lines in n-dimensional space from Han and Bancroft mention not to use least square methods on the multiple lines
-//    // problem. Instead they recommend a SVD approach.
-//
-//    solver.setTolerance(1e-4);
-//    solver.setMaxIterations(1000);
-//    {
-//        // Perform the computation and measure the time
-//        PROFILE_SCOPE("SOLVE");
-//
-//        solver.analyzePattern(sparse_m); // TODO: Needs only to be executed once since sparsity pattern doe not change
-//        solver.factorize(sparse_m); // Needs to be done every iteration
-//        if (solver.info() != Eigen::Success) {
-//            std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
-//        }
-//
-//        // x = solver.solve(b);
-//        solution = solver.solveWithGuess(points_vector.cast<double>(), solution);
-//        if (solver.info() != Eigen::Success) {
-//            std::cerr << "Solving failed during update_R_from_C " << std::endl;
-//            std::cout << "Errenous vector RF: " <<  std::endl;
-//            std::cout << points_vector({0,1,2,3,4,5,6,7,8}) << std::endl;
-//        }
-//        else {
-////            std::cout << "Solver took " << solver.iterations() << " steps." << std::endl;
-//            R(0) = (1-weight_RF)*R(0) + weight_RF*solution(0);
-//            R(1) = (1-weight_RF)*R(1) + weight_RF*solution(1);
-//            R(2) = (1-weight_RF)*R(2) + weight_RF*solution(2);
-//        }
-//    }
+
+
+
+
 }
 
 // TODO: add return number
@@ -1001,43 +1027,74 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
     array<int, 2> shuffle({1, 0});
     delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle); // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
     delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-
-     for (const auto& element : permutation){
-         switch( element ){
-             default:
-                 std::cout << "Unknown number in permutation" << std::endl;
-             case 0:
-                 update_F_from_G(F, V, G, weights["lr"], weights["weight_FG"]);
-//                 std::cout << "Case " << element << std::endl;
-                 break;
-             case 1:
-                 update_F_from_R(F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
-//                 std::cout << "Case " << element << std::endl;
-                 break;
-             case 2:
-                 update_G_from_F(G, V, F, weights["lr"], weights["weight_FG"]);
-//                 std::cout << "Case " << element << std::endl;
-                 break;
-             case 3:
-                 update_G_from_I(G, delta_I, weights["weight_GI"]);
-//                 std::cout << "Case " << element << std::endl;
-                 break;
-             case 4:
-                 update_I_from_G(I, delta_I, G, weights["weight_IG"]);
-                 delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-                 delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-//                 std::cout << "Case " << element << std::endl;
-                 break;
-             case 5:
-                 update_I_from_V(I, V, weights["weight_IV"], weights["timestep"]);
-                 delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-                 delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-//                 std::cout << "Case " << element << std::endl;
-                 break;
-             case 6:
-                 update_R_from_F(R, F, CCM, dCdx, dCdy, sparse_m, weights["weight_RF"], N);
-//                 std::cout << "Case " << element << std::endl;
-                 break;
+    for (const auto& element : permutation){
+        switch( element ){
+            default:
+                std::cout << "Unknown number in permutation" << std::endl;
+            case 0:
+                std::cout << F << std::endl;
+                update_F_from_G(F, V, G, weights["lr"], weights["weight_FG"]);
+                std::cout << F << std::endl;
+                std::cout << V << std::endl;
+                std::cout << G << std::endl;
+//                    std::cout << "Case " << element << std::endl;
+                break;
+            case 1:
+                std::cout << F << std::endl;
+                update_F_from_R(F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
+                std::cout << F << std::endl;
+                std::cout << CCM << std::endl;
+                std::cout << dCdx << std::endl;
+                std::cout << dCdy << std::endl;
+                std::cout << R << std::endl;
+//                    std::cout << "Case " << element << std::endl;
+                break;
+            case 2:
+                std::cout << G << std::endl;
+                update_G_from_F(G, V, F, weights["lr"], weights["weight_FG"]);
+                std::cout << G << std::endl;
+                std::cout << V << std::endl;
+                std::cout << F << std::endl;
+//                    std::cout << "Case " << element << std::endl;
+                break;
+            case 3:
+                std::cout << G << std::endl;
+                update_G_from_I(G, delta_I, weights["weight_GI"]);
+                std::cout << G << std::endl;
+                std::cout << delta_I << std::endl;
+//                    std::cout << "Case " << element << std::endl;
+                break;
+            case 4:
+                std::cout << I << std::endl;
+                update_I_from_G(I, delta_I, G, weights["weight_IG"]);
+                delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                std::cout << I << std::endl;
+                std::cout << G << std::endl;
+                std::cout << delta_I << std::endl;
+//                    std::cout << "Case " << element << std::endl;
+                break;
+            case 5:
+                std::cout << I << std::endl;
+                update_I_from_V(I, V, weights["weight_IV"], weights["timestep"]);
+                delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                std::cout << I << std::endl;
+                std::cout << V << std::endl;
+                std::cout << delta_I << std::endl;
+//                    std::cout << "Case " << element << std::endl;
+                break;
+            case 6:
+                std::cout << R << std::endl;
+                update_R_from_F(R, F, CCM, dCdx, dCdy, sparse_m, weights["weight_RF"], N);
+                std::cout << R << std::endl;
+                std::cout << F << std::endl;
+                std::cout << CCM << std::endl;
+                std::cout << dCdx << std::endl;
+                std::cout << dCdy << std::endl;
+                std::cout << R << std::endl;
+//                    std::cout << "Case " << element << std::endl;
+                break;
          }
      }
  }
@@ -1093,8 +1150,6 @@ int test(){
     // Rotation Vector R
     Tensor<float,1> R(3);
     R.setRandom();
-
-
 
     if (test_conversion){
         std::cout << "TESTING CONVERSION" << std::endl;
@@ -1343,12 +1398,6 @@ int test(){
         // Camera calibration map
         find_C(n, m, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
         std::cout << "Implemented find_C function with autodiff" << std::endl;
-//        std::cout << "C" << std::endl;
-//        std::cout << CCM << std::endl;
-//        std::cout << "dCdx" << std::endl;
-//        std::cout << dCdx << std::endl;
-//        std::cout << "dCdy" << std::endl;
-//        std::cout << dCdy << std::endl;
 
         //##################################################################################################################
         // Tensor cross product
@@ -1392,15 +1441,73 @@ int test(){
         // // Time the dot product computation using .chip() (CHATGPT USES CHIP JUST FOR FANCY INDEXING)
         // std::cout << "Timing dot product computation with .chip():" << std::endl;
         // timeDotProductComputation(computeDotProductWithChip, A, B, E, 1000);
+
+
+        //##################################################################################################################
+        // Tensor cross product 1x3
+        {
+            Eigen::Tensor<float,1> A(3);
+            Eigen::Tensor<float,3,Eigen::RowMajor> B(2,2,3);
+            Eigen::Tensor<float,3,Eigen::RowMajor> C(2,2,3);
+            Eigen::Tensor<float,3,Eigen::RowMajor> C_comp(2,2,3);
+            A.setValues({1,2,3});
+            B.setValues({{{0,1,2},{0,1,2}},{{0,1,2},{0,1,2}}});
+            C_comp.setValues({{{1,-2,1},{1,-2,1}},{{1,-2,1},{1,-2,1}}});
+            crossProduct1x3(A, B, C);
+            if (isApprox(C_comp, C)){
+                std::cout << "HELPER FUNCTION CROSSPRODUCT1x3 CORRECT" << std::endl;
+            }else{
+                std::cout << "HELPER FUNCTION CROSSPRODUCT1x3 FALSE" << std::endl;
+                std::cout << "C" << std::endl;
+                std::cout << C << std::endl;
+                std::cout << "C should be" << std::endl;
+                std::cout << C_comp << std::endl;
+            }
+        }
+
         std::cout << "HELPER FUNCTIONS TEST PASSED" << std::endl;
     }
 
     if (test_step){
         std::cout << "TESTING UPDATE STEP FUNCTION" << std::endl;
+
+        //##################################################################################################################
+        // Camera calibration matrix (C/CCM) and dCdx/dCdy
+        Tensor<float,3,Eigen::RowMajor> CCM(n,m,3);
+        CCM.setZero();
+        Tensor<float,3,Eigen::RowMajor> dCdx(n,m,3);
+        dCdx.setZero();
+        Tensor<float,3,Eigen::RowMajor> dCdy(n,m,3);
+        dCdy.setZero();
+        find_C(n, m, 3.1415/4, 3.1415/4, 1.0f, CCM, dCdx, dCdy);
+
+        //##################################################################################################################
+        // Optic flow F, temporal derivative V, spatial derivative G
+        Tensor<float,3,Eigen::RowMajor> F(n,m,2);
+        F.setConstant(0.1);
+        F.chip(1,2).setConstant(1.0);
+        Tensor<float,2,Eigen::RowMajor> V(n,m);
+        V.setConstant(1.0);
+        Tensor<float,3,Eigen::RowMajor> G(n,m,2);
+        G.setConstant(0.0);
+        G.chip(1,2).setConstant(-1.0);
+
+        //##################################################################################################################
+        // Intesity I
+        Tensor<float,2,Eigen::RowMajor> I(n+1,m+1);
+        I.setZero();
+        Tensor<float,3,Eigen::RowMajor> I_gradient(n,m,2);
+        I_gradient.setZero();
+
+        //##################################################################################################################
+        // Rotation Vector R
+        Tensor<float,1> R(3);
+        R.setValues({1,2,3});
+
         //##################################################################################################################
         // Sparse Matrix Creation
         Tensor<float,2,Eigen::RowMajor> F_flat(nm,3);
-        F_flat.setRandom();
+        F_flat.setConstant(1.0);
         SpMat sparse_m(nm*3,nm+3);
         create_sparse_matrix(nm, F_flat, sparse_m);
         std::cout << "Implemented sparse matrix creation for update_R" << std::endl;
@@ -1493,7 +1600,7 @@ int main() {
     //##################################################################################################################
     // Parameters
 
-//    test();
+    test();
     auto clock_time = std::chrono::system_clock::now();
     std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
     std::string results_name = "results ";
@@ -1501,8 +1608,8 @@ int main() {
     std::string calib_path = "../res/shapes_rotation/calib.txt";
     std::string event_path = "../res/shapes_rotation/events.txt";
 
-    float start_time_events = 10.0; // in s
-    float end_time_events = 10.05; // in s
+    float start_time_events = 11.0; // in s
+    float end_time_events = 11.05; // in s
     float time_bin_size_in_s = 0.05; // in s
     int iterations = 1000;
 
@@ -1524,18 +1631,15 @@ int main() {
     //##################################################################################################################
     // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
     Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
-//    F.setRandom();
     F.setConstant(.1);
-//    Tensor<float,2,Eigen::RowMajor> V(height, width);
     Tensor<float,3,Eigen::RowMajor> G(height, width,2);
-//    G.setRandom();
     G.setConstant(.1);
     Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
-    I.setConstant(1.0);
+    I.setConstant(0.0);
     Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
     I_gradient.setZero();
     Tensor<float,1> R(3);
-    R.setConstant(.1);
+    R.setConstant(0.1);
 
 
     //##################################################################################################################
@@ -1595,7 +1699,7 @@ int main() {
     for (int i = 0; i < N * 3; i++) {
         tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
         j = int(i/3 + 3);
-        tripletList.emplace_back(i, j, 1.0); // Points
+        tripletList.emplace_back(i, j, 1.0); // Points, Placeholder
     }
     sparse_m.setFromTriplets(tripletList.begin(), tripletList.end());
     for (Tensor<float,2,Eigen::RowMajor> V : frames){
