@@ -1138,7 +1138,6 @@ int test(){
 
         I.setValues({{0,1,3}, {1,3,6}, {3,6,10}});
         I_gradient_comparison.setValues({{1,2},{2,3}});
-        G.chip(1,2).setConstant(1.0);
         Eigen::array<Eigen::Index, 2> dimensions = I.dimensions();
         Eigen::Tensor<float,2,Eigen::RowMajor> delta_I_x(dimensions[0], dimensions[1]);
         Eigen::Tensor<float,2,Eigen::RowMajor> delta_I_y(dimensions[0], dimensions[1]);
@@ -1162,6 +1161,7 @@ int test(){
         //##################################################################################################################
         // Update I from G
         Tensor<float,2,Eigen::RowMajor> I_comparison(n+1,m+1);
+        G.chip(1,2).setConstant(1.0);
         I_gradient.chip(0,2) = I_gradient_comparison;
         I_gradient.chip(1,2) = I_gradient_comparison;
         I_comparison.setValues({{1,4,3},{3,5,6},{3,6,10}});
@@ -1474,8 +1474,8 @@ int main() {
     std::string calib_path = "../res/shapes_rotation/calib.txt";
     std::string event_path = "../res/shapes_rotation/events.txt";
 
-    float start_time_events = 20.0; // in s
-    float end_time_events = 20.20; // in s
+    float start_time_events = 10.0; // in s
+    float end_time_events = 10.15; // in s
     float time_bin_size_in_s = 0.05; // in s
     int iterations = 1000;
 
@@ -1497,11 +1497,11 @@ int main() {
     //##################################################################################################################
     // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
     Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
-    F.setRandom();
+//    F.setRandom();
     F.setConstant(.1);
-//    Tensor<float,2,Eigen::RowMajor> V(height, width);
+    // Tensor<float,2,Eigen::RowMajor> V(height, width);
     Tensor<float,3,Eigen::RowMajor> G(height, width,2);
-    G.setRandom();
+//    G.setRandom();
     G.setConstant(.1);
     Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
     I.setZero();
@@ -1509,7 +1509,6 @@ int main() {
     I_gradient.setZero();
     Tensor<float,1> R(3);
     R.setConstant(.1);
-
 
     //##################################################################################################################
     // Create results_folder
