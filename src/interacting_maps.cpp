@@ -26,14 +26,14 @@ namespace fs = std::filesystem;
 
 namespace Eigen{
 //    typedef Eigen::Vector<float, Eigen::Dynamic, Eigen::RowMajor> VectorXfRowMajor;
-//    typedef Eigen::Vector<double, Eigen::Dynamic, Eigen::RowMajor> VectorXdRowMajor;
+//    typedef Eigen::Vector<float, Eigen::Dynamic, Eigen::RowMajor> VectorXfRowMajor;
 //    typedef Eigen::Vector<int, Eigen::Dynamic, Eigen::RowMajor> VectorXiRowMajor;
 
     typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXfRowMajor;
     typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRowMajor;
     typedef Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXiRowMajor;
-    typedef Eigen::Tensor<float,2,Eigen::RowMajor> Tensor2d;
-    typedef Eigen::Tensor<float,3,Eigen::RowMajor> Tensor3d;
+    typedef Eigen::Tensor<float,2,Eigen::RowMajor> Tensor2f;
+    typedef Eigen::Tensor<float,3,Eigen::RowMajor> Tensor3f;
 }
 
 #define PI 3.14159265
@@ -64,9 +64,9 @@ std::vector<std::string> split_string(std::stringstream sstream, char delimiter)
 
 // GRADIENT CALCUATIONS
 
-Eigen::VectorXd gradient(const Eigen::VectorXd& x) {
+Eigen::VectorXf gradient(const Eigen::VectorXf& x) {
     int n = x.size();
-    Eigen::VectorXd grad(n);
+    Eigen::VectorXf grad(n);
 
     // Central differences in the interior
     for (int i = 1; i < n - 1; ++i) {
@@ -204,7 +204,7 @@ Eigen::MatrixXfRowMajor cvMatToEigenCopy(const cv::Mat& mat) {
     return eigen_matrix;
 }
 
-cv::Mat convertToFloat(cv::Mat& mat) {
+cv::Mat convertTofloat(cv::Mat& mat) {
     // Ensure the source matrix is of type CV_8U
     CV_Assert(mat.type() == CV_8U);
 
@@ -334,7 +334,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
     cv::Mat saturation(rows, cols, CV_8UC1);
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
-            saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::min(saturations(i, j) / max_saturation * 255, 255.0f));
+            saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::min(saturations(i, j) / max_saturation * 255.0, 255.0));
         }
     }
 
@@ -568,8 +568,8 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
 //    std::cout << "Height: " << height << std::endl;
 //    std::cout << "Width: " << width << std::endl;
     // Create grid of points
-    Eigen::MatrixXd XX(N_x, N_y);
-    Eigen::MatrixXd YY(N_x, N_y);
+    Eigen::MatrixXf XX(N_x, N_y);
+    Eigen::MatrixXf YY(N_x, N_y);
     for (int i = 0; i < N_x; ++i) {
         for (int j = 0; j < N_y; ++j) {
             XX(i, j) = i;
@@ -585,7 +585,7 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
     // Tensor<float,3,Eigen::RowMajor> CCM_T;
     // Tensor<float,3,Eigen::RowMajor> C_x;
     // Tensor<float,3,Eigen::RowMajor> C_y;
-    // std::vector<std::vector<Eigen::VectorXd>> C_y;
+    // std::vector<std::vector<Eigen::VectorXf>> C_y;
     for (int i = 0; i < N_x; ++i) {
         for (int j = 0; j < N_y; ++j) {
             autodiff::real x = XX(i, j);
@@ -781,7 +781,7 @@ void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::Row
     }
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
+    std::chrono::duration<float> elapsed = end - start;
     std::cout << "Time elapsed: " << elapsed.count() << " seconds" << std::endl;
 }
 
@@ -903,12 +903,12 @@ void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Ei
         PROFILE_SCOPE("FR CROSSPRODUCT");
         crossProduct1x3(R, CCM, cross);
     }
-    std::cout << cross << std::endl;
+//    std::cout << cross << std::endl;
     {
         PROFILE_SCOPE("FR M32");
         m32(cross, Cx, Cy, update);
     }
-    std::cout << update << std::endl;
+//    std::cout << update << std::endl;
 
     F = (1 - weight_FR)*F + weight_FR*update;
 }
@@ -925,7 +925,7 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
     Tensor<float, 1, Eigen::RowMajor> points_tensor_1;
     Tensor<float, 1, Eigen::RowMajor> directions_tensor_1;
     Eigen::Vector3f solution_short(3);
-    Eigen::VectorXd solution_long(N*3);
+    Eigen::VectorXf solution_long(N*3);
     Eigen::array<int , 2> reshaper_2({N, 3});
     Eigen::array<int , 1> reshaper_1({N * 3});
     Eigen::MatrixXf points_matrix;
@@ -978,7 +978,7 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
                 int counter = 0;
                 for (int k=3; k<sparse_m.outerSize(); ++k)
                     // Skip the first three cols as they stay the same
-                    for (SparseMatrix<double>::InnerIterator it(sparse_m,k); it; ++it)
+                    for (SparseMatrix<float>::InnerIterator it(sparse_m,k); it; ++it)
                     {
                         // Iterate Columnwise through the matrix. Meaning the first entries are all 1 until the 4th column is reached
                         // This also happens exactly at have the contained values -> 3N ones, 3N reshaped_Cs
@@ -988,7 +988,7 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
                     }
             }
 
-        Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver; // Tends to fail really often
+        Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>, Eigen::LeastSquareDiagonalPreconditioner<float>> solver; // Tends to fail really often
         // The Paper Nearest approaches to multiple lines in n-dimensional space from Han and Bancroft mention not to use least square methods on the multiple lines
         // problem. Instead they recommend a SVD approach.
 
@@ -1005,7 +1005,7 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
             }
 
             // x = solver.solve(b);
-            solution_long = solver.solveWithGuess(points_vector.cast<double>(), solution_long);
+            solution_long = solver.solveWithGuess(points_vector.cast<float>(), solution_long);
             if (solver.info() != Eigen::Success) {
                 std::cerr << "Solving failed during update_R_from_C " << std::endl;
                 std::cout << "Errenous vector RF: " <<  std::endl;
@@ -1049,7 +1049,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 1:
                 std::cout << F << std::endl;
-                update_F_from_R(F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
+                (F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
                 std::cout << F << std::endl;
                 std::cout << CCM << std::endl;
                 std::cout << dCdx << std::endl;
@@ -1343,11 +1343,11 @@ int test(){
         std::cout << "TESTING HELPER FUNCTIONS" << std::endl;
         //##################################################################################################################
         // Test sparse matrix creation
-        Tensor3d In2(n,m,2);
-        Tensor3d Cx(n,m,3);
-        Tensor3d Cy(n,m,3);
-        Tensor3d Out3(n,m,3);
-        Tensor3d Out3_comparison(n,m,3);
+        Tensor3f In2(n,m,2);
+        Tensor3f Cx(n,m,3);
+        Tensor3f Cy(n,m,3);
+        Tensor3f Out3(n,m,3);
+        Tensor3f Out3_comparison(n,m,3);
         In2.setValues({{{1,4},{2,3}},{{3,2},{4,1}}});
         Cx.setValues({{{1,2,3},{1,2,3}},{{1,2,3},{1,2,3}}});
         Cy.setValues({{{.1,.2,.3},{.1,.2,.3}},{{.1,.2,.3},{.1,.2,.3}}});
@@ -1365,10 +1365,10 @@ int test(){
 
         //##################################################################################################################
         // Test Vector distance function needed for M32
-        Tensor3d dCdx_small(1,1,3);
-        Tensor3d dCdy_small(1,1,3);
-        Tensor2d distance_comparison(1,1);
-        Tensor2d distance(1,1);
+        Tensor3f dCdx_small(1,1,3);
+        Tensor3f dCdy_small(1,1,3);
+        Tensor2f distance_comparison(1,1);
+        Tensor2f distance(1,1);
         dCdx_small.setValues({{{1,2,3}}});
         dCdy_small.setValues({{{1,0,1}}});
         distance_comparison.setValues({{(float)std::sqrt(6.0)}});
@@ -1385,9 +1385,9 @@ int test(){
 
         //##################################################################################################################
         // M32 Test
-        Tensor3d In3(1,1,3);
-        Tensor3d Out2(1,1,2);
-        Tensor3d Out2_comparison(1,1,2);
+        Tensor3f In3(1,1,3);
+        Tensor3f Out2(1,1,2);
+        Tensor3f Out2_comparison(1,1,2);
         // TAKE dCdx and dCdy from vector_distance test above
         In3.setValues({{{1,1,1}}});
         Out2_comparison.setValues({{{(float)(1/std::sqrt(6)), (float)(std::sqrt(6)/std::sqrt(12))}}});
@@ -1405,7 +1405,10 @@ int test(){
         //##################################################################################################################
         // Camera calibration map
         find_C(n, m, PI/2, PI/2, 1.0f, CCM, dCdx, dCdy);
-        std::cout << "Implemented find_C function with autodiff" << std::endl;
+//        std::cout << CCM << std::endl;
+//        std::cout << dCdx << std::endl;
+//        std::cout << dCdy << std::endl;
+//        std::cout << "Implemented find_C function with autodiff" << std::endl;
         float epsilon = 1e-6;
         if (std::abs(CCM(1,1,0) - 1/std::sqrt(3)) < epsilon and std::abs(dCdx(1,1,0) - 4*std::sqrt(3)/9) < epsilon and std::abs(dCdx(1,1,1) - 2/(std::sqrt(3)*3)) < epsilon){
             std::cout << "HELPER FUNCTION FIND_C CORRECT" << std::endl;
@@ -1434,7 +1437,7 @@ int test(){
             crossProduct3x3(A, B, D);
         }
         auto end_chip = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> duration_chip = end_chip - start_chip;
+        std::chrono::duration<float> duration_chip = end_chip - start_chip;
         std::cout << "Time for chip-based implementation: " << duration_chip.count()/iterations << " seconds\n";
 
         // Timing the loop-based implementation
@@ -1443,7 +1446,7 @@ int test(){
             crossProduct3x3_loop(A, B, D);
         }
         auto end_loop = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> duration_loop = end_loop - start_loop;
+        std::chrono::duration<float> duration_loop = end_loop - start_loop;
         std::cout << "Time for loop-based implementation: " << duration_loop.count()/iterations << " seconds\n";
         std::cout << "Implemented cross product for Tensors" << std::endl;
         // Define the resulting tensor D with shape (m, n)
@@ -1538,7 +1541,7 @@ int test(){
         weights["weight_RF"] = 0.2;
         weights["lr"] = 0.9;
         weights["timestep"] = 0.05f;
-        std::vector<int> permutation {0,2,3,4,5,6};
+        std::vector<int> permutation {0,1,2,3,4,5,6};
         interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, nm);
         std::cout << "Implemented interacting maps update step" << std::endl;
         std::cout << "UPDATE STEP FUNCTION TEST PASSED" << std::endl;
@@ -1714,7 +1717,7 @@ int main() {
 
         // Setup Sparse Matrix for update_R_from_F
         int N = height*width;
-        std::vector<Eigen::Triplet<double>> tripletList;
+        std::vector<Eigen::Triplet<float>> tripletList;
         SpMat sparse_m(N * 3, N + 3);
         tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
         int j = 3;
