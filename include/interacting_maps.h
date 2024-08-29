@@ -14,7 +14,7 @@ namespace fs = std::filesystem;
 
 using namespace Eigen;
 
-typedef SparseMatrix<double> SpMat;
+typedef SparseMatrix<float> SpMat;
 
 struct Event{
     float time;
@@ -115,7 +115,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float, 3>& vector_field);
 
 void create_VIFG_image(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& VIFG);
 
-// void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& dxdC, Tensor<float,3,Eigen::RowMajor>& dydC);
+// void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& dXfC, Tensor<float,3,Eigen::RowMajor>& dydC);
 void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& C_x, Tensor<float,3,Eigen::RowMajor>& C_y);
 
 void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, float lr, float weight_FG);

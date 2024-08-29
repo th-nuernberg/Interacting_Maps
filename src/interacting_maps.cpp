@@ -9,6 +9,19 @@
 #include "Instrumentor.h"
 #include <cmath>
 
+#define PI 3.14159265
+#define EXECUTE_TEST 0
+#define SMALL_MATRIX_METHOD 1
+
+// Define DEBUG_LOG macro that logs with function name in debug mode
+#ifdef DEBUG
+#define DEBUG_LOG(message) \
+        std::cout << "DEBUG (" << __func__ << "): " << message << std::endl << \
+        "###########################################" << std::endl;
+#else
+#define DEBUG_LOG(message) // No-op in release mode
+#endif
+
 #define PROFILING 1
 #if PROFILING
 #define PROFILE_SCOPE(name) InstrumentationTimer timer##__LINE__(name)
@@ -19,26 +32,15 @@
 #define PROFILE_FUNCTION()
 #endif
 
-// Define a type for convenience
-// using namespace autodiff;
-
 namespace fs = std::filesystem;
 
 namespace Eigen{
-//    typedef Eigen::Vector<float, Eigen::Dynamic, Eigen::RowMajor> VectorXfRowMajor;
-//    typedef Eigen::Vector<float, Eigen::Dynamic, Eigen::RowMajor> VectorXfRowMajor;
-//    typedef Eigen::Vector<int, Eigen::Dynamic, Eigen::RowMajor> VectorXiRowMajor;
-
     typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXfRowMajor;
-    typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRowMajor;
+    typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXfRowMajor;
     typedef Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXiRowMajor;
     typedef Eigen::Tensor<float,2,Eigen::RowMajor> Tensor2f;
     typedef Eigen::Tensor<float,3,Eigen::RowMajor> Tensor3f;
 }
-
-#define PI 3.14159265
-
-
 
 std::ostream& operator << (std::ostream &os, const Event &e) {
     return (os << "Time: " << e.time << " Coords: " << e.coordinates[0] << " " << e.coordinates[1] << " Polarity: " << e.polarity);
@@ -142,7 +144,7 @@ Eigen::MatrixXfRowMajor Tensor2Matrix(const Eigen::Tensor<float,2,Eigen::RowMajo
 //    // As OpenCV uses a RowMajor layout, all Eigen::Matrix are also RowMajor. Tensors are ColMajor by default and it is
 //    // recommended to only uses ColMajor Tensors. So at conversion the layout needs to be considered.
 //    Eigen::Tensor<float,2,RowMajor> row_major(dims[0], dims[1]);
-//    // Swap the layout and preserve the order of the dimensions; https://eigen.tuxfamily.org/dox/unsupported/eigen_tensors.html
+//    // Swap the layout and preserve the order of the dimensions; https://eigen.tuXfamily.org/dox/unsupported/eigen_tensors.html
 //    Eigen::array<int,2> shuffle({1, 0});
 //    row_major = input.swap_layout().shuffle(shuffle);
     const float* data_ptr = &input(0); // Points to beginning of array;
@@ -262,8 +264,8 @@ cv::Mat frame2grayscale(const Eigen::MatrixXfRowMajor& frame) {
     // Find min and max polarity
     double min_polarity, max_polarity;
     cv::minMaxLoc(frame_cv, &min_polarity, &max_polarity);
-    std::cout << min_polarity << std::endl;
-    std::cout << max_polarity << std::endl;
+    DEBUG_LOG("Min Polarity: " << min_polarity)
+    DEBUG_LOG("Max Polarity: " << max_polarity)
 
     // Normalize the frame
     cv::Mat normalized_frame;
@@ -443,8 +445,8 @@ Calibration_Data get_calibration_data(const std::vector<float>& raw_data, int fr
                                               {0, data.focal_point[1], raw_data[3]},
                                               {0, 0, 1}});
     data.distortion_coefficients = std::vector<float>(raw_data.begin()+4, raw_data.end());
-    data.view_angles = std::vector<float>({std::atan(frame_height/(2*data.focal_point[0])),
-                                            std::atan(frame_width/(2*data.focal_point[1]))});
+    data.view_angles = std::vector<float>({2*std::atan(frame_height/(2*data.focal_point[0])),
+                                            2*std::atan(frame_width/(2*data.focal_point[1]))});
     return data;
 }
 
@@ -468,8 +470,8 @@ void read_events(const std::string& file_path, std::vector<Event>& events, float
             events.push_back(event);
             counter++;
         }
-        std::cout << "Final time stamp: " << time << std::endl;
-        std::cout << "Number of events: " << events.size() << std::endl;
+        DEBUG_LOG("Final time stamp: " << time)
+        DEBUG_LOG("Number of events: " << events.size())
     }
 }
 
@@ -520,7 +522,9 @@ void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::
         }
         frames[i] = frame;
         i++;
-        std::cout << "Eventvector size: " << event_vector.size() << std::endl;
+
+        DEBUG_LOG("Eventvector size: " << event_vector.size());
+        DEBUG_LOG("Last Event: " << event_vector.back());
     }
 
 }
@@ -572,8 +576,10 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
     float height = tan(view_angle_x / 2);
     float width = tan(view_angle_y / 2);
 
-//    std::cout << "Height: " << height << std::endl;
-//    std::cout << "Width: " << width << std::endl;
+    DEBUG_LOG("view_angle_x: " << view_angle_x);
+    DEBUG_LOG("view_angle_y: " << view_angle_y);
+    DEBUG_LOG("Height: " << height);
+    DEBUG_LOG("Width: " << width);
     // Create grid of points
     Eigen::MatrixXf XX(N_x, N_y);
     Eigen::MatrixXf YY(N_x, N_y);
@@ -608,6 +614,7 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             // Vector3real dCdy;
             autodiff::VectorXreal F;
 
+            // NEEDS TO STAY D O U B L E
             Eigen::VectorXd dCdx = autodiff::jacobian(C, wrt(x), at(x,y,N_x, N_y, height, width, rs), F);
             Eigen::VectorXd dCdy = autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F);
 
@@ -833,9 +840,9 @@ void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::R
     const auto& dimensions = I.dimensions();
     Eigen::array<Eigen::Index, 2> offsets = {0, 0};
     Eigen::array<Eigen::Index, 2> extents = {dimensions_V.at(0), dimensions_V.at(1)};
-//    std::cout << I << std::endl;
-    I.slice(offsets,extents) = (1 - weight_IV)*I.slice(offsets,extents) + weight_IV*cum_V;
-//    std::cout << I << std::endl;
+    DEBUG_LOG("I: " << I);
+    I.slice(offsets,extents) = I.slice(offsets,extents) + weight_IV*cum_V;
+    DEBUG_LOG("I: " << I);
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
             if (I(i,j)>0){
@@ -943,15 +950,15 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
     Eigen::MatrixXf directions_matrix;
     Eigen::VectorXf points_vector;
     Eigen::VectorXf directions_vector;
-    bool new_method = true;
 
-    if (new_method){
+    if (SMALL_MATRIX_METHOD){
         Matrix3f A = Matrix3f::Zero();
         Vector3f B = Vector3f::Zero();
         Matrix3f I = Matrix3f::Identity();
         Matrix3f outerProduct;
         Eigen::Vector<float,3> p;
         Eigen::Vector<float,3> d;
+        Eigen::Vector<float,3> d1;
         {
             PROFILE_SCOPE("RF Pre");
             m23(F, Cx, Cy, transformed_F);
@@ -969,7 +976,8 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
 //            std::cout << directions_matrix << std::endl;
             for (size_t i = 0; i < directions_matrix.rows(); ++i){
                 p = points_matrix.block<1,3>(i,0);
-                d = directions_matrix.block<1,3>(i,0).normalized(); // Normalize direction vector
+//                d = directions_matrix.block<1,3>(i,0).normalized(); // Normalize direction vector
+                d = directions_matrix.block<1,3>(i,0);
                 outerProduct = d * d.transpose();
 //                std::cout << p << std::endl;
 //                std::cout << d << std::endl;
@@ -977,14 +985,28 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
                 A += I - outerProduct;
                 B += (I - outerProduct) * p;
             }
-//            std::cout << A << std::endl;
-//            std::cout << B << std::endl;
+            d1 = directions_matrix.block<1,3>(0,0);
+            DEBUG_LOG("First direction: " << std::endl << d1);
+            DEBUG_LOG("Last direction: " << std::endl << d);
+            DEBUG_LOG("N outer products: " << std::endl << directions_matrix.rows());
+            DEBUG_LOG("outerProduct: " << std::endl << outerProduct);
+            DEBUG_LOG("A: " << std::endl << A);
+            DEBUG_LOG("B: " << std::endl << B);
         }
         solution_short = A.partialPivLu().solve(B);
 //        std::cout << "R update: " << solution_short << std::endl;
         R(0) = (1-weight_RF)*R(0) + weight_RF*solution_short(0);
         R(1) = (1-weight_RF)*R(1) + weight_RF*solution_short(1);
         R(2) = (1-weight_RF)*R(2) + weight_RF*solution_short(2);
+        if (std::abs(R(0)) < 1e-14 or std::isnan(R(0))){
+            R(0) = 0.0;
+        }
+        if (std::abs(R(1)) < 1e-14 or std::isnan(R(1))){
+            R(1) = 0.0;
+        }
+        if (std::abs(R(2)) < 1e-14 or std::isnan(R(2))){
+            R(2) = 0.0;
+        }
     }
     else{
             {
@@ -1038,8 +1060,7 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
             solution_long = solver.solveWithGuess(points_vector.cast<float>(), solution_long);
             if (solver.info() != Eigen::Success) {
                 std::cerr << "Solving failed during update_R_from_C " << std::endl;
-                std::cout << "Errenous vector RF: " <<  std::endl;
-                std::cout << points_vector({0,1,2,3,4,5,6,7,8}) << std::endl;
+                DEBUG_LOG("Errenous vector RF: " << points_vector({0,1,2,3,4,5,6,7,8}));
             }
             else {
 //            std::cout << "Solver took " << solver.iterations() << " steps." << std::endl;
@@ -1064,11 +1085,11 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
             default:
                 std::cout << "Unknown number in permutation" << std::endl;
             case 0:
-//                std::cout << F << std::endl;
+//                DEBUG_LOG("F: "<< std::endl << F);
                 update_F_from_G(F, V, G, weights["lr"], weights["weight_FG"]);
-//                std::cout << F << std::endl;
-//                std::cout << V << std::endl;
-//                std::cout << G << std::endl;
+//                DEBUG_LOG("F: "<<  F);
+//                DEBUG_LOG("V: "<<  V);
+//                DEBUG_LOG("G: "<<  G);
 //                    std::cout << "Case " << element << std::endl;
                 break;
             case 1:
@@ -1643,11 +1664,7 @@ int test(){
 int main() {
     //##################################################################################################################
     // Parameters
-
-
-    bool execute_test = true;
-
-    if (execute_test){
+    if (EXECUTE_TEST){
         test();
     }
     else{
@@ -1659,7 +1676,7 @@ int main() {
         std::string event_path = "../res/shapes_rotation/events.txt";
 
         float start_time_events = 0.0; // in s
-        float end_time_events = 0.05; // in s
+        float end_time_events = 0.25; // in s
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 1000;
 
@@ -1672,11 +1689,11 @@ int main() {
         weights["weight_GF"] = 0.2;
         weights["weight_GI"] = 0.2;
         weights["weight_IG"] = 0.2;
-        weights["weight_IV"] = 0.2;
+        weights["weight_IV"] = 1.0;
         weights["weight_RF"] = 0.8;
         weights["lr"] = 0.9;
         weights["time_step"] = time_bin_size_in_s;
-        std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
+        std::vector<int> permutation {0,1,2,3,4,6}; // Which update steps to take
 
         //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
