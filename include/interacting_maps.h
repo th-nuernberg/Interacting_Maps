@@ -128,7 +128,7 @@ void update_I_from_V(Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,2,Eigen::R
 
 void update_I_from_G(Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& I_gradient, Tensor<float,3,Eigen::RowMajor>& G, float weight_IG);
 
-void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, Tensor<float,1> R, float weight_FR);
+void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, Tensor<float,1> R, float weight_FR);
 
 void update_R_from_F(Tensor<float,1> R, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, float weight_RF, int N);
 
