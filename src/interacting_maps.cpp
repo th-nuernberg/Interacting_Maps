@@ -216,6 +216,30 @@ cv::Mat convertTofloat(cv::Mat& mat) {
     return mat;
 }
 
+void writeToFile(const Tensor<float,3,Eigen::RowMajor>& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
+}
+
+void writeToFile(const Tensor<float,2,Eigen::RowMajor>& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
+}
+
+void writeToFile(const Eigen::MatrixXfRowMajor& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
+}
+
 //TODO ensure Tensors are actually const
 bool isApprox(Tensor<float,3,Eigen::RowMajor>& t1, Tensor<float,3,Eigen::RowMajor>& t2, const float precision = 1e-8){
     Map<VectorXf> mt1(t1.data(), t1.size());
@@ -822,7 +846,7 @@ void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::R
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
-            update_G(i,j,0) = (i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1))) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+            update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1))) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
             update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1))) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
         }
     }
@@ -841,28 +865,29 @@ void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::R
     Eigen::array<Eigen::Index, 2> offsets = {0, 0};
     Eigen::array<Eigen::Index, 2> extents = {dimensions_V.at(0), dimensions_V.at(1)};
     DEBUG_LOG("I: " << I);
-    I.slice(offsets,extents) = I.slice(offsets,extents) + weight_IV*cum_V;
+    DEBUG_LOG("Cum_V: " << cum_V);
+    I.slice(offsets,extents) = (1-weight_IV) * I.slice(offsets,extents) + weight_IV*cum_V;
     DEBUG_LOG("I: " << I);
-    for (int i = 0; i<dimensions[0]; i++){
-        for (int j = 0; j<dimensions[1]; j++){
-            if (I(i,j)>0){
-                if (I(i,j)>time_step){
-                    I(i,j) -= time_step;
-                }
-                else{
-                    I(i,j) = 0;
-                }
-            }
-            if (I(i,j)<0){
-                if (I(i,j)<time_step){
-                    I(i,j) += time_step;
-                }
-                else{
-                    I(i,j) = 0;
-                }
-            }
-        }
-    }
+//    for (int i = 0; i<dimensions[0]; i++){
+//        for (int j = 0; j<dimensions[1]; j++){
+//            if (I(i,j)>0){
+//                if (I(i,j)>time_step){
+//                    I(i,j) -= time_step;
+//                }
+//                else{
+//                    I(i,j) = 0;
+//                }
+//            }
+//            if (I(i,j)<0){
+//                if (I(i,j)<time_step){
+//                    I(i,j) += time_step;
+//                }
+//                else{
+//                    I(i,j) = 0;
+//                }
+//            }
+//        }
+//    }
 }
 
 void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajor> &I_gradient, Tensor<float,3,Eigen::RowMajor> &G, const float weight_IG=0.5){
@@ -1104,7 +1129,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 2:
 //                std::cout << G << std::endl;
-                update_G_from_F(G, V, F, weights["lr"], weights["weight_FG"]);
+                update_G_from_F(G, V, F, weights["lr"], weights["weight_GF"]);
 //                std::cout << G << std::endl;
 //                std::cout << V << std::endl;
 //                std::cout << F << std::endl;
@@ -1664,6 +1689,9 @@ int test(){
 int main() {
     //##################################################################################################################
     // Parameters
+
+    std::setprecision(8);
+
     if (EXECUTE_TEST){
         test();
     }
@@ -1675,8 +1703,8 @@ int main() {
         std::string calib_path = "../res/shapes_rotation/calib.txt";
         std::string event_path = "../res/shapes_rotation/events.txt";
 
-        float start_time_events = 0.0; // in s
-        float end_time_events = 0.25; // in s
+        float start_time_events = 10.0; // in s
+        float end_time_events = 10.05; // in s
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 1000;
 
@@ -1689,11 +1717,11 @@ int main() {
         weights["weight_GF"] = 0.2;
         weights["weight_GI"] = 0.2;
         weights["weight_IG"] = 0.2;
-        weights["weight_IV"] = 1.0;
+        weights["weight_IV"] = 0.5;
         weights["weight_RF"] = 0.8;
         weights["lr"] = 0.9;
         weights["time_step"] = time_bin_size_in_s;
-        std::vector<int> permutation {0,1,2,3,4,6}; // Which update steps to take
+        std::vector<int> permutation {0,1,2,4,5}; // Which update steps to take
 
         //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
@@ -1761,22 +1789,31 @@ int main() {
         int N = height*width;
         std::vector<Eigen::Triplet<float>> tripletList;
         SpMat sparse_m(N * 3, N + 3);
-        tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
-        int j = 3;
-        for (int i = 0; i < N * 3; i++) {
-            tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
-            j = int(i/3 + 3);
-            tripletList.emplace_back(i, j, 1.0); // Points, Placeholder
-        }
-        sparse_m.setFromTriplets(tripletList.begin(), tripletList.end());
+//        tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
+//        int j = 3;
+//        for (int i = 0; i < N * 3; i++) {
+//            tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
+//            j = int(i/3 + 3);
+//            tripletList.emplace_back(i, j, 1.0); // Points, Placeholder
+//        }
+//        sparse_m.setFromTriplets(tripletList.begin(), tripletList.end());
         for (Tensor<float,2,Eigen::RowMajor> V : frames){
 //            std::cout << V << std::endl;
+            writeToFile(V, "V.txt");
+            writeToFile(I, "I.txt");
+            writeToFile(F, "F.txt");
+            writeToFile(G, "G.txt");
             for (int iter = 0; iter < iterations; ++iter){
+
                 interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, N);
                 if (iter%100==0){
                     std::cout << iter << "/" << iterations << std::endl;
                 }
             }
+            writeToFile(V, "V2.txt");
+            writeToFile(I, "I2.txt");
+            writeToFile(F, "F2.txt");
+            writeToFile(G, "G2.txt");
             std::cout << "R: " << R << std::endl;
             counter++;
             std::cout << "Frame: " << counter << std::endl;
