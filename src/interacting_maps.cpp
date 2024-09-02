@@ -381,11 +381,12 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
     return bgr_image;
 }
 
-cv::Mat create_VIFG(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& G, const std::string& name = "VIFG", bool save = false) {
+cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& G, const Tensor<float,3,Eigen::RowMajor>& F, const std::string& name = "VIGF", bool save = false) {
     cv::Mat V_img = V2image(V);
     cv::Mat I_img = frame2grayscale(I);
-    cv::Mat F_img = vector_field2image(F);
     cv::Mat G_img = vector_field2image(G);
+    cv::Mat F_img = vector_field2image(F);
+
 
     long rows = V.rows();
     long cols = V.cols();
@@ -812,6 +813,18 @@ void m23(const Tensor<float,3,Eigen::RowMajor>& In, const Tensor<float,3,Eigen::
 //     }
 // }
 
+bool VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3,Eigen::RowMajor>& F, Eigen::Tensor<float,3,Eigen::RowMajor>& G, float precision){
+    InstrumentationTimer timer("VFG_check");
+    const auto& dimensions = F.dimensions();
+    Tensor<float,2,Eigen::RowMajor> dot(dimensions[0], dimensions[1]);
+    for (int i = 0; i<dimensions[0]; i++){
+        for (int j = 0; j<dimensions[1]; j++){
+            dot(i,j) = -(F(i,j,0)*G(i,j,0) + F(i,j,1)*G(i,j,1));
+        }
+    }
+    return isApprox(V, dot, precision);
+}
+
 // Function to time the performance of a given dot product computation function
 template<typename Func>
 void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::RowMajor>& A, const Eigen::Tensor<float,3,Eigen::RowMajor>& B, Eigen::Tensor<float,2,Eigen::RowMajor>& D, int iterations) {
@@ -956,149 +969,71 @@ void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Ei
     F = (1 - weight_FR)*F + weight_FR*update;
 }
 
-void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, SpMat& sparse_m, const float weight_RF, const int N) {
+void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Matrix3f& A, const std::vector<Matrix3f>& Identity_minus_outerProducts, const float weight_RF, const int N) {
     //InstrumentationTimer timer1("update_R_from_F");
     PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
     Tensor<float, 3, Eigen::RowMajor> transformed_F(dimensions[0], dimensions[1], 3);
     Tensor<float, 3, Eigen::RowMajor> points_tensor_3(dimensions[0], dimensions[1], 3);
-    Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(dimensions[0], dimensions[1], 3);
     Tensor<float, 2, Eigen::RowMajor> points_tensor_2;
-    Tensor<float, 2, Eigen::RowMajor> directions_tensor_2;
-    Tensor<float, 1, Eigen::RowMajor> points_tensor_1;
-    Tensor<float, 1, Eigen::RowMajor> directions_tensor_1;
-    Eigen::Vector3f solution_short(3);
-    Eigen::VectorXf solution_long(N*3);
+    Eigen::Vector3f solution(3);
     Eigen::array<int , 2> reshaper_2({N, 3});
-    Eigen::array<int , 1> reshaper_1({N * 3});
     Eigen::MatrixXf points_matrix;
-    Eigen::MatrixXf directions_matrix;
-    Eigen::VectorXf points_vector;
-    Eigen::VectorXf directions_vector;
+    Vector3f B = Vector3f::Zero();
+    Eigen::Vector<float, 3> p;
 
-    if (SMALL_MATRIX_METHOD){
-        Matrix3f A = Matrix3f::Zero();
-        Vector3f B = Vector3f::Zero();
-        Matrix3f I = Matrix3f::Identity();
-        Matrix3f outerProduct;
-        Eigen::Vector<float,3> p;
-        Eigen::Vector<float,3> d;
-        Eigen::Vector<float,3> d1;
-        {
-            PROFILE_SCOPE("RF Pre");
-            m23(F, Cx, Cy, transformed_F);
-            crossProduct3x3(C, transformed_F, points_tensor_3);
-            points_tensor_2 = points_tensor_3.reshape(reshaper_2); // reshaped_points need to be Eigen::Vector for solver
-            points_matrix = Tensor2Matrix(points_tensor_2);
-            directions_tensor_2 = C.reshape(reshaper_2);
-            directions_matrix = Tensor2Matrix(directions_tensor_2);
-//            std::cout << transformed_F << std::endl;
-//            std::cout << points_tensor_3 << std::endl;
-//            std::cout << points_tensor_2 << std::endl;
-//            std::cout << points_matrix << std::endl;
-//            std::cout << C << std::endl;
-//            std::cout << directions_tensor_2 << std::endl;
-//            std::cout << directions_matrix << std::endl;
-            for (size_t i = 0; i < directions_matrix.rows(); ++i){
-                p = points_matrix.block<1,3>(i,0);
-//                d = directions_matrix.block<1,3>(i,0).normalized(); // Normalize direction vector
-                d = directions_matrix.block<1,3>(i,0);
-                outerProduct = d * d.transpose();
-//                std::cout << p << std::endl;
-//                std::cout << d << std::endl;
-//                std::cout << outerProduct << std::endl;
-                A += I - outerProduct;
-                B += (I - outerProduct) * p;
-            }
-            d1 = directions_matrix.block<1,3>(0,0);
-            DEBUG_LOG("First direction: " << std::endl << d1);
-            DEBUG_LOG("Last direction: " << std::endl << d);
-            DEBUG_LOG("N outer products: " << std::endl << directions_matrix.rows());
-            DEBUG_LOG("outerProduct: " << std::endl << outerProduct);
-            DEBUG_LOG("A: " << std::endl << A);
-            DEBUG_LOG("B: " << std::endl << B);
-        }
-        solution_short = A.partialPivLu().solve(B);
-//        std::cout << "R update: " << solution_short << std::endl;
-        R(0) = (1-weight_RF)*R(0) + weight_RF*solution_short(0);
-        R(1) = (1-weight_RF)*R(1) + weight_RF*solution_short(1);
-        R(2) = (1-weight_RF)*R(2) + weight_RF*solution_short(2);
-        if (std::abs(R(0)) < 1e-14 or std::isnan(R(0))){
-            R(0) = 0.0;
-        }
-        if (std::abs(R(1)) < 1e-14 or std::isnan(R(1))){
-            R(1) = 0.0;
-        }
-        if (std::abs(R(2)) < 1e-14 or std::isnan(R(2))){
-            R(2) = 0.0;
+    {
+        PROFILE_SCOPE("RF Pre");
+        m23(F, Cx, Cy, transformed_F);
+        crossProduct3x3(C, transformed_F, points_tensor_3);
+        points_tensor_2 = points_tensor_3.reshape(reshaper_2); // reshaped_points need to be Eigen::Vector for solver
+        points_matrix = Tensor2Matrix(points_tensor_2);
+        for (size_t i = 0; i < N; ++i) {
+            p = points_matrix.block<1, 3>(i, 0);
+
+            B += (Identity_minus_outerProducts[i]) * p;
         }
     }
-    else{
-            {
-                PROFILE_SCOPE("RF PRE");
-                m23(F, Cx, Cy, transformed_F);
-                crossProduct3x3(C, transformed_F, points_tensor_3);
-                points_tensor_1 = points_tensor_3.reshape(reshaper_1); // reshaped_points need to be Eigen::Vector for solver
-                points_vector = Tensor2VectorRM(points_tensor_1);
-                directions_tensor_1 = C.reshape(reshaper_1);
-//                std::cout << transformed_F << std::endl;
-//                std::cout << points_tensor_3 << std::endl;
-//                std::cout << points_tensor_1 << std::endl;
-//                std::cout << points_vector << std::endl;
-//                std::cout << C << std::endl;
-//                std::cout << directions_tensor_1 << std::endl;
+    solution = A.partialPivLu().solve(B);
+//        std::cout << "R update: " << solution_short << std::endl;
+    R(0) = (1 - weight_RF) * R(0) + weight_RF * solution(0);
+    R(1) = (1 - weight_RF) * R(1) + weight_RF * solution(1);
+    R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
+    if (std::abs(R(0)) < 1e-14 or std::isnan(R(0))) {
+        R(0) = 0.0;
+    }
+    if (std::abs(R(1)) < 1e-14 or std::isnan(R(1))) {
+        R(1) = 0.0;
+    }
+    if (std::abs(R(2)) < 1e-14 or std::isnan(R(2))) {
+        R(2) = 0.0;
+    }
+}
 
-            }
+void setup_R_update(const Tensor<float,3,Eigen::RowMajor>& CCM, Matrix3f A, std::vector<Matrix3f> Identity_minus_outerProducts){
+    const auto &dimensions = CCM.dimensions();
+    int height = dimensions[0];
+    int width = dimensions[1];
+    Matrix3f Identity = Matrix3f::Identity();
+    Matrix3f outerProduct;
+    Eigen::Vector<float,3> d;
+    Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(height, width, 3);
+    Tensor<float, 2, Eigen::RowMajor> directions_tensor_2(height*width, 3);
+    Eigen::array<int , 2> reshaper_2({height*width, 3});
+    Eigen::MatrixXf directions_matrix(height*width, 3);
+    directions_tensor_2 = CCM.reshape(reshaper_2);
+    directions_matrix = Tensor2Matrix(directions_tensor_2);
 
-            {
-                PROFILE_SCOPE("RF Set Entries");
-                int counter = 0;
-                for (int k=3; k<sparse_m.outerSize(); ++k)
-                    // Skip the first three cols as they stay the same
-                    for (SparseMatrix<float>::InnerIterator it(sparse_m,k); it; ++it)
-                    {
-                        // Iterate Columnwise through the matrix. Meaning the first entries are all 1 until the 4th column is reached
-                        // This also happens exactly at have the contained values -> 3N ones, 3N reshaped_Cs
-                        // j = it.value();
-                        it.valueRef() = directions_tensor_1[counter];
-                        counter++;
-                    }
-            }
-
-        Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>, Eigen::LeastSquareDiagonalPreconditioner<float>> solver; // Tends to fail really often
-        // The Paper Nearest approaches to multiple lines in n-dimensional space from Han and Bancroft mention not to use least square methods on the multiple lines
-        // problem. Instead they recommend a SVD approach.
-
-        solver.setTolerance(1e-4);
-//        solver.setMaxIterations(2000); // Set with no basis
-        {
-            // Perform the computation and measure the time
-            PROFILE_SCOPE("SOLVE");
-
-            solver.analyzePattern(sparse_m); // TODO: Needs only to be executed once since sparsity pattern does not change
-            solver.factorize(sparse_m); // Needs to be done every iteration
-            if (solver.info() != Eigen::Success) {
-                std::cerr << "Decomposition failed during update_R_from_C" << std::endl;
-            }
-
-            // x = solver.solve(b);
-            solution_long = solver.solveWithGuess(points_vector.cast<float>(), solution_long);
-            if (solver.info() != Eigen::Success) {
-                std::cerr << "Solving failed during update_R_from_C " << std::endl;
-                DEBUG_LOG("Errenous vector RF: " << points_vector({0,1,2,3,4,5,6,7,8}));
-            }
-            else {
-//            std::cout << "Solver took " << solver.iterations() << " steps." << std::endl;
-                R(0) = (1-weight_RF)*R(0) + weight_RF*solution_long(0);
-                R(1) = (1-weight_RF)*R(1) + weight_RF*solution_long(1);
-                R(2) = (1-weight_RF)*R(2) + weight_RF*solution_long(2);
-            }
-        }
+    for (size_t i = 0; i < height*width; ++i){
+//                d = directions_matrix.block<1,3>(i,0).normalized(); // Normalize direction vector
+        d = directions_matrix.block<1,3>(i,0);
+        Identity_minus_outerProducts[i] = Identity - d * d.transpose();
+        A += Identity_minus_outerProducts[i];
     }
 }
 
 // TODO: add return number
-void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, SpMat& sparse_m, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N){
+void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, const Matrix3f& A, const std::vector<Matrix3f>& Identity_minus_outerProducts, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N){
     PROFILE_FUNCTION();
     Eigen::array<Eigen::Index, 2> dimensions = V.dimensions();
     Eigen::Tensor<float,3,Eigen::RowMajor> delta_I(dimensions[0], dimensions[1], 2);
@@ -1164,7 +1099,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 6:
 //                std::cout << R << std::endl;
-                update_R_from_F(R, F, CCM, dCdx, dCdy, sparse_m, weights["weight_RF"], N);
+                update_R_from_F(R, F, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights["weight_RF"], N);
 //                std::cout << R << std::endl;
 //                std::cout << F << std::endl;
 //                std::cout << CCM << std::endl;
@@ -1590,14 +1525,11 @@ int test(){
         // Rotation Vector R
         Tensor<float,1> R(3);
         R.setValues({1,2,3});
+        Matrix3f A = Matrix3f::Zero();
+        std::vector<Matrix3f> Identity_minus_outerProducts(n*m);
+        setup_R_update(CCM, A, Identity_minus_outerProducts);
 
-        //##################################################################################################################
-        // Sparse Matrix Creation
-        Tensor<float,2,Eigen::RowMajor> F_flat(nm,3);
-        F_flat.setConstant(1.0);
-        SpMat sparse_m(nm*3,nm+3);
-        create_sparse_matrix(nm, F_flat, sparse_m);
-        std::cout << "Implemented sparse matrix creation for update_R" << std::endl;
+
         //##################################################################################################################
         // Testing Interacting Maps step
         std::unordered_map<std::string,float> weights;
@@ -1612,7 +1544,7 @@ int test(){
         weights["time_step"] = 0.05f;
         std::vector<int> permutation {0,1,2,3,4,5,6};
         for (int i = 0; i < 100; ++i){
-            interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, nm);
+            interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, nm);
         }
         std::cout << "R: " << R << std::endl;
         std::cout << "Implemented interacting maps update step" << std::endl;
@@ -1678,7 +1610,7 @@ int test(){
                 Gimage(i, j, 1) = std::sin(j * 0.1);
             }
         }
-        cv::Mat result = create_VIFG(Vimage, Iimage, Fimage, Gimage, "output.png", true);
+        cv::Mat result = create_VIGF(Vimage, Iimage, Gimage, Fimage, "output.png", true);
         cv::imshow("Result", result);
 //        cv::waitKey(0);
         std::cout << "OPENCV TEST PASSED" << std::endl;
@@ -1703,13 +1635,14 @@ int main() {
         std::string calib_path = "../res/shapes_rotation/calib.txt";
         std::string event_path = "../res/shapes_rotation/events.txt";
 
-        float start_time_events = 10.0; // in s
-        float end_time_events = 10.05; // in s
+        float start_time_events = 0.0; // in s
+        float end_time_events = 0.05; // in s
         float time_bin_size_in_s = 0.05; // in s
-        int iterations = 1000;
+        int iterations = 4000;
 
         int height = 180; // in pixels
         int width = 240; // in pixels
+        int N = height*width;
 
         std::unordered_map<std::string,float> weights;
         weights["weight_FG"] = 0.2;
@@ -1721,21 +1654,22 @@ int main() {
         weights["weight_RF"] = 0.8;
         weights["lr"] = 0.9;
         weights["time_step"] = time_bin_size_in_s;
-        std::vector<int> permutation {0,1,2,4,5}; // Which update steps to take
+        std::vector<int> permutation {0,1,4,5,6}; // Which update steps to take
+        auto rng = std::default_random_engine {};
+
 
         //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
         Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
-        F.setConstant(0.1);
-        Tensor<float,3,Eigen::RowMajor> G(height, width,2);
-        G.setConstant(0.1);
+        F.setRandom();
+        Tensor<float,3,Eigen::RowMajor> G(height, width, 2);
+        G.setRandom();
         Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
-        I.setConstant(0.0);
+        I.setRandom();
         Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
-        I_gradient.setZero();
+        I_gradient.setRandom();
         Tensor<float,1> R(3);
-        R.setConstant(0.1);
-
+        R.setRandom();
 
         //##################################################################################################################
         // Create results_folder
@@ -1779,24 +1713,36 @@ int main() {
         find_C(height, width, calibration_data.view_angles[0], calibration_data.view_angles[1], 1.0f, CCM, dCdx, dCdy);
         std::cout << "Calculated Camera Matrix" << std::endl;
 
+        //##################################################################################################################
+        // A matrix and outerProducts for update_R
+        Matrix3f A = Matrix3f::Zero();
+        std::vector<Matrix3f> Identity_minus_outerProducts(height*width);
+        setup_R_update(CCM, A, Identity_minus_outerProducts);
+
+//        Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(height, width, 3);
+//        Tensor<float, 2, Eigen::RowMajor> directions_tensor_2(height*width, 3);
+//        Eigen::array<int , 2> reshaper_2({height*width, 3});
+//        Eigen::MatrixXf directions_matrix(height*width, 3);
+//
+//        Matrix3f Identity = Matrix3f::Identity();
+//        Matrix3f outerProduct;
+//        Eigen::Vector<float,3> d;
+//
+//        directions_tensor_2 = CCM.reshape(reshaper_2);
+//        directions_matrix = Tensor2Matrix(directions_tensor_2);
+//
+//        for (size_t i = 0; i < height*width; ++i){
+////                d = directions_matrix.block<1,3>(i,0).normalized(); // Normalize direction vector
+//            d = directions_matrix.block<1,3>(i,0);
+//            Identity_minus_outerProducts[i] = Identity - d * d.transpose();
+//            A += Identity_minus_outerProducts[i];
+//        }
+
         std::string profiler_name = "Profiler.json";
         fs::path profiler_path = folder_path / profiler_name;
         Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
         std::cout << "Setup Profiler" << std::endl;
         int counter = 0;
-
-        // Setup Sparse Matrix for update_R_from_F
-        int N = height*width;
-        std::vector<Eigen::Triplet<float>> tripletList;
-        SpMat sparse_m(N * 3, N + 3);
-//        tripletList.reserve(6 * N); // Assuming on average 2 non-zero entries per row
-//        int j = 3;
-//        for (int i = 0; i < N * 3; i++) {
-//            tripletList.emplace_back(i, i % 3, 1.0); // Diagonal element
-//            j = int(i/3 + 3);
-//            tripletList.emplace_back(i, j, 1.0); // Points, Placeholder
-//        }
-//        sparse_m.setFromTriplets(tripletList.begin(), tripletList.end());
         for (Tensor<float,2,Eigen::RowMajor> V : frames){
 //            std::cout << V << std::endl;
             writeToFile(V, "V.txt");
@@ -1804,10 +1750,11 @@ int main() {
             writeToFile(F, "F.txt");
             writeToFile(G, "G.txt");
             for (int iter = 0; iter < iterations; ++iter){
-
-                interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, sparse_m, weights, permutation, N);
+                std::shuffle(std::begin(permutation), std::end(permutation), rng);
+                interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, N);
                 if (iter%100==0){
                     std::cout << iter << "/" << iterations << std::endl;
+                    std::cout << "-V=FG?: " << VFG_check(V, F, G, 0.1) << std::endl;
                 }
             }
             writeToFile(V, "V2.txt");
@@ -1817,9 +1764,9 @@ int main() {
             std::cout << "R: " << R << std::endl;
             counter++;
             std::cout << "Frame: " << counter << std::endl;
-            std::string image_name = "VIFG_" + std::to_string(counter) + ".png";
+            std::string image_name = "VIGF_" + std::to_string(counter) + ".png";
             fs::path image_path = folder_path / image_name;
-            create_VIFG(Tensor2Matrix(V), Tensor2Matrix(I), F, G, image_path, true);
+            create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
         }
         Instrumentor::Get().EndSession();
     }
