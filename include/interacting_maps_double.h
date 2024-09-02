@@ -136,7 +136,7 @@ void vector_distance(const Tensor<double,3,Eigen::RowMajor> &vec1, const Tensor<
 
 void m32(const Tensor<double,3,Eigen::RowMajor>& In, const Tensor<double,3,Eigen::RowMajor>& Cx, const Tensor<double,3,Eigen::RowMajor>& Cy, Tensor<double,3,Eigen::RowMajor>& Out);
 
-void interacting_maps_step(Tensor<double,2,Eigen::RowMajor>& V, Tensor<double,2,Eigen::RowMajor>& cum_V, Tensor<double,2,Eigen::RowMajor>& I, Tensor<double,3,Eigen::RowMajor>& F, Tensor<double,3,Eigen::RowMajor>& G, Tensor<double,1>& R, const Tensor<double,3,Eigen::RowMajor>& CCM, const Tensor<double,3,Eigen::RowMajor>& dCdx, const Tensor<double,3,Eigen::RowMajor>& dCdy, SpMat& sparse_m, std::unordered_map<std::string,double>& weights, std::vector<int>& permutation, const int N);
+void interacting_maps_step(Tensor<double,2,Eigen::RowMajor>& V, Tensor<double,2,Eigen::RowMajor>& cum_V, Tensor<double,2,Eigen::RowMajor>& I, Tensor<double,3,Eigen::RowMajor>& F, Tensor<double,3,Eigen::RowMajor>& G, Tensor<double,1>& R, const Tensor<double,3,Eigen::RowMajor>& CCM, const Tensor<double,3,Eigen::RowMajor>& dCdx, const Tensor<double,3,Eigen::RowMajor>& dCdy,  Matrix3f& A, std::vector<Matrix3f>& Identity_minus_outerProducts, std::unordered_map<std::string,double>& weights, std::vector<int>& permutation, const int N);
 
 void interacting_maps(std::vector<Tensor<double,2,Eigen::RowMajor>>& Vs, std::vector<Tensor<double,2,Eigen::RowMajor>>& cum_Vs, std::unordered_map<std::string,double> weights, int iterations, std::string results_directory);
 
