@@ -813,16 +813,23 @@ void m23(const Tensor<float,3,Eigen::RowMajor>& In, const Tensor<float,3,Eigen::
 //     }
 // }
 
-bool VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3,Eigen::RowMajor>& F, Eigen::Tensor<float,3,Eigen::RowMajor>& G, float precision){
+float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3,Eigen::RowMajor>& F, Eigen::Tensor<float,3,Eigen::RowMajor>& G, float precision){
     InstrumentationTimer timer("VFG_check");
     const auto& dimensions = F.dimensions();
-    Tensor<float,2,Eigen::RowMajor> dot(dimensions[0], dimensions[1]);
+    Eigen::MatrixXfRowMajor dot(dimensions[0], dimensions[1]);
+    Eigen::MatrixXfRowMajor diff(dimensions[0], dimensions[1]);
+
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
             dot(i,j) = -(F(i,j,0)*G(i,j,0) + F(i,j,1)*G(i,j,1));
+            diff(i,j) = V(i,j) - dot(i,j);
         }
     }
-    return isApprox(V, dot, precision);
+
+    float diff_sum = diff.sum();
+    float dot_sum = dot.sum();
+    return diff_sum;
+    //return isApprox(V, dot, precision);
 }
 
 // Function to time the performance of a given dot product computation function
@@ -856,14 +863,28 @@ void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::R
 void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
     InstrumentationTimer timer("update_G_from_F");
     const auto& dimensions = G.dimensions();
+    float eps = 1e-8;
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
-            update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1))) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
-            update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1))) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+            update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+            update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
         }
     }
     G = (1-weight_GF)*G + lr * weight_GF * update_G;
+}
+
+void update_G_from_F_gradient(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
+    InstrumentationTimer timer("update_G_from_F_gradient");
+    const auto& dimensions = G.dimensions();
+    Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
+    for (int i = 0; i<dimensions[0]; i++){
+        for (int j = 0; j<dimensions[1]; j++){
+            update_G(i,j,0) = 2 * F(i,j,0) * (V(i,j) + F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1));
+            update_G(i,j,1) = 2 * F(i,j,1) * (V(i,j) + F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1));
+        }
+    }
+    G += lr * weight_GF * update_G;
 }
 
 void update_G_from_I(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajor> &I_gradient, const float weight_GI){
@@ -1635,8 +1656,8 @@ int main() {
         std::string calib_path = "../res/shapes_rotation/calib.txt";
         std::string event_path = "../res/shapes_rotation/events.txt";
 
-        float start_time_events = 0.0; // in s
-        float end_time_events = 0.05; // in s
+        float start_time_events = 10.0; // in s
+        float end_time_events = 10.05; // in s
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 4000;
 
@@ -1654,7 +1675,7 @@ int main() {
         weights["weight_RF"] = 0.8;
         weights["lr"] = 0.9;
         weights["time_step"] = time_bin_size_in_s;
-        std::vector<int> permutation {0,1,4,5,6}; // Which update steps to take
+        std::vector<int> permutation {0,1,2,3,4,6}; // Which update steps to take
         auto rng = std::default_random_engine {};
 
 
@@ -1755,6 +1776,18 @@ int main() {
                 if (iter%100==0){
                     std::cout << iter << "/" << iterations << std::endl;
                     std::cout << "-V=FG?: " << VFG_check(V, F, G, 0.1) << std::endl;
+                }
+                if (iter%2270==0){
+                    // std::cout << "Here!" << std::endl;
+                    std::string image_name = "VIGF_testIter_" + std::to_string(iter) + ".png";
+                    fs::path image_path = folder_path / image_name;
+                    create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
+                }
+                if (iter%2271==0){
+                    // std::cout << "Here!" << std::endl;
+                    std::string image_name = "VIGF_testIter_" + std::to_string(iter) + ".png";
+                    fs::path image_path = folder_path / image_name;
+                    create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
                 }
             }
             writeToFile(V, "V2.txt");
