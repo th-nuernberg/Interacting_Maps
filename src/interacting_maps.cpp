@@ -770,10 +770,12 @@ void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::R
     InstrumentationTimer timer("update_F_from_G");
     const auto& dimensions = F.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_F(dimensions);
+//    float eps = 1e-8f;
+    float eps = 0.0f;
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
-            update_F(i,j,0) = F(i,j,0) - ((G(i,j,0)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1))) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
-            update_F(i,j,1) = F(i,j,1) - ((G(i,j,1)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1))) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
+            update_F(i,j,0) = F(i,j,0) - ((G(i,j,0)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1) + eps)) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
+            update_F(i,j,1) = F(i,j,1) - ((G(i,j,1)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1) + eps)) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
         }
     }
     F = (1-weight_FG)*F + lr * weight_FG * update_F;
@@ -783,7 +785,7 @@ void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::R
     InstrumentationTimer timer("update_G_from_F");
     const auto& dimensions = G.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
-//    float eps = 1e-8;
+//    float eps = 1e-8f;
     float eps = 0.0f;
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
@@ -1471,13 +1473,13 @@ int main() {
 //    test();
     auto clock_time = std::chrono::system_clock::now();
     std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-    std::string results_name = "Version 2108 Base Rotation";
+    std::string results_name = "Version 2108 IBorder Translation no eps 3";
     std::string folder_name = results_name + " " + std::ctime(&time);
     std::string calib_path = "../res/shapes_rotation/calib.txt";
     std::string event_path = "../res/shapes_rotation/events.txt";
 
-    float start_time_events = 10.0; // in s
-    float end_time_events = 10.5; // in s
+    float start_time_events = 1.0; // in s
+    float end_time_events = 1.5; // in s
     float time_bin_size_in_s = 0.05; // in s
     int iterations = 2000;
 
@@ -1511,8 +1513,8 @@ int main() {
     Tensor<float,1,Eigen::RowMajor> col(height+1);
     row.setZero();
     col.setZero();
-//    I.chip(height,0) = row;
-//    I.chip(width,1) = col;
+    I.chip(height,0) = row;
+    I.chip(width,1) = col;
     Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
     I_gradient.setRandom();
     Tensor<float,1> R(3);
