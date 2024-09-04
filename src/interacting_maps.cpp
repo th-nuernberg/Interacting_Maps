@@ -783,10 +783,12 @@ void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::R
     InstrumentationTimer timer("update_G_from_F");
     const auto& dimensions = G.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
+//    float eps = 1e-8;
+    float eps = 0.0f;
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
-            update_G(i,j,0) = (i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1))) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
-            update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1))) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+            update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+            update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
         }
     }
     G = (1-weight_GF)*G + lr * weight_GF * update_G;
@@ -1469,15 +1471,15 @@ int main() {
 //    test();
     auto clock_time = std::chrono::system_clock::now();
     std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-    std::string results_name = "results ";
-    std::string folder_name = results_name + std::ctime(&time);
+    std::string results_name = "Version 2108 Base Rotation";
+    std::string folder_name = results_name + " " + std::ctime(&time);
     std::string calib_path = "../res/shapes_rotation/calib.txt";
     std::string event_path = "../res/shapes_rotation/events.txt";
 
-    float start_time_events = 20.0; // in s
-    float end_time_events = 20.20; // in s
+    float start_time_events = 10.0; // in s
+    float end_time_events = 10.5; // in s
     float time_bin_size_in_s = 0.05; // in s
-    int iterations = 1000;
+    int iterations = 2000;
 
     int height = 180; // in pixels
     int width = 240; // in pixels
@@ -1498,17 +1500,23 @@ int main() {
     // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
     Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
     F.setRandom();
-    F.setConstant(.1);
+//    F.setConstant(.1);
 //    Tensor<float,2,Eigen::RowMajor> V(height, width);
     Tensor<float,3,Eigen::RowMajor> G(height, width,2);
     G.setRandom();
-    G.setConstant(.1);
+//    G.setConstant(.1);
     Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
-    I.setZero();
+    I.setRandom();
+    Tensor<float,1,Eigen::RowMajor> row(width+1);
+    Tensor<float,1,Eigen::RowMajor> col(height+1);
+    row.setZero();
+    col.setZero();
+//    I.chip(height,0) = row;
+//    I.chip(width,1) = col;
     Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
-    I_gradient.setZero();
+    I_gradient.setRandom();
     Tensor<float,1> R(3);
-    R.setConstant(.1);
+    R.setRandom();
 
 
     //##################################################################################################################
