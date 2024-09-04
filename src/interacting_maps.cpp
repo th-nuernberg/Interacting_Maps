@@ -987,6 +987,28 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
     }
 }
 
+void setup_R_update(const Tensor<float,3,Eigen::RowMajor>& CCM, Matrix3f& A, std::vector<Matrix3f>& Identity_minus_outerProducts){
+    const auto &dimensions = CCM.dimensions();
+    int height = dimensions[0];
+    int width = dimensions[1];
+    Matrix3f Identity = Matrix3f::Identity();
+    Matrix3f outerProduct;
+    Eigen::Vector<float,3> d;
+    Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(height, width, 3);
+    Tensor<float, 2, Eigen::RowMajor> directions_tensor_2(height*width, 3);
+    Eigen::array<int , 2> reshaper_2({height*width, 3});
+    Eigen::MatrixXf directions_matrix(height*width, 3);
+    directions_tensor_2 = CCM.reshape(reshaper_2);
+    directions_matrix = Tensor2Matrix(directions_tensor_2);
+
+    for (size_t i = 0; i < height*width; ++i){
+//                d = directions_matrix.block<1,3>(i,0).normalized(); // Normalize direction vector
+        d = directions_matrix.block<1,3>(i,0);
+        Identity_minus_outerProducts[i] = Identity - d * d.transpose();
+        A += Identity_minus_outerProducts[i];
+    }
+}
+
 // TODO: add return number
 void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, SpMat& sparse_m, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N){
     PROFILE_FUNCTION();
