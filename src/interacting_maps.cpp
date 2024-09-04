@@ -771,11 +771,20 @@ void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::R
     const auto& dimensions = F.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_F(dimensions);
 //    float eps = 1e-8f;
-    float eps = 0.0f;
+    float eps = 1e-15f;
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
-            update_F(i,j,0) = F(i,j,0) - ((G(i,j,0)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1) + eps)) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
-            update_F(i,j,1) = F(i,j,1) - ((G(i,j,1)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1) + eps)) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
+            float norm = (G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1));
+            if (norm < eps){
+                update_F(i,j,0) = F(i,j,0);
+                update_F(i,j,1) = F(i,j,1);
+            }
+            else{
+                update_F(i,j,0) = F(i,j,0) - ((G(i,j,0)/norm) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
+                update_F(i,j,1) = F(i,j,1) - ((G(i,j,1)/norm) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
+            }
+//            update_F(i,j,0) = F(i,j,0) - ((G(i,j,0)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1) + eps)) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
+//            update_F(i,j,1) = F(i,j,1) - ((G(i,j,1)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1) + eps)) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
         }
     }
     F = (1-weight_FG)*F + lr * weight_FG * update_F;
@@ -786,11 +795,19 @@ void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::R
     const auto& dimensions = G.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
 //    float eps = 1e-8f;
-    float eps = 0.0f;
+    float eps = 1e-15f;
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
-            update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
-            update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+            float norm = (F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1));
+            if (norm < eps){
+                update_G(i,j,0) = G(i,j,0);
+                update_G(i,j,1) = G(i,j,1);
+            }else{
+                update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/norm) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+                update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/norm) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+            }
+//            update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+//            update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
         }
     }
     G = (1-weight_GF)*G + lr * weight_GF * update_G;
@@ -958,7 +975,7 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
         solution = solver.solveWithGuess(points_vector.cast<float>(), solution);
         if (solver.info() != Eigen::Success) {
             std::cerr << "Solving failed during update_R_from_C " << std::endl;
-            std::cout << "Errenous vector RF: " <<  std::endl;
+            std::cout << "Errenous points vector RF: " <<  std::endl;
             std::cout << points_vector({0,1,2,3,4,5,6,7,8}) << std::endl;
         }
         else {
@@ -1473,13 +1490,13 @@ int main() {
 //    test();
     auto clock_time = std::chrono::system_clock::now();
     std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-    std::string results_name = "Version 2108 IBorder Translation no eps 3";
+    std::string results_name = "Version 2108 IBorder Rotation Eps only if needed, longer iteration";
     std::string folder_name = results_name + " " + std::ctime(&time);
     std::string calib_path = "../res/shapes_rotation/calib.txt";
     std::string event_path = "../res/shapes_rotation/events.txt";
 
-    float start_time_events = 1.0; // in s
-    float end_time_events = 1.5; // in s
+    float start_time_events = 10.0; // in s
+    float end_time_events = 10.5; // in s
     float time_bin_size_in_s = 0.05; // in s
     int iterations = 2000;
 
