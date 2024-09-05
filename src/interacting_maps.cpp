@@ -1050,7 +1050,7 @@ void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& 
     }
 }
 
-void setup_R_update(const Tensor<float,3,Eigen::RowMajor>& CCM, Matrix3f A, std::vector<Matrix3f> Identity_minus_outerProducts){
+void setup_R_update(const Tensor<float,3,Eigen::RowMajor>& CCM, Matrix3f& A, std::vector<Matrix3f>& Identity_minus_outerProducts){
     const auto &dimensions = CCM.dimensions();
     int height = dimensions[0];
     int width = dimensions[1];
@@ -1670,15 +1670,15 @@ int main() {
     else{
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "SpeedUp Branch IBorder Rotation Eps only if needed, longer iteration ";
-        std::string folder_name = results_name + std::ctime(&time);
+        std::string results_name = "SpeedUp Branch IBorder Rotation Eps only if needed";
+        std::string folder_name = results_name + " " + std::ctime(&time);
         std::string calib_path = "../res/shapes_rotation/calib.txt";
         std::string event_path = "../res/shapes_rotation/events.txt";
 
         float start_time_events = 10.0; // in s
-        float end_time_events = 10.05; // in s
+        float end_time_events = 10.5; // in s
         float time_bin_size_in_s = 0.05; // in s
-        int iterations = 4000;
+        int iterations = 1000;
 
         int height = 180; // in pixels
         int width = 240; // in pixels
