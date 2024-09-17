@@ -850,24 +850,32 @@ void update_FG(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajo
     InstrumentationTimer timer("update_FG");
     const auto& dimensions = F.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_F(dimensions);
-//    float eps = 1e-8f;
-    float eps = 1e-15f;
-    for (int i = 0; i<dimensions[0]; i++){
-        for (int j = 0; j<dimensions[1]; j++){
-            float norm = (G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1));
-            if (norm < eps){
-                update_F(i,j,0) = F(i,j,0);
-                update_F(i,j,1) = F(i,j,1);
+    update_F.setZero();
+    for (int i = 0; i<dimensions[0]; i++) {
+        for (int j = 0; j < dimensions[1]; j++) {
+            float norm = (G(i, j, 0) * G(i, j, 0) + G(i, j, 1) * G(i, j, 1));
+            if (norm != 0.0) {
+                update_F(i, j, 0) = F(i, j, 0) - ((G(i, j, 0) / norm) *
+                                                  (V(i, j) + (F(i, j, 0) * G(i, j, 0) + F(i, j, 1) * G(i, j, 1))));
+                update_F(i, j, 1) = F(i, j, 1) - ((G(i, j, 1) / norm) *
+                                                  (V(i, j) + (F(i, j, 0) * G(i, j, 0) + F(i, j, 1) * G(i, j, 1))));
+                F(i, j, 0) = (1 - weight_FG) * F(i, j, 0) + lr * weight_FG * update_F(i, j, 0);
+                F(i, j, 1) = (1 - weight_FG) * F(i, j, 1) + lr * weight_FG * update_F(i, j, 1);
+                if (F(i, j, 0) > 255.0){
+                    F(i, j, 0) = 255.0;
+                }
+                if (F(i, j, 1) > 255.0){
+                    F(i, j, 1) = 255.0;
+                }
+                if (F(i, j, 0) < -255.0){
+                    F(i, j, 0) = -255.0;
+                }
+                if (F(i, j, 1) < -255.0){
+                    F(i, j, 1) = -255.0;
+                }
             }
-            else{
-                update_F(i,j,0) = F(i,j,0) - ((G(i,j,0)/norm) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
-                update_F(i,j,1) = F(i,j,1) - ((G(i,j,1)/norm) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
-            }
-//            update_F(i,j,0) = F(i,j,0) - ((G(i,j,0)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1) + eps)) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
-//            update_F(i,j,1) = F(i,j,1) - ((G(i,j,1)/(G(i,j,0) * G(i,j,0) + G(i,j,1) * G(i,j,1) + eps)) * (V(i,j) + (F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1))));
         }
     }
-    F = (1-weight_FG)*F + lr * weight_FG * update_F;
 }
 
 void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
@@ -879,18 +887,28 @@ void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajo
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
             float norm = (F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1));
-            if (norm < eps){
-                update_G(i,j,0) = G(i,j,0);
-                update_G(i,j,1) = G(i,j,1);
-            }else{
-                update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/norm) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
-                update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/norm) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
+            if (norm != 0.0) {
+                update_G(i, j, 0) = G(i, j, 0) - ((F(i, j, 0) / norm) *
+                                                  (V(i, j) + (G(i, j, 0) * F(i, j, 0) + G(i, j, 1) * F(i, j, 1))));
+                update_G(i, j, 1) = G(i, j, 1) - ((F(i, j, 1) / norm) *
+                                                  (V(i, j) + (G(i, j, 0) * F(i, j, 0) + G(i, j, 1) * F(i, j, 1))));
+                F(i, j, 0) = (1 - weight_GF) * F(i, j, 0) + lr * weight_GF * update_G(i, j, 0);
+                F(i, j, 1) = (1 - weight_GF) * F(i, j, 1) + lr * weight_GF * update_G(i, j, 1);
+                if (G(i, j, 0) > 255.0){
+                    G(i, j, 0) = 255.0;
+                }
+                if (G(i, j, 1) > 255.0){
+                    G(i, j, 1) = 255.0;
+                }
+                if (G(i, j, 0) < -255.0){
+                    G(i, j, 0) = -255.0;
+                }
+                if (G(i, j, 1) < -255.0){
+                    G(i, j, 1) = -255.0;
+                }
             }
-//            update_G(i,j,0) = G(i,j,0) - ((F(i,j,0)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
-//            update_G(i,j,1) = G(i,j,1) - ((F(i,j,1)/(F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1) + eps)) * (V(i,j) + (G(i,j,0) * F(i,j,0) + G(i,j,1) * F(i,j,1))));
         }
     }
-    G = (1-weight_GF)*G + lr * weight_GF * update_G;
 }
 
 void update_GF_gradient(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
