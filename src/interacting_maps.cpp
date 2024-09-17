@@ -385,7 +385,7 @@ cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const 
     cv::Mat V_img = V2image(V);
     cv::Mat I_img = frame2grayscale(I);
     cv::Mat G_img = vector_field2image(G);
-    cv::Mat F_img = vector_field2image(F);
+    cv::Mat F_img = vector_field2image(G);
 
 
     long rows = V.rows();
