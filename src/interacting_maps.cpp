@@ -846,8 +846,8 @@ void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::Row
     std::cout << "Time elapsed: " << elapsed.count() << " seconds" << std::endl;
 }
 
-void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, const float lr, const float weight_FG){
-    InstrumentationTimer timer("update_F_from_G");
+void update_FG(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, const float lr, const float weight_FG){
+    InstrumentationTimer timer("update_FG");
     const auto& dimensions = F.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_F(dimensions);
 //    float eps = 1e-8f;
@@ -870,8 +870,8 @@ void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::R
     F = (1-weight_FG)*F + lr * weight_FG * update_F;
 }
 
-void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
-    InstrumentationTimer timer("update_G_from_F");
+void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
+    InstrumentationTimer timer("update_GF");
     const auto& dimensions = G.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
 //    float eps = 1e-8f;
@@ -893,8 +893,8 @@ void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::R
     G = (1-weight_GF)*G + lr * weight_GF * update_G;
 }
 
-void update_G_from_F_gradient(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
-    InstrumentationTimer timer("update_G_from_F_gradient");
+void update_GF_gradient(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
+    InstrumentationTimer timer("update_GF_gradient");
     const auto& dimensions = G.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
     for (int i = 0; i<dimensions[0]; i++){
@@ -906,13 +906,13 @@ void update_G_from_F_gradient(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2
     G += lr * weight_GF * update_G;
 }
 
-void update_G_from_I(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajor> &I_gradient, const float weight_GI){
-    InstrumentationTimer timer("update_G_from_I");
+void update_GI(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajor> &I_gradient, const float weight_GI){
+    InstrumentationTimer timer("update_GI");
     G = (1 - weight_GI) * G + weight_GI*I_gradient;
 }
 
-void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajor> &cum_V, const float weight_IV=0.5, const float time_step=0.05){
-    InstrumentationTimer timer("update_I_from_V");
+void update_IV(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajor> &cum_V, const float weight_IV=0.5, const float time_step=0.05){
+    InstrumentationTimer timer("update_IV");
     const auto& dimensions_V = cum_V.dimensions();
     const auto& dimensions = I.dimensions();
     Eigen::array<Eigen::Index, 2> offsets = {0, 0};
@@ -943,8 +943,8 @@ void update_I_from_V(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::R
 //    }
 }
 
-void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajor> &I_gradient, Tensor<float,3,Eigen::RowMajor> &G, const float weight_IG=0.5){
-    InstrumentationTimer timer("update_I_from_G");
+void update_IG(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajor> &I_gradient, Tensor<float,3,Eigen::RowMajor> &G, const float weight_IG=0.5){
+    InstrumentationTimer timer("update_IG");
     const auto& dimensions = I.dimensions();
     Tensor<float,3,Eigen::RowMajor> temp_map = G - I_gradient;
     Tensor<float,2,Eigen::RowMajor> x_update(dimensions);
@@ -990,7 +990,7 @@ void update_I_from_G(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::R
     // y_update[:,1:] = temp_map[:,1:,1] - temp_map[:,:-1,1]
     // return (1 - weight_IG)*I + weight_IG*(I - x_update - y_update)
 }
-void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Tensor<float,1>& R, const float weight_FR){
+void update_FR(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Tensor<float,1>& R, const float weight_FR){
     PROFILE_FUNCTION();
     Tensor<float,3,Eigen::RowMajor> cross(CCM.dimensions());
 //    const auto& dimensions = F.dimensions();
@@ -1009,8 +1009,8 @@ void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Ei
     F = (1 - weight_FR)*F + weight_FR*update;
 }
 
-void update_R_from_F(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Matrix3f& A, const std::vector<Matrix3f>& Identity_minus_outerProducts, const float weight_RF, const int N) {
-    //InstrumentationTimer timer1("update_R_from_F");
+void update_RF(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& C, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Matrix3f& A, const std::vector<Matrix3f>& Identity_minus_outerProducts, const float weight_RF, const int N) {
+    //InstrumentationTimer timer1("update_RF");
     PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
     Tensor<float, 3, Eigen::RowMajor> transformed_F(dimensions[0], dimensions[1], 3);
@@ -1086,7 +1086,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 std::cout << "Unknown number in permutation" << std::endl;
             case 0:
 //                DEBUG_LOG("F: "<< std::endl << F);
-                update_F_from_G(F, V, G, weights["lr"], weights["weight_FG"]);
+                update_FG(F, V, G, weights["lr"], weights["weight_FG"]);
 //                DEBUG_LOG("F: "<<  F);
 //                DEBUG_LOG("V: "<<  V);
 //                DEBUG_LOG("G: "<<  G);
@@ -1094,7 +1094,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 1:
 //                std::cout << F << std::endl;
-                update_F_from_R(F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
+                update_FR(F, CCM, dCdx, dCdy, R, weights["weight_FR"]);
 //                std::cout << F << std::endl;
 //                std::cout << CCM << std::endl;
 //                std::cout << dCdx << std::endl;
@@ -1104,7 +1104,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 2:
 //                std::cout << G << std::endl;
-                update_G_from_F(G, V, F, weights["lr"], weights["weight_GF"]);
+                update_GF(G, V, F, weights["lr"], weights["weight_GF"]);
 //                std::cout << G << std::endl;
 //                std::cout << V << std::endl;
 //                std::cout << F << std::endl;
@@ -1112,14 +1112,14 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 3:
 //                std::cout << G << std::endl;
-                update_G_from_I(G, delta_I, weights["weight_GI"]);
+                update_GI(G, delta_I, weights["weight_GI"]);
 //                std::cout << G << std::endl;
 //                std::cout << delta_I << std::endl;
 //                    std::cout << "Case " << element << std::endl;
                 break;
             case 4:
 //                std::cout << I << std::endl;
-                update_I_from_G(I, delta_I, G, weights["weight_IG"]);
+                update_IG(I, delta_I, G, weights["weight_IG"]);
                 delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
                 delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
 //                std::cout << I << std::endl;
@@ -1129,7 +1129,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 5:
 //                std::cout << I << std::endl;
-                update_I_from_V(I, V, weights["weight_IV"], weights["time_step"]);
+                update_IV(I, V, weights["weight_IV"], weights["time_step"]);
                 delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
                 delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
 //                std::cout << I << std::endl;
@@ -1139,7 +1139,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 6:
 //                std::cout << R << std::endl;
-                update_R_from_F(R, F, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights["weight_RF"], N);
+                update_RF(R, F, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights["weight_RF"], N);
 //                std::cout << R << std::endl;
 //                std::cout << F << std::endl;
 //                std::cout << CCM << std::endl;
@@ -1256,7 +1256,7 @@ int test(){
         F_comparison(0,1,1) = 1.5;
         F_comparison(1,0,1) = 2.0;
         F_comparison(1,1,1) = 2.5;
-        update_F_from_G(F, V, G, 1.0, 0.5);
+        update_FG(F, V, G, 1.0, 0.5);
         if(isApprox(F, F_comparison)){
             std::cout << "UPDATE FUNCTION FG CORRECT" << std::endl;
         }else{
@@ -1299,7 +1299,7 @@ int test(){
         I_gradient.chip(0,2) = I_gradient_comparison;
         I_gradient.chip(1,2) = I_gradient_comparison;
         I_comparison.setValues({{1,4,3},{3,5,6},{3,6,10}});
-        update_I_from_G(I, I_gradient, G, 1.0);
+        update_IG(I, I_gradient, G, 1.0);
         if (isApprox(I_comparison, I)){
             std::cout << "UPDATE FUNCTION IG CORRECT" << std::endl;
         }else{
@@ -1315,7 +1315,7 @@ int test(){
         I.setValues({{0,1,3}, {1,3,6}, {3,6,10}});
         V.setValues({{1,1},{0,0}});
         I_comparison.setValues({{0.4,0.9,2.9},{0.4,1.4,5.9},{2.9,5.9,9.9}});
-        update_I_from_V(I, V, 0.5, 0.1);
+        update_IV(I, V, 0.5, 0.1);
         if (isApprox(I_comparison, I)){
             std::cout << "UPDATE FUNCTION IV CORRECT" << std::endl;
         }else{
@@ -1334,7 +1334,7 @@ int test(){
         G_comparison.setValues({{{1,2},{1,2}},{{1.5,1.5},{2.5,0.5}}});
         std::cout << G << std::endl;
         std::cout << I_gradient << std::endl;
-        update_G_from_I(G, I_gradient, 0.5);
+        update_GI(G, I_gradient, 0.5);
         if (isApprox(G_comparison, G)){
             std::cout << "UPDATE FUNCTION GI CORRECT" << std::endl;
         }else{

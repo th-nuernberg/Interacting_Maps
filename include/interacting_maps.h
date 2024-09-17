@@ -85,7 +85,7 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin
 void create_frames(const std::vector<std::vector<Event>>& binned_events, std::vector<Tensor<float,2,Eigen::RowMajor>>& frames, const int camera_height, const int camera_width);
 
 /**
- * @brief Create a sparse matrix from temporal derivative data (Events) for the update function update_R_from_F
+ * @brief Create a sparse matrix from temporal derivative data (Events) for the update function update_RF
  * 
  * @param N Number of pixels (rows*cols)
  * @param V temporal derivative matrix
@@ -118,19 +118,19 @@ void create_VIFG_image(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen:
 // void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& dXfC, Tensor<float,3,Eigen::RowMajor>& dydC);
 void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& C_x, Tensor<float,3,Eigen::RowMajor>& C_y);
 
-void update_F_from_G(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, float lr, float weight_FG);
+void update_FG(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, float lr, float weight_FG);
 
-void update_G_from_F(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, float lr, float weight_GF);
+void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, float lr, float weight_GF);
 
-void update_G_from_I(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,3,Eigen::RowMajor>& I_gradient, float weight_GI);
+void update_GI(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,3,Eigen::RowMajor>& I_gradient, float weight_GI);
 
-void update_I_from_V(Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,2,Eigen::RowMajor>& cum_V, float weight_IV, float time_step);
+void update_IV(Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,2,Eigen::RowMajor>& cum_V, float weight_IV, float time_step);
 
-void update_I_from_G(Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& I_gradient, Tensor<float,3,Eigen::RowMajor>& G, float weight_IG);
+void update_IG(Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& I_gradient, Tensor<float,3,Eigen::RowMajor>& G, float weight_IG);
 
-void update_F_from_R(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, Tensor<float,1> R, float weight_FR);
+void update_FR(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, Tensor<float,1> R, float weight_FR);
 
-void update_R_from_F(Tensor<float,1> R, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, float weight_RF, int N);
+void update_RF(Tensor<float,1> R, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& Cx, Tensor<float,3,Eigen::RowMajor>& Cy, float weight_RF, int N);
 
 void vector_distance(const Tensor<float,3,Eigen::RowMajor> &vec1, const Tensor<float,3,Eigen::RowMajor> &vec2, Tensor<float,2,Eigen::RowMajor> &distance);
 
