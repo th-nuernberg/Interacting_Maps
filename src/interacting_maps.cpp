@@ -84,6 +84,71 @@ Eigen::VectorXf gradient(const Eigen::VectorXf& x) {
     return grad;
 }
 
+Eigen::Tensor<float,3,Eigen::RowMajor> computeGradient(const MatrixXfRowMajor & data, const std::vector<int> direction={0,1}) {
+    int rows = data.rows();
+    int cols = data.cols();
+
+    DEBUG_LOG("data: " << std::endl << data);
+    // Initialize the tensor: 3 dimensions (rows, cols, gradient direction)
+    if (direction.size() == 2){
+        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 2);
+        // Compute gradient along rows (x-direction)
+        for (int i = 0; i < rows; ++i) {
+            for (int j = 1; j < cols - 1; ++j) {
+                gradients(i, j, 0) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
+            }
+//            gradients(i, 0, 0) = data(i, 1) - data(i, 0); // Forward difference for the first column
+//            gradients(i, cols - 1, 0) = data(i, cols - 1) - data(i, cols - 2); // Backward difference for the last column
+            gradients(i, 0, 0) = (data(i, 1) - 0.0) / 2.0; // Central difference with 0 border
+            gradients(i, cols - 1, 0) = (0.0 - data(i, cols - 2)) / 2.0; // Central difference with 0 border
+        }
+
+        // Compute gradient along columns (y-direction)
+        for (int j = 0; j < cols; ++j) {
+            for (int i = 1; i < rows - 1; ++i) {
+                gradients(i, j, 1) = (data(i + 1, j) - data(i - 1, j)) / 2.0;
+            }
+            gradients(0, j, 1) = data(1, j) - data(0, j); // Forward difference for the first row
+            gradients(rows - 1, j, 1) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
+            gradients(0, j, 1) = (data(1, j) - 0.0) / 2.0; // Central difference with 0 border
+            gradients(rows - 1, j, 1) = (0.0 - data(rows - 2, j)) / 2.0; // Central difference with 0 border
+        }
+        return gradients;
+    }
+    else if (direction[0] == 0){
+        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 1);
+        // Compute gradient along rows (x-direction)
+        for (int i = 0; i < rows; ++i) {
+            for (int j = 1; j < cols - 1; ++j) {
+                gradients(i, j, 0) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
+            }
+//            gradients(i, 0, 0) = data(i, 1) - data(i, 0); // Forward difference for the first column
+//            gradients(i, cols - 1, 0) = data(i, cols - 1) - data(i, cols - 2); // Backward difference for the last colums
+            gradients(i, 0, 0) = (data(i, 1) - 0.0) / 2.0; // Central difference with 0 border
+            gradients(i, cols - 1, 0) = (0.0 - data(i, cols - 2)) / 2.0; // Central difference with 0 border
+        }
+        return gradients;
+    }
+    else if (direction[0] == 1) {
+        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 1);
+        // Compute gradient along columns (y-direction)
+        for (int j = 0; j < cols; ++j) {
+            for (int i = 1; i < rows - 1; ++i) {
+                gradients(i, j, 0) = (data(i + 1, j) - data(i - 1, j)) / 2.0;
+            }
+//            gradients(0, j, 0) = data(1, j) - data(0, j); // Forward difference for the first row
+//            gradients(rows - 1, j, 0) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
+            gradients(0, j, 1) = (data(1, j) - 0.0) / 2.0; // Central difference with 0 border
+            gradients(rows - 1, j, 1) = (0.0 - data(rows - 2, j)) / 2.0; // Central difference with 0 border
+        }
+        DEBUG_LOG(gradients(0, 0, 0));
+        return gradients;
+    }
+    else{
+        throw std::invalid_argument("invalid directions");
+    }
+}
+
 Eigen::MatrixXfRowMajor gradient_x(const Eigen::MatrixXfRowMajor& mat) {
     int rows = mat.rows();
     int cols = mat.cols();
@@ -965,8 +1030,33 @@ void update_IG(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajo
     InstrumentationTimer timer("update_IG");
     const auto& dimensions = I.dimensions();
     Tensor<float,3,Eigen::RowMajor> temp_map = G - I_gradient;
-    Tensor<float,2,Eigen::RowMajor> x_update(dimensions);
-    Tensor<float,2,Eigen::RowMajor> y_update(dimensions);
+    Tensor<float,3,Eigen::RowMajor> x_update(dimensions[0], dimensions[1], 1);
+    Tensor<float,3,Eigen::RowMajor> y_update(dimensions[0], dimensions[1], 1);
+    DEBUG_LOG("temp_map: " << std::endl << temp_map)
+    std::vector<int> x_direction = {0};
+    x_update = computeGradient(Tensor2Matrix(temp_map.chip(0,2)), x_direction);
+    std::vector<int> y_direction = {1};
+    y_update = computeGradient(Tensor2Matrix(temp_map.chip(1,2)), y_direction);
+    DEBUG_LOG("x_update: " << std::endl << x_update)
+    DEBUG_LOG("y_update: " << std::endl << y_update)
+    array<int, 2> two_dims{{int(dimensions[0]), int(dimensions[1])}};
+    Tensor<float,2,Eigen::RowMajor> x_update2 = x_update.reshape(two_dims);
+    Tensor<float,2,Eigen::RowMajor> y_update2 = y_update.reshape(two_dims);
+
+    I = I + weight_IG * (- x_update2 - y_update2);
+//    for (int i = 0; i<dimensions[0]; i++){
+//        for (int j = 0; j<dimensions[1]; j++){
+//            if (I(i,j)<0){
+//                I(i,j) = 0;
+//            }
+//            if (I(i,j)>255.0){
+//                I(i,j) = 255.0;
+//            }
+//
+//        }
+//    }
+//    DEBUG_LOG("I: " << std::endl << I);
+
 //    std::cout << G << std::endl;
 //    std::cout << I_gradient << std::endl;
 //    std::cout << temp_map << std::endl;
@@ -1148,8 +1238,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
             case 5:
 //                std::cout << I << std::endl;
                 update_IV(I, V, weights["weight_IV"], weights["time_step"]);
-                delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-                delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                delta_I = computeGradient(Tensor2Matrix(I));
 //                std::cout << I << std::endl;
 //                std::cout << V << std::endl;
 //                std::cout << delta_I << std::endl;
