@@ -19,7 +19,7 @@ typedef SparseMatrix<float> SpMat;
 struct Event{
     float time;
     std::vector<int> coordinates;
-    int polarity;
+    float polarity;
 
     std::string toString() const;
 };
@@ -136,7 +136,7 @@ void vector_distance(const Tensor<float,3,Eigen::RowMajor> &vec1, const Tensor<f
 
 void m32(const Tensor<float,3,Eigen::RowMajor>& In, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, Tensor<float,3,Eigen::RowMajor>& Out);
 
-void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, SpMat& sparse_m, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N);
+void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& delta_I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, SpMat& sparse_m, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N);
 
 void interacting_maps(std::vector<Tensor<float,2,Eigen::RowMajor>>& Vs, std::vector<Tensor<float,2,Eigen::RowMajor>>& cum_Vs, std::unordered_map<std::string,float> weights, int iterations, std::string results_directory);
 
