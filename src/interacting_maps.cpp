@@ -2135,7 +2135,12 @@ int main() {
         delta_I = computeGradient(Tensor2Matrix(I));
         DEBUG_LOG(delta_I);
         Tensor<float,1> R(3);
-        R.setRandom();
+        Tensor<float,1> R2(3);
+        Tensor<float,1> R3(3);
+        R.setRandom(); // between 0 and 1
+        R2.setConstant(2);
+        R3.setConstant(1);
+        R = R*R2 - R3; // between -1 and 1
 
         //##################################################################################################################
         // Create results_folder
