@@ -2033,8 +2033,14 @@ int test(){
 //        cv::waitKey(0);
 
         // Vectorfield to Image
-        Eigen::Tensor<float,3,Eigen::RowMajor> vector_field(1000,1000,2);
-        vector_field.setRandom();
+        Eigen::Tensor<float,3,Eigen::RowMajor> vector_field(100,100,2);
+        // Fill example tensor data (normally you would have real data)
+        for (int i = 0; i < 100; ++i) {
+            for (int j = 0; j < 100; ++j) {
+                vector_field(i, j, 0) = std::sin(i * 0.05);
+                vector_field(i, j, 1) = std::cos(j * 0.05);
+            }
+        }
         cv::Mat image = vector_field2image(vector_field);
         cv::imshow("Vector Field Image", image);
 //        cv::waitKey(0);
@@ -2048,15 +2054,17 @@ int test(){
         // Fill example tensor data (normally you would have real data)
         for (int i = 0; i < 100; ++i) {
             for (int j = 0; j < 100; ++j) {
-                Fimage(i, j, 0) = std::sin(i * 0.1);
-                Fimage(i, j, 1) = std::cos(j * 0.1);
+                Fimage(i, j, 0) = std::sin(i * 0.33);
+                Fimage(i, j, 1) = std::cos(j * 0.33);
                 Gimage(i, j, 0) = std::cos(i * 0.1);
                 Gimage(i, j, 1) = std::sin(j * 0.1);
             }
         }
-        cv::Mat result = create_VIGF(Vimage, Iimage, Gimage, Fimage, "output.png", true);
-        cv::imshow("Result", result);
+        cv::Mat result = create_VIGF(Vimage, Iimage, Gimage, Fimage, "Test VIFG.png", true);
+        cv::imshow("Test VIFG", result);
 //        cv::waitKey(0);
+
+        plot_VvsFG(Vimage, Fimage, Gimage, "Test VvsFG.png", true);
         std::cout << "OPENCV TEST PASSED" << std::endl;
     }
     return 0;
