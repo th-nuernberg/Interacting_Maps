@@ -1394,7 +1394,6 @@ void update_IG(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajo
     // y_update[:,0] = temp_map[:,0,1] # - 0 // Out of bound entries are set to 0
     // y_update[:,1:] = temp_map[:,1:,1] - temp_map[:,:-1,1]
     // return (1 - weight_IG)*I + weight_IG*(I - x_update - y_update)
-}
 void update_FR(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& Cx, const Tensor<float,3,Eigen::RowMajor>& Cy, const Tensor<float,1>& R, const float weight_FR){
     PROFILE_FUNCTION();
     Tensor<float,3,Eigen::RowMajor> cross(CCM.dimensions());
@@ -1435,7 +1434,6 @@ void update_RF(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, con
         points_matrix = Tensor2Matrix(points_tensor_2);
         for (size_t i = 0; i < N; ++i) {
             p = points_matrix.block<1, 3>(i, 0);
-
             B += (Identity_minus_outerProducts[i]) * p;
         }
     }
@@ -2084,13 +2082,15 @@ int main() {
     else{
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "SpeedUp Branch IBorder Rotation Eps only if needed";
+        std::string results_name = "Test Translation, 2346, event_factor=10, F=(0,1), gradient uses buffer and central differences";
         std::string folder_name = results_name + " " + std::ctime(&time);
-        std::string calib_path = "../res/shapes_rotation/calib.txt";
-        std::string event_path = "../res/shapes_rotation/events.txt";
+        std::string resource_name = "academic_translation";
+        std::string calib_path = "../res/" + resource_name + "/calib.txt";
+        std::string event_path = "../res/" + resource_name + "/events.txt";
+        std::string settings_path = "../res/" + resource_name + "/settings.txt";
 
-        float start_time_events = 10.0; // in s
-        float end_time_events = 10.5; // in s
+        float start_time_events = 0.0; // in s
+        float end_time_events = 0.04999; // in s
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 1000;
 
@@ -2117,14 +2117,15 @@ int main() {
         std::vector<int> permutation {2,3,4,6}; // Which update steps to take
         auto rng = std::default_random_engine {};
 
-
         //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
         Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
-        F.setRandom();
+        F.setZero();
+        F.chip(1,2).setConstant(1);
         Tensor<float,3,Eigen::RowMajor> G(height, width, 2);
         G.setRandom();
-        Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
+        Tensor<float,2,Eigen::RowMajor> I(height, width);
+        Tensor<float,2,Eigen::RowMajor> TmpTensor2(height, width);
         I.setRandom();
 //        I = I * TmpTensor2.setConstant(255.0);
 //        Tensor<float,1,Eigen::RowMajor> row(width+1);
