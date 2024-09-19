@@ -355,8 +355,8 @@ cv::Mat frame2grayscale(const Eigen::MatrixXfRowMajor& frame) {
     // Find min and max polarity
     double min_polarity, max_polarity;
     cv::minMaxLoc(frame_cv, &min_polarity, &max_polarity);
-    DEBUG_LOG("Min Polarity: " << min_polarity)
-    DEBUG_LOG("Max Polarity: " << max_polarity)
+//    DEBUG_LOG("Min Polarity: " << min_polarity)
+//    DEBUG_LOG("Max Polarity: " << max_polarity)
 
     // Normalize the frame
     cv::Mat normalized_frame;
@@ -1295,10 +1295,11 @@ void update_IV(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajo
     const auto& dimensions = I.dimensions();
     Eigen::array<Eigen::Index, 2> offsets = {0, 0};
     Eigen::array<Eigen::Index, 2> extents = {dimensions_V.at(0), dimensions_V.at(1)};
-    DEBUG_LOG("I: " << I);
-    DEBUG_LOG("Cum_V: " << cum_V);
+//    DEBUG_LOG("I: " << I);
+//    DEBUG_LOG("Cum_V: " << cum_V);
     I.slice(offsets,extents) = (1-weight_IV) * I.slice(offsets,extents) + weight_IV*cum_V;
-    DEBUG_LOG("I: " << I);
+
+//    DEBUG_LOG("I: " << I);
 //    for (int i = 0; i<dimensions[0]; i++){
 //        for (int j = 0; j<dimensions[1]; j++){
 //            if (I(i,j)>0){
@@ -1324,6 +1325,7 @@ void update_IV(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajo
 void update_IG(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajor> &I_gradient, Tensor<float,3,Eigen::RowMajor> &G, const float weight_IG=0.5){
     InstrumentationTimer timer("update_IG");
     const auto& dimensions = I.dimensions();
+//    DEBUG_LOG("I: " << std::endl << I);
     Tensor<float,3,Eigen::RowMajor> temp_map = G - I_gradient;
     Tensor<float,3,Eigen::RowMajor> x_update(dimensions[0], dimensions[1], 1);
     Tensor<float,3,Eigen::RowMajor> y_update(dimensions[0], dimensions[1], 1);
