@@ -799,14 +799,14 @@ Calibration_Data get_calibration_data(const std::vector<float>& raw_data, int fr
     return data;
 }
 
-void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, int max_events = INT32_MAX){
+void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, float event_factor = 1.0, int max_events = INT32_MAX){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
         std::ifstream event_file(path);
-        int counter;
-        float time;
-        int width, height, polarity;
+        int counter = 0;
+        float time, polarity;
+        int width, height;
         while (event_file >> time >> width >> height >> polarity){
             if (time < start_time) continue;
             if (time > end_time) break;
@@ -815,7 +815,7 @@ void read_events(const std::string& file_path, std::vector<Event>& events, float
             event.time = time;
             std::vector<int> coords = {height, width};
             event.coordinates = coords;
-            event.polarity = polarity;
+            event.polarity = (polarity*2 - 1) * event_factor;
             events.push_back(event);
             counter++;
         }
@@ -866,7 +866,7 @@ void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::
         cum_frame.setZero();
         for (Event event : event_vector){
 //            std::cout << event << std::endl;
-            frame(event.coordinates.at(0), event.coordinates.at(1)) = (float)event.polarity*2-1;
+            frame(event.coordinates.at(0), event.coordinates.at(1)) = event.polarity;
 //            cum_frame(event.coordinates.at(0), event.coordinates.at(1)) += (float)event.polarity;
         }
         frames[i] = frame;
@@ -2065,7 +2065,8 @@ int main() {
         weights["weight_RF"] = 0.8;
         weights["lr"] = 0.9;
         weights["time_step"] = time_bin_size_in_s;
-        std::vector<int> permutation {0,1,2,3,4,6}; // Which update steps to take
+        weights["event_factor"] = 10.0;
+        std::vector<int> permutation {2,3,4,6}; // Which update steps to take
         auto rng = std::default_random_engine {};
 
 
@@ -2103,7 +2104,7 @@ int main() {
         //##################################################################################################################
         // Read events file
         std::vector<Event> event_data;
-        read_events(event_path, event_data, start_time_events, end_time_events);
+        read_events(event_path, event_data, start_time_events, end_time_events, weights["event_factor"]);
         std::cout << "Readout events at " << event_path << std::endl;
 
         //##################################################################################################################
