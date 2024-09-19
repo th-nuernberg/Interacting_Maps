@@ -2216,34 +2216,41 @@ int main() {
         int counter = 0;
         for (Tensor<float,2,Eigen::RowMajor> V : frames){
 //            std::cout << V << std::endl;
-            writeToFile(V, "V.txt");
-            writeToFile(I, "I.txt");
-            writeToFile(F, "F.txt");
-            writeToFile(G, "G.txt");
+            writeToFile(V, folder_path / "V.txt");
+            writeToFile(I, folder_path / "I.txt");
+            writeToFile(delta_I, folder_path / "I_gradient.txt");
+            writeToFile(F, folder_path / "F.txt");
+            writeToFile(G, folder_path / "G.txt");
             for (int iter = 0; iter < iterations; ++iter){
                 std::shuffle(std::begin(permutation), std::end(permutation), rng);
                 interacting_maps_step(V, V, I, delta_I,F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, N);
                 if (iter%100==0){
-                    std::cout << iter << "/" << iterations << std::endl;
+                    std::cout << iter << "/" << iterations << "\t";
                     std::cout << "-V=FG?: " << VFG_check(V, F, G, 0.1) << std::endl;
+                    writeToFile(V, folder_path / "V2.txt");
+                    writeToFile(I, folder_path / "I2.txt");
+                    writeToFile(delta_I, folder_path / "I_gradient2.txt");
+                    writeToFile(F, folder_path / "F2.txt");
+                    writeToFile(G, folder_path / "G2.txt");
                 }
-                if (iter%2270==0){
-                    // std::cout << "Here!" << std::endl;
-                    std::string image_name = "VIGF_testIter_" + std::to_string(iter) + ".png";
-                    fs::path image_path = folder_path / image_name;
-                    create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
-                }
-                if (iter%2271==0){
-                    // std::cout << "Here!" << std::endl;
-                    std::string image_name = "VIGF_testIter_" + std::to_string(iter) + ".png";
-                    fs::path image_path = folder_path / image_name;
-                    create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
-                }
+//                if (iter%2270==0){
+//                    // std::cout << "Here!" << std::endl;
+//                    std::string image_name = "VIGF_testIter_" + std::to_string(iter) + ".png";
+//                    fs::path image_path = folder_path / image_name;
+//                    create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
+//                }
+//                if (iter%2271==0){
+//                    // std::cout << "Here!" << std::endl;
+//                    std::string image_name = "VIGF_testIter_" + std::to_string(iter) + ".png";
+//                    fs::path image_path = folder_path / image_name;
+//                    create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
+//                }
             }
-            writeToFile(V, "V2.txt");
-            writeToFile(I, "I2.txt");
-            writeToFile(F, "F2.txt");
-            writeToFile(G, "G2.txt");
+            writeToFile(V, folder_path / "V2.txt");
+            writeToFile(I, folder_path / "I2.txt");
+            writeToFile(delta_I, folder_path / "I_gradient2.txt");
+            writeToFile(F, folder_path / "F2.txt");
+            writeToFile(G, folder_path / "G2.txt");
             std::cout << "R: " << R << std::endl;
             counter++;
             std::cout << "Frame: " << counter << std::endl;
