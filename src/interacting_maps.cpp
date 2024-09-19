@@ -599,6 +599,136 @@ cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const 
     return image;
 }
 
+// Function to create a colorbar
+cv::Mat createColorbar(double globalMin, double globalMax, int height, int width, int colormapType = cv::COLORMAP_VIRIDIS) {
+    // Create a vertical gradient (values from globalMin to globalMax)
+    cv::Mat colorbar(height, width, CV_32F);
+
+    // Fill the colorbar with values from globalMin to globalMax
+    for (int i = 0; i < height; ++i) {
+        float value = globalMin + i * (globalMax - globalMin) / height;
+        colorbar.row(i).setTo(value);
+    }
+
+    // Normalize the colorbar to the range [0, 255]
+    cv::Mat colorbarNormalized;
+    colorbar.convertTo(colorbarNormalized, CV_8U, 255.0 / (globalMax - globalMin), -255.0 * globalMin / (globalMax - globalMin));
+
+    // Apply the same colormap to the colorbar
+    cv::Mat colorbarColored;
+    cv::applyColorMap(colorbarNormalized, colorbarColored, colormapType);
+
+    // Add labels to the colorbar (min, max, and optionally intermediate ticks)
+    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+    double fontScale = 0.4;
+    int thickness = 1;
+    int baseline = 0;
+
+    // Put the min value at the bottom
+    std::string minLabel = std::to_string(globalMin);
+    cv::Size minTextSize = cv::getTextSize(minLabel, fontFace, fontScale, thickness, &baseline);
+    cv::putText(colorbarColored, minLabel, cv::Point(5, height - 5), fontFace, fontScale, cv::Scalar(255, 255, 255), thickness);
+
+    // Put the max value at the top
+    std::string maxLabel = std::to_string(globalMax);
+    cv::Size maxTextSize = cv::getTextSize(maxLabel, fontFace, fontScale, thickness, &baseline);
+    cv::putText(colorbarColored, maxLabel, cv::Point(5, maxTextSize.height), fontFace, fontScale, cv::Scalar(255, 255, 255), thickness);
+
+    // Optionally, you can add intermediate ticks and labels here as needed
+
+    return colorbarColored;
+}
+
+cv::Mat plot_VvsFG(const MatrixXfRowMajor& V, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& G, const std::string& path = "VvsFG", bool save = false){
+    long rows = V.rows();
+    long cols = V.cols();
+    cv::Mat image(rows + 50, cols * 3 + 50, CV_8UC3, cv::Scalar(0, 0, 0));
+
+    // Step 1: Prepare Matrices
+    // Convert V to cvMat
+    cv::Mat V_img;
+    V_img = eigenToCvMat(V);
+
+    // Calculate the dot product of F and G, convert to cvMat
+    MatrixXfRowMajor FdotG(rows, cols);
+    cv::Mat FdotG_img;
+    FdotG = Tensor2Matrix(-(F*G).sum(Eigen::array<int,1>({2})));
+    FdotG_img = eigenToCvMat(FdotG); // Multiply FG elementwise then sum over 3rd dim > dot product
+
+    // Calculate the difference between V and the dot product
+    MatrixXfRowMajor diff(rows, cols);
+    cv::Mat diff_img;
+    diff = V - FdotG;
+    diff_img = eigenToCvMat(diff);
+
+    // Step 2: Find the global min and max values across all three matrices
+    double minVal1, maxVal1, minVal2, maxVal2, minVal3, maxVal3;
+    cv::minMaxLoc(V_img, &minVal1, &maxVal1);
+    cv::minMaxLoc(FdotG_img, &minVal2, &maxVal2);
+    cv::minMaxLoc(diff_img, &minVal3, &maxVal3);
+
+    double globalMin = std::min({minVal1, minVal2, minVal3});
+    double globalMax = std::max({maxVal1, maxVal2, maxVal3});
+
+    // Step 3: Normalize all matrices to the global range [0, 255]
+    cv::Mat normalizedMatrix1, normalizedMatrix2, normalizedMatrix3;
+    // Normalize each matrix to the range [0, 255] using the global min and max
+    V_img.convertTo(normalizedMatrix1, CV_8U, 255.0 / (globalMax - globalMin), -255.0 * globalMin / (globalMax - globalMin));
+    FdotG_img.convertTo(normalizedMatrix2, CV_8U, 255.0 / (globalMax - globalMin), -255.0 * globalMin / (globalMax - globalMin));
+    diff_img.convertTo(normalizedMatrix3, CV_8U, 255.0 / (globalMax - globalMin), -255.0 * globalMin / (globalMax - globalMin));
+
+    // Step 4: Apply the same colormap to each normalized matrix
+    cv::Mat coloredMatrix1, coloredMatrix2, coloredMatrix3;
+    cv::applyColorMap(normalizedMatrix1, coloredMatrix1, cv::COLORMAP_VIRIDIS);
+    cv::applyColorMap(normalizedMatrix2, coloredMatrix2, cv::COLORMAP_VIRIDIS);
+    cv::applyColorMap(normalizedMatrix3, coloredMatrix3, cv::COLORMAP_VIRIDIS);
+
+    // Step 5: Concatenate the three matrices horizontally or vertically for display
+    cv::Mat combinedMatrix;
+    cv::hconcat(std::vector<cv::Mat>{coloredMatrix1, coloredMatrix2, coloredMatrix3}, combinedMatrix);
+
+    // Step 6: Create a colorbar (we'll use height of the matrix and width of 50 pixels for the colorbar)
+    int colorbarWidth = 50;
+    cv::Mat colorbar = createColorbar(globalMin, globalMax, combinedMatrix.rows, colorbarWidth);
+
+    // Step 7: Concatenate the colorbar with the combined image
+    cv::Mat coloredImage;
+    cv::hconcat(combinedMatrix, colorbar, coloredImage);
+
+    // Step 8: Add a black region at the top of the image for the title
+    int titleHeight = 50;  // Height of the title area
+    cv::Mat titleImage = cv::Mat::zeros(titleHeight, coloredImage.cols, CV_8UC3);
+
+    // Step 9: Add the title text to the top region
+    std::string title = "V | - F dot G | Difference";
+    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+    double fontScale = 0.5;
+    int thickness = 2;
+    cv::Scalar color(255, 255, 255); // White text
+    int baseline = 0;
+
+    // Get the text size to center the title
+    cv::Size textSize = cv::getTextSize(title, fontFace, fontScale, thickness, &baseline);
+    cv::Point textOrg((titleImage.cols - textSize.width) / 2, (titleHeight + textSize.height) / 2);
+
+    // Put the title on the titleImage
+    cv::putText(titleImage, title, textOrg, fontFace, fontScale, color, thickness);
+
+    // Step 10: Concatenate the title image with the matrix image
+    cv::Mat finalImage;
+    cv::vconcat(titleImage, coloredImage, finalImage);
+
+    // Step 11: Display the final image with the title
+    if (save && !path.empty()) {
+        imwrite(path, finalImage);
+    }
+    else{
+        cv::imshow("V vs F dot G", finalImage);
+        cv::waitKey(0); // Wait for a key press before closing the window
+    }
+    return finalImage;
+}
+
 
 // INTERACTING MAPS
 
@@ -2061,6 +2191,9 @@ int main() {
             std::string image_name = "VIGF_" + std::to_string(counter) + ".png";
             fs::path image_path = folder_path / image_name;
             create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
+            image_name = "VvsFG" + std::to_string(counter) + ".png";
+            image_path = folder_path / image_name;
+            plot_VvsFG(Tensor2Matrix(V), F, G, image_path, true);
         }
         Instrumentor::Get().EndSession();
     }
