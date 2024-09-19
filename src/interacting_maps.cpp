@@ -371,8 +371,8 @@ cv::Mat frame2grayscale(const Eigen::MatrixXfRowMajor& frame) {
 
 cv::Mat V2image(const Eigen::MatrixXfRowMajor& V) {
     // Determine the shape of the image
-    int rows = V.rows();
-    int cols = V.cols();
+    long rows = V.rows();
+    long cols = V.cols();
     
     // Create an empty image with 3 channels (BGR)
     cv::Mat image = cv::Mat::zeros(rows, cols, CV_8UC3);
@@ -381,7 +381,7 @@ cv::Mat V2image(const Eigen::MatrixXfRowMajor& V) {
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
             if (V(i, j) > 0) {
-                image.at<cv::Vec3b>(i, j)[0] = 255; // Set blue channel
+                image.at<cv::Vec3b>(i, j)[1] = 255; // Set green channel
             }
             if (V(i, j) < 0) {
                 image.at<cv::Vec3b>(i, j)[2] = 255; // Set red channel
@@ -1357,28 +1357,28 @@ void update_IG(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajo
 //    std::cout << G << std::endl;
 //    std::cout << I_gradient << std::endl;
 //    std::cout << temp_map << std::endl;
-    x_update.setZero();
-    y_update.setZero();
-    for (int i = 0; i<dimensions[0]-1; i++){
-        for (int j = 0; j<dimensions[1]-1; j++){
-            if (i==0){
-//                std::cout << temp_map(i,j,0) << std::endl;
-                x_update(i,j) = temp_map(i,j,0);
-            }
-            else{
-                x_update(i,j) = temp_map(i,j,0) - temp_map(i-1,j,0);
-            }
-            if (j==0){
-                y_update(i,j) = temp_map(i,j,1);
-            }
-            else{
-                y_update(i,j) = temp_map(i,j,1) - temp_map(i,j-1,1);
-            }
-        }
+//    x_update.setZero();
+//    y_update.setZero();
+//    for (int i = 0; i<dimensions[0]-1; i++){
+//        for (int j = 0; j<dimensions[1]-1; j++){
+//            if (i==0){
+////                std::cout << temp_map(i,j,0) << std::endl;
+//                x_update(i,j) = temp_map(i,j,0);
+//            }
+//            else{
+//                x_update(i,j) = temp_map(i,j,0) - temp_map(i-1,j,0);
+//            }
+//            if (j==0){
+//                y_update(i,j) = temp_map(i,j,1);
+//            }
+//            else{
+//                y_update(i,j) = temp_map(i,j,1) - temp_map(i,j-1,1);
+//            }
+//        }
     }
 //    std::cout << x_update << std::endl;
 //    std::cout << y_update << std::endl;
-    I = (1 - weight_IG)*I + weight_IG*(I - x_update - y_update);
+
     // # Gradient Implementation, the paper mentions an effect in x-direction which gets computed as a difference between matrix components in x-direction. 
     // # This is very similar to how gradients are implemented which is why they are used here. The temp map consists of an x and a y component since, the
     // # gradient of I consists of two components. One for the x and one for the y direction.
@@ -1444,15 +1444,15 @@ void update_RF(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, con
     R(0) = (1 - weight_RF) * R(0) + weight_RF * solution(0);
     R(1) = (1 - weight_RF) * R(1) + weight_RF * solution(1);
     R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
-    if (std::abs(R(0)) < 1e-14 or std::isnan(R(0))) {
-        R(0) = 0.0;
-    }
-    if (std::abs(R(1)) < 1e-14 or std::isnan(R(1))) {
-        R(1) = 0.0;
-    }
-    if (std::abs(R(2)) < 1e-14 or std::isnan(R(2))) {
-        R(2) = 0.0;
-    }
+//    if (std::abs(R(0)) < 1e-14 or std::isnan(R(0))) {
+//        R(0) = 0.0;
+//    }
+//    if (std::abs(R(1)) < 1e-14 or std::isnan(R(1))) {
+//        R(1) = 0.0;
+//    }
+//    if (std::abs(R(2)) < 1e-14 or std::isnan(R(2))) {
+//        R(2) = 0.0;
+//    }
 }
 
 void setup_R_update(const Tensor<float,3,Eigen::RowMajor>& CCM, Matrix3f& A, std::vector<Matrix3f>& Identity_minus_outerProducts){
