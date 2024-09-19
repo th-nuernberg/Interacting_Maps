@@ -8,6 +8,8 @@
 #include <numeric>
 #include "Instrumentor.h"
 #include <cmath>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 #define PI 3.14159265
 #define EXECUTE_TEST 0
@@ -390,13 +392,7 @@ cv::Mat V2image(const Eigen::MatrixXfRowMajor& V) {
     return image;
 }
 
-
 cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_field) {
-    // oben rechts: blau
-    // oben links: pink
-    // unten rechts: grün
-    // unten links: gelb/orange
-
 
     const int rows = vector_field.dimension(0);
     const int cols = vector_field.dimension(1);
@@ -407,9 +403,13 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
 
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
-            float x = vector_field(i, j, 0);
-            float y = vector_field(i, j, 1);
-            angles(i, j) = std::atan2(y, x);
+            float y = vector_field(i, j, 0);
+            float x = vector_field(i, j, 1);
+            float angle = std::atan2(y, x);
+            if (angle < 0){
+                angle += 2*PI;
+            }
+            angles(i,j) = angle;
             saturations(i, j) = std::sqrt(x * x + y * y);
         }
     }
@@ -418,7 +418,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
     cv::Mat hue(rows, cols, CV_8UC1);
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
-            hue.at<uint8_t>(i, j) = static_cast<uint8_t>((angles(i, j) + M_PI) / (2 * M_PI) * 179);
+            hue.at<uint8_t>(i, j) = static_cast<uint8_t>((angles(i, j))/(2 * M_PI) * 179);
         }
     }
 
@@ -446,25 +446,154 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
     return bgr_image;
 }
 
-cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& G, const Tensor<float,3,Eigen::RowMajor>& F, const std::string& name = "VIGF", bool save = false) {
+//cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& G, const Tensor<float,3,Eigen::RowMajor>& F, const std::string& path = "VIGF", bool save = false) {
+//    cv::Mat V_img = V2image(V);
+//    cv::Mat I_img = frame2grayscale(I);
+//    cv::Mat G_img = vector_field2image(G);
+//    cv::Mat F_img = vector_field2image(G);
+//
+//    long rows = V.rows();
+//    long cols = V.cols();
+//    cv::Mat image(rows * 2 + 20, cols * 2 + 20, CV_8UC3, cv::Scalar(0, 0, 0));
+//
+//    V_img.copyTo(image(cv::Rect(5, 5, cols, rows)));
+//    cvtColor(I_img, I_img, cv::COLOR_GRAY2BGR);
+//    I_img.copyTo(image(cv::Rect(cols + 10, 5, cols+1, rows+1)));
+//    G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
+//    F_img.copyTo(image(cv::Rect(cols + 10, rows + 10, cols, rows)));
+//
+//    if (save && !path.empty()) {
+//        imwrite(path, image);
+//    }
+//
+//    return image;
+//}
+
+// Function to create outward vector field using Eigen
+Tensor<float,3,Eigen::RowMajor> create_outward_vector_field(int grid_size) {
+    // Create a 2D grid of points using linspace equivalent
+    Eigen::VectorXf x = Eigen::VectorXf::LinSpaced(grid_size, -1.0, 1.0);
+    Eigen::VectorXf y = Eigen::VectorXf::LinSpaced(grid_size, 1.0, -1.0);
+
+    // Initialize matrices for meshgrid-like behavior (xv, yv)
+    Eigen::MatrixXf xv(grid_size, grid_size);
+    Eigen::MatrixXf yv(grid_size, grid_size);
+
+    // Create meshgrid by repeating x and y values across rows and columns
+    for (int i = 0; i < grid_size; ++i) {
+        xv.row(i) = x.transpose();
+        yv.col(i) = y;
+    }
+
+    // Create a 3D Tensor to store the 2D vector field (x, y components at each point)
+    Tensor<float,3,Eigen::RowMajor> vectors(grid_size, grid_size, 2);
+
+    // Calculate distances from origin and store the normalized vectors
+    for (int i = 0; i < grid_size; ++i) {
+        for (int j = 0; j < grid_size; ++j) {
+            float x_val = xv(i, j);
+            float y_val = yv(i, j);
+            float distance = std::sqrt(x_val * x_val + y_val * y_val);
+
+            // Prevent division by zero at the origin
+            if (distance == 0) distance = 1.0;
+
+            // Normalize the vector and assign it
+            vectors(i, j, 1) = x_val / distance;
+            vectors(i, j, 0) = y_val / distance;
+        }
+    }
+
+    return vectors;
+}
+
+// Function to create the circular band mask
+cv::Mat create_circular_band_mask(const cv::Size& image_size, float inner_radius, float outer_radius) {
+    cv::Mat mask(image_size, CV_8UC1, cv::Scalar(0));
+
+    int center_x = image_size.width / 2;
+    int center_y = image_size.height / 2;
+
+    for (int i = 0; i < image_size.height; ++i) {
+        for (int j = 0; j < image_size.width; ++j) {
+            float distance = std::sqrt((i - center_y) * (i - center_y) + (j - center_x) * (j - center_x));
+            if (distance >= inner_radius && distance <= outer_radius) {
+                mask.at<uchar>(i, j) = 255;  // Inside the band
+            }
+        }
+    }
+
+    return mask;
+}
+
+// Function to create the color wheel with a circular band
+cv::Mat create_colorwheel(int grid_size) {
+    Tensor<float,3,Eigen::RowMajor> vector_field = create_outward_vector_field(grid_size);
+
+    cv::Mat image;
+    image = vector_field2image(vector_field);
+
+    // Define inner and outer radius
+    float inner_radius = grid_size / 4.0f;
+    float outer_radius = grid_size / 2.0f;
+
+    // Create the circular band mask
+    cv::Mat mask = create_circular_band_mask(image.size(), inner_radius, outer_radius);
+
+    // Apply mask to the image
+    cv::Mat colourwheel = image.clone();
+    colourwheel.setTo(cv::Scalar(255, 255, 255), ~mask);  // Outside the mask: set to white
+    return colourwheel;
+}
+
+// Function to create the VIGF image
+cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& G, const Tensor<float,3,Eigen::RowMajor>& F, const std::string& path = "VIGF", bool save = false) {
     cv::Mat V_img = V2image(V);
     cv::Mat I_img = frame2grayscale(I);
     cv::Mat G_img = vector_field2image(G);
-    cv::Mat F_img = vector_field2image(G);
-
+    cv::Mat F_img = vector_field2image(F);
 
     long rows = V.rows();
     long cols = V.cols();
-    cv::Mat image(rows * 2 + 20, cols * 2 + 20, CV_8UC3, cv::Scalar(0, 0, 0));
+    long I_rows = I.rows();
+    long I_cols = I.cols();
 
+    // Calculate the size of the color wheel
+    int colourwheel_size = cols / 2;
+
+    // Calculate the size of the final output image (double size + padding and color wheel)
+    int x_size = rows * 2 + 20;
+    int y_size = cols * 2 + 30 + colourwheel_size;
+
+    cv::Mat image(x_size, y_size, CV_8UC3, cv::Scalar(0, 0, 0));
+    std::cout << image.size() << std::endl;
+
+    //    V_img.copyTo(image(cv::Rect(5, 5, cols, rows)));
+    //    cvtColor(I_img, I_img, cv::COLOR_GRAY2BGR);
+    //    I_img.copyTo(image(cv::Rect(cols + 10, 5, cols+1, rows+1)));
+    //    G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
+    //    F_img.copyTo(image(cv::Rect(cols + 10, rows + 10, cols, rows)));
+
+    // Place V image
     V_img.copyTo(image(cv::Rect(5, 5, cols, rows)));
-    cvtColor(I_img, I_img, cv::COLOR_GRAY2BGR);
-    I_img.copyTo(image(cv::Rect(cols + 10, 5, cols+1, rows+1)));
-    G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
-    F_img.copyTo(image(cv::Rect(cols + 10, rows + 10, cols, rows)));
 
-    if (save && !name.empty()) {
-        imwrite(name, image);
+    // Place I image (convert to BGR first)
+    cvtColor(I_img, I_img, cv::COLOR_GRAY2BGR);
+    I_img.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, 5, I_cols, I_rows)));
+
+    // Place G image
+    G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
+
+    // Place F image
+    F_img.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, rows + 10, cols, rows)));
+
+    // Create and place the color wheel
+    cv::Mat colourwheel = create_colorwheel(colourwheel_size);
+    colourwheel.copyTo(image(cv::Rect(cols + 10, 2 * rows + 10 - colourwheel_size, colourwheel_size, colourwheel_size)));
+
+    // Save the image if required
+    if (save && !path.empty()) {
+        cv::imwrite(path, image);
     }
 
     return image;
