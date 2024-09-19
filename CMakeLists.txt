@@ -16,6 +16,9 @@ include_directories(
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
+# Add the src directory
+add_subdirectory(src)
+
 # Add source files
 set(SOURCES
         ${PROJECT_SOURCE_DIR}/src/interacting_maps.cpp
