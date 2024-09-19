@@ -775,7 +775,7 @@ fs::path create_folder_and_update_gitignore(const std::string& folder_name) {
     return folder_path;
 }
 
-void read_calib(const std::string& file_path, std::vector<float>& calibration_data){
+void read_single_line_txt(const std::string& file_path, std::vector<float>& calibration_data){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
@@ -1725,7 +1725,7 @@ int test(){
         // Read calibration file
         std::string calib_path = "../res/shapes_rotation/calib.txt";
         std::vector<float> calibration_data;
-        read_calib(calib_path, calibration_data);
+        read_single_line_txt(calib_path, calibration_data);
         std::cout << "Implemented calibration data readout" << std::endl;
 
         //##################################################################################################################
@@ -2046,8 +2046,13 @@ int main() {
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 1000;
 
-        int height = 180; // in pixels
-        int width = 240; // in pixels
+        std::vector<float> settings;
+        read_single_line_txt(calib_path, settings);
+
+//        int height = 180; // in pixels
+//        int width = 240; // in pixels
+        int height = settings[0]; // in pixels
+        int width = settings[1]; // in pixels
         int N = height*width;
 
         std::unordered_map<std::string,float> weights;
@@ -2091,7 +2096,7 @@ int main() {
         //##################################################################################################################
         // Read calibration file
         std::vector<float> raw_calibration_data;
-        read_calib(calib_path, raw_calibration_data);
+        read_single_line_txt(calib_path, raw_calibration_data);
         Calibration_Data calibration_data = get_calibration_data(raw_calibration_data, height, width);
         std::cout << "Readout calibration file at " << calib_path << std::endl;
 
