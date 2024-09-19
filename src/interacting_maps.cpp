@@ -1476,13 +1476,15 @@ void setup_R_update(const Tensor<float,3,Eigen::RowMajor>& CCM, Matrix3f& A, std
 }
 
 // TODO: add return number
-void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, const Matrix3f& A, const std::vector<Matrix3f>& Identity_minus_outerProducts, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N){
+void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& delta_I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, const Matrix3f& A, const std::vector<Matrix3f>& Identity_minus_outerProducts, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N){
     PROFILE_FUNCTION();
     Eigen::array<Eigen::Index, 2> dimensions = V.dimensions();
-    Eigen::Tensor<float,3,Eigen::RowMajor> delta_I(dimensions[0], dimensions[1], 2);
+
     array<int, 2> shuffle({1, 0});
-    delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle); // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
-    delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+//    delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle); // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
+//    delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+//    delta_I = computeGradient(Tensor2Matrix(I));
+
     for (const auto& element : permutation){
         switch( element ){
             default:
@@ -1523,8 +1525,8 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
             case 4:
 //                std::cout << I << std::endl;
                 update_IG(I, delta_I, G, weights["weight_IG"]);
-                delta_I.chip(0, 2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-                delta_I.chip(1, 2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+                delta_I = computeGradient(Tensor2Matrix(I));
+//                DEBUG_LOG("delta_I: "<< std::endl << delta_I);
 //                std::cout << I << std::endl;
 //                std::cout << G << std::endl;
 //                std::cout << delta_I << std::endl;
@@ -1597,8 +1599,8 @@ int test(){
     // Intesity I
     Tensor<float,2,Eigen::RowMajor> I(n+1,m+1);
     I.setZero();
-    Tensor<float,3,Eigen::RowMajor> I_gradient(n,m,2);
-    I_gradient.setRandom();
+    Tensor<float,3,Eigen::RowMajor> delta_I(n,m,2);
+    delta_I.setRandom();
 
     //##################################################################################################################
     // Rotation Vector R
@@ -1670,20 +1672,20 @@ int test(){
         }
         //##################################################################################################################
         // gradient I
-        Tensor<float,2,Eigen::RowMajor> I_gradient_comparison(n,m);
+        Tensor<float,2,Eigen::RowMajor> delta_I_comparison(n,m);
 
         I.setValues({{0,1,3}, {1,3,6}, {3,6,10}});
-        I_gradient_comparison.setValues({{1,2},{2,3}});
+        delta_I_comparison.setValues({{1,2},{2,3}});
         G.chip(1,2).setConstant(1.0);
         Eigen::array<Eigen::Index, 2> dimensions = I.dimensions();
         Eigen::Tensor<float,2,Eigen::RowMajor> delta_I_x(dimensions[0], dimensions[1]);
         Eigen::Tensor<float,2,Eigen::RowMajor> delta_I_y(dimensions[0], dimensions[1]);
         array<int, 2> shuffle({1, 0});
-        I_gradient.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle); // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
-        I_gradient.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
-        delta_I_x = I_gradient.chip(0,2);
-        delta_I_y = I_gradient.chip(1,2);
-        if (isApprox(I_gradient_comparison, delta_I_x) and isApprox(I_gradient_comparison, delta_I_y)){
+        delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle); // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
+        delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
+        delta_I_x = delta_I.chip(0,2);
+        delta_I_y = delta_I.chip(1,2);
+        if (isApprox(delta_I_comparison, delta_I_x) and isApprox(delta_I_comparison, delta_I_y)){
             std::cout << "I GRADIENT FUNCTION CORRECT" << std::endl;
         }else{
             std::cout << "I GRADIENT FUNCTION FALSE" << std::endl;
@@ -1692,16 +1694,16 @@ int test(){
             std::cout << "I gradient y after update" << std::endl;
             std::cout << delta_I_y << std::endl;
             std::cout << "I gradient should be" << std::endl;
-            std::cout << I_gradient_comparison << std::endl;
+            std::cout << delta_I_comparison << std::endl;
         }
 
         //##################################################################################################################
         // Update I from G
         Tensor<float,2,Eigen::RowMajor> I_comparison(n+1,m+1);
-        I_gradient.chip(0,2) = I_gradient_comparison;
-        I_gradient.chip(1,2) = I_gradient_comparison;
+        delta_I.chip(0,2) = delta_I_comparison;
+        delta_I.chip(1,2) = delta_I_comparison;
         I_comparison.setValues({{1,4,3},{3,5,6},{3,6,10}});
-        update_IG(I, I_gradient, G, 1.0);
+        update_IG(I, delta_I, G, 1.0);
         if (isApprox(I_comparison, I)){
             std::cout << "UPDATE FUNCTION IG CORRECT" << std::endl;
         }else{
@@ -1732,11 +1734,11 @@ int test(){
         // Update G from I
         Tensor<float,3,Eigen::RowMajor> G_comparison(n,m,2);
         G.setValues({{{1,4},{2,3}},{{3,2},{4,1}}});
-        I_gradient.setValues({{{1,0},{0,1}},{{0,1},{1,0}}});
+        delta_I.setValues({{{1,0},{0,1}},{{0,1},{1,0}}});
         G_comparison.setValues({{{1,2},{1,2}},{{1.5,1.5},{2.5,0.5}}});
         std::cout << G << std::endl;
-        std::cout << I_gradient << std::endl;
-        update_GI(G, I_gradient, 0.5);
+        std::cout << delta_I << std::endl;
+        update_GI(G, delta_I, 0.5);
         if (isApprox(G_comparison, G)){
             std::cout << "UPDATE FUNCTION GI CORRECT" << std::endl;
         }else{
@@ -1960,8 +1962,8 @@ int test(){
         // Intesity I
         Tensor<float,2,Eigen::RowMajor> I(n+1,m+1);
         I.setValues({{1,4,0},{9,16,0},{0,0,0}});
-        Tensor<float,3,Eigen::RowMajor> I_gradient(n,m,2);
-        I_gradient.setZero();
+        Tensor<float,3,Eigen::RowMajor> delta_I(n,m,2);
+        delta_I.setZero();
 
         //##################################################################################################################
         // Rotation Vector R
@@ -1986,7 +1988,7 @@ int test(){
         weights["time_step"] = 0.05f;
         std::vector<int> permutation {0,1,2,3,4,5,6};
         for (int i = 0; i < 100; ++i){
-            interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, nm);
+            interacting_maps_step(V, V, I, delta_I, F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, nm);
         }
         std::cout << "R: " << R << std::endl;
         std::cout << "Implemented interacting maps update step" << std::endl;
@@ -2114,14 +2116,16 @@ int main() {
         G.setRandom();
         Tensor<float,2,Eigen::RowMajor> I(height+1, width+1);
         I.setRandom();
-        Tensor<float,1,Eigen::RowMajor> row(width+1);
-        Tensor<float,1,Eigen::RowMajor> col(height+1);
-        row.setZero();
-        col.setZero();
-        I.chip(height,0) = row;
-        I.chip(width,1) = col;
-        Tensor<float,3,Eigen::RowMajor> I_gradient(height, width,2);
-        I_gradient.setRandom();
+//        I = I * TmpTensor2.setConstant(255.0);
+//        Tensor<float,1,Eigen::RowMajor> row(width+1);
+//        Tensor<float,1,Eigen::RowMajor> col(height+1);
+//        row.setZero();
+//        col.setZero();
+//        I.chip(height,0) = row;
+//        I.chip(width,1) = col;
+        Tensor<float,3,Eigen::RowMajor> delta_I(height, width,2);
+        delta_I = computeGradient(Tensor2Matrix(I));
+        DEBUG_LOG(delta_I);
         Tensor<float,1> R(3);
         R.setRandom();
 
@@ -2205,7 +2209,7 @@ int main() {
             writeToFile(G, "G.txt");
             for (int iter = 0; iter < iterations; ++iter){
                 std::shuffle(std::begin(permutation), std::end(permutation), rng);
-                interacting_maps_step(V, V, I, F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, N);
+                interacting_maps_step(V, V, I, delta_I,F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, N);
                 if (iter%100==0){
                     std::cout << iter << "/" << iterations << std::endl;
                     std::cout << "-V=FG?: " << VFG_check(V, F, G, 0.1) << std::endl;
