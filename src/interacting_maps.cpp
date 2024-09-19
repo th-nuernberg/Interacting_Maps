@@ -1146,14 +1146,11 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
             dot(i,j) = -(F(i,j,0)*G(i,j,0) + F(i,j,1)*G(i,j,1));
-            diff(i,j) = V(i,j) - dot(i,j);
+            diff(i,j) = (V(i,j) - dot(i,j) * V(i,j) - dot(i,j));
         }
     }
 
-    float diff_sum = diff.sum();
-    float dot_sum = dot.sum();
-    return diff_sum;
-    //return isApprox(V, dot, precision);
+    return diff.mean();
 }
 
 // Function to time the performance of a given dot product computation function
