@@ -38,7 +38,7 @@ namespace fs = std::filesystem;
 
 namespace Eigen{
     typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXfRowMajor;
-    typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXfRowMajor;
+    typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRowMajor;
     typedef Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXiRowMajor;
     typedef Eigen::Tensor<float,2,Eigen::RowMajor> Tensor2f;
     typedef Eigen::Tensor<float,3,Eigen::RowMajor> Tensor3f;
@@ -86,64 +86,63 @@ Eigen::VectorXf gradient(const Eigen::VectorXf& x) {
     return grad;
 }
 
-Eigen::Tensor<float,3,Eigen::RowMajor> computeGradient(const MatrixXfRowMajor & data, const std::vector<int> direction={0,1}) {
+Eigen::Tensor<float,3,Eigen::RowMajor> computeGradient(const Eigen::MatrixXfRowMajor & data, const std::vector<int> direction={0,1}) {
     int rows = data.rows();
     int cols = data.cols();
 
-    DEBUG_LOG("data: " << std::endl << data);
+//    DEBUG_LOG("data: " << std::endl << data);
     // Initialize the tensor: 3 dimensions (rows, cols, gradient direction)
     if (direction.size() == 2){
         Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 2);
-        // Compute gradient along rows (x-direction)
+        // Compute gradient along columns (up-down, x-direction)
+        for (int j = 0; j < cols; ++j) {
+            for (int i = 1; i < rows - 1; ++i) {
+                gradients(i, j, 0) = (data(i + 1, j) - data(i - 1, j)) / 2.0;
+            }
+//            gradients(0, j, 1) = data(1, j) - data(0, j); // Forward difference for the first row
+//            gradients(rows - 1, j, 1) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
+            gradients(0, j, 0) = (data(1, j) - data(0,j)) / 2.0; // Central difference with replicate border
+            gradients(rows - 1, j, 0) = (data(rows-1, j) - data(rows - 2, j)) / 2.0; // Central difference with replicate border
+        }
+        // Compute gradient along rows (left-right, y-direction)
         for (int i = 0; i < rows; ++i) {
             for (int j = 1; j < cols - 1; ++j) {
-                gradients(i, j, 0) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
+                gradients(i, j, 1) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
             }
 //            gradients(i, 0, 0) = data(i, 1) - data(i, 0); // Forward difference for the first column
 //            gradients(i, cols - 1, 0) = data(i, cols - 1) - data(i, cols - 2); // Backward difference for the last column
-            gradients(i, 0, 0) = (data(i, 1) - 0.0) / 2.0; // Central difference with 0 border
-            gradients(i, cols - 1, 0) = (0.0 - data(i, cols - 2)) / 2.0; // Central difference with 0 border
-        }
-
-        // Compute gradient along columns (y-direction)
-        for (int j = 0; j < cols; ++j) {
-            for (int i = 1; i < rows - 1; ++i) {
-                gradients(i, j, 1) = (data(i + 1, j) - data(i - 1, j)) / 2.0;
-            }
-            gradients(0, j, 1) = data(1, j) - data(0, j); // Forward difference for the first row
-            gradients(rows - 1, j, 1) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
-            gradients(0, j, 1) = (data(1, j) - 0.0) / 2.0; // Central difference with 0 border
-            gradients(rows - 1, j, 1) = (0.0 - data(rows - 2, j)) / 2.0; // Central difference with 0 border
+            gradients(i, 0, 1) = (data(i, 1) - data(i,0)) / 2.0; // Central difference with replicate border
+            gradients(i, cols - 1, 1) = (data(i, cols - 1) - data(i, cols - 2)) / 2.0; // Central difference with replicate border
         }
         return gradients;
     }
-    else if (direction[0] == 0){
+    else if (direction[0] == 1){
         Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 1);
-        // Compute gradient along rows (x-direction)
+        // Compute gradient along rows (y-direction)
         for (int i = 0; i < rows; ++i) {
             for (int j = 1; j < cols - 1; ++j) {
                 gradients(i, j, 0) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
             }
 //            gradients(i, 0, 0) = data(i, 1) - data(i, 0); // Forward difference for the first column
 //            gradients(i, cols - 1, 0) = data(i, cols - 1) - data(i, cols - 2); // Backward difference for the last colums
-            gradients(i, 0, 0) = (data(i, 1) - 0.0) / 2.0; // Central difference with 0 border
-            gradients(i, cols - 1, 0) = (0.0 - data(i, cols - 2)) / 2.0; // Central difference with 0 border
+            gradients(i, 0, 0) = (data(i, 1) - data(i,0)) / 2.0; // Central difference with replicate border
+            gradients(i, cols - 1, 0) = (data(i, cols - 1) - data(i, cols - 2)) / 2.0; // Central difference with replicate border
         }
         return gradients;
     }
-    else if (direction[0] == 1) {
+    else if (direction[0] == 0) {
         Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 1);
-        // Compute gradient along columns (y-direction)
+        // Compute gradient along columns (x-direction)
         for (int j = 0; j < cols; ++j) {
             for (int i = 1; i < rows - 1; ++i) {
                 gradients(i, j, 0) = (data(i + 1, j) - data(i - 1, j)) / 2.0;
             }
 //            gradients(0, j, 0) = data(1, j) - data(0, j); // Forward difference for the first row
 //            gradients(rows - 1, j, 0) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
-            gradients(0, j, 1) = (data(1, j) - 0.0) / 2.0; // Central difference with 0 border
-            gradients(rows - 1, j, 1) = (0.0 - data(rows - 2, j)) / 2.0; // Central difference with 0 border
+            gradients(0, j, 0) = (data(1, j) - data(0,j)) / 2.0; // Central difference with replicate border
+            gradients(rows - 1, j, 0) = (data(rows-1, j) - data(rows - 2, j)) / 2.0; // Central difference with replicate border
         }
-        DEBUG_LOG(gradients(0, 0, 0));
+//        DEBUG_LOG(gradients(0, 0, 0));
         return gradients;
     }
     else{
