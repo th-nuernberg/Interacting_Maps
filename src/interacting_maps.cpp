@@ -1291,16 +1291,16 @@ void update_GI(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajo
 //    DEBUG_LOG("G: " << std::endl << G);
 }
 
-void update_IV(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajor> &cum_V, const float weight_IV=0.5, const float time_step=0.05){
+void update_IV(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajor> &MI, const float weight_IV=0.5, const float time_step=0.05){
     InstrumentationTimer timer("update_IV");
-    const auto& dimensions_V = cum_V.dimensions();
+    const auto& dimensions_V = MI.dimensions();
     const auto& dimensions = I.dimensions();
-    Eigen::array<Eigen::Index, 2> offsets = {0, 0};
-    Eigen::array<Eigen::Index, 2> extents = {dimensions_V.at(0), dimensions_V.at(1)};
+//    Eigen::array<Eigen::Index, 2> offsets = {0, 0};
+//    Eigen::array<Eigen::Index, 2> extents = {dimensions_V.at(0), dimensions_V.at(1)};
 //    DEBUG_LOG("I: " << I);
 //    DEBUG_LOG("Cum_V: " << cum_V);
-    I.slice(offsets,extents) = (1-weight_IV) * I.slice(offsets,extents) + weight_IV*cum_V;
-
+//    I.slice(offsets,extents) = (1-weight_IV) * I.slice(offsets,extents) + weight_IV*MI;
+    I = (1-weight_IV)*I + weight_IV*MI;
 //    DEBUG_LOG("I: " << I);
 //    for (int i = 0; i<dimensions[0]; i++){
 //        for (int j = 0; j<dimensions[1]; j++){
@@ -1478,7 +1478,7 @@ void setup_R_update(const Tensor<float,3,Eigen::RowMajor>& CCM, Matrix3f& A, std
 }
 
 // TODO: add return number
-void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& cum_V, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& delta_I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, const Matrix3f& A, const std::vector<Matrix3f>& Identity_minus_outerProducts, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N){
+void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen::RowMajor>& MI, Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,3,Eigen::RowMajor>& delta_I, Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& CCM, const Tensor<float,3,Eigen::RowMajor>& dCdx, const Tensor<float,3,Eigen::RowMajor>& dCdy, const Matrix3f& A, const std::vector<Matrix3f>& Identity_minus_outerProducts, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, const int N){
     PROFILE_FUNCTION();
     Eigen::array<Eigen::Index, 2> dimensions = V.dimensions();
 
@@ -1536,7 +1536,7 @@ void interacting_maps_step(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Ei
                 break;
             case 5:
 //                std::cout << I << std::endl;
-                update_IV(I, V, weights["weight_IV"], weights["time_step"]);
+                update_IV(I, MI, weights["weight_IV"], weights["time_step"]);
                 delta_I = computeGradient(Tensor2Matrix(I));
 //                std::cout << I << std::endl;
 //                std::cout << V << std::endl;
@@ -2084,7 +2084,7 @@ int main() {
     else{
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "Test Translation, 2346, event_factor=10, F=(0,1), gradient uses buffer and central differences";
+        std::string results_name = "02, eps=1e-4, gamma=10000";
         std::string folder_name = results_name + " " + std::ctime(&time);
         std::string resource_name = "academic_translation";
         std::string calib_path = "../res/" + resource_name + "/calib.txt";
@@ -2092,7 +2092,7 @@ int main() {
         std::string settings_path = "../res/" + resource_name + "/settings.txt";
 
         float start_time_events = 0.0; // in s
-        float end_time_events = 0.04999; // in s
+        float end_time_events = 1.0; // in s
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 1000;
 
@@ -2116,7 +2116,7 @@ int main() {
         weights["lr"] = 0.9;
         weights["time_step"] = time_bin_size_in_s;
         weights["event_factor"] = 10.0;
-        std::vector<int> permutation {2,3,4,6}; // Which update steps to take
+        std::vector<int> permutation {0,2}; // Which update steps to take
         auto rng = std::default_random_engine {};
 
         //##################################################################################################################
@@ -2195,6 +2195,17 @@ int main() {
         std::vector<Matrix3f> Identity_minus_outerProducts(height*width);
         setup_R_update(CCM, A, Identity_minus_outerProducts);
 
+        //##################################################################################################################
+        // Memory Image for I to remember previous image
+        Tensor<float,2,Eigen::RowMajor> MI(height, width);
+        MI.setConstant(0.0);
+
+        Tensor<float,2,Eigen::RowMajor> decayBase(height, width);
+        decayBase.setConstant(0.0);
+
+        float memoryWeight = 0.99;
+
+
 //        Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(height, width, 3);
 //        Tensor<float, 2, Eigen::RowMajor> directions_tensor_2(height*width, 3);
 //        Eigen::array<int , 2> reshaper_2({height*width, 3});
@@ -2226,9 +2237,25 @@ int main() {
             writeToFile(delta_I, folder_path / "I_gradient.txt");
             writeToFile(F, folder_path / "F.txt");
             writeToFile(G, folder_path / "G.txt");
+
+            // For each new frame slowly decay the image back to the base gray image
+            MI = (1-memoryWeight)*decayBase + memoryWeight*MI;
+            MI += V;
+            // Image can't have negative intensity Values
+            for (int i = 0; i<height; i++){
+                for (int j = 0; j<width; j++){
+                    if (MI(i,j) < 0.0){
+                        MI(i,j) = 0.0;
+                    }
+                    if (MI(i,j) > 255.0){
+                        MI(i,j) = 255.0;
+                    }
+                }
+            }
+
             for (int iter = 0; iter < iterations; ++iter){
                 std::shuffle(std::begin(permutation), std::end(permutation), rng);
-                interacting_maps_step(V, V, I, delta_I,F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, N);
+                interacting_maps_step(V, MI, I, delta_I,F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, N);
                 if (iter%100==0){
                     std::cout << iter << "/" << iterations << "\t";
                     std::cout << "-V=FG?: " << VFG_check(V, F, G, 0.1) << std::endl;
