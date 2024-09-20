@@ -118,11 +118,11 @@ void create_VIFG_image(Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,2,Eigen:
 // void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& C, Tensor<float,3,Eigen::RowMajor>& dXfC, Tensor<float,3,Eigen::RowMajor>& dydC);
 void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& C_x, Tensor<float,3,Eigen::RowMajor>& C_y);
 
-void update_FG(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, float lr, float weight_FG);
+void update_FG(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, float lr, float weight_FG, float eps, float gamma);
 
-void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, float lr, float weight_GF);
+void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, float lr, float weight_GF, float eps, float gamma);
 
-void update_GI(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,3,Eigen::RowMajor>& I_gradient, float weight_GI);
+void update_GI(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,3,Eigen::RowMajor>& I_gradient, float weight_GI, float eps, float gamma);
 
 void update_IV(Tensor<float,2,Eigen::RowMajor>& I, Tensor<float,2,Eigen::RowMajor>& cum_V, float weight_IV, float time_step);
 
