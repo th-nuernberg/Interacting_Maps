@@ -1171,7 +1171,8 @@ void update_FG(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajo
     const auto& dimensions = F.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_F(dimensions);
     update_F.setZero();
-    float eps = 1e-15;
+    float eps = 1e-4f;
+    float gamma = 10000.0;
     for (int i = 0; i<dimensions[0]; i++) {
         for (int j = 0; j < dimensions[1]; j++) {
             float norm = (G(i, j, 0) * G(i, j, 0) + G(i, j, 1) * G(i, j, 1));
@@ -1182,17 +1183,17 @@ void update_FG(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajo
                                                   (V(i, j) + (F(i, j, 0) * G(i, j, 0) + F(i, j, 1) * G(i, j, 1))));
                 F(i, j, 0) = (1 - weight_FG) * F(i, j, 0) + lr * weight_FG * update_F(i, j, 0);
                 F(i, j, 1) = (1 - weight_FG) * F(i, j, 1) + lr * weight_FG * update_F(i, j, 1);
-                if (F(i, j, 0) > 255.0){
-                    F(i, j, 0) = 255.0;
+                if (F(i, j, 0) > gamma){
+                    F(i, j, 0) = gamma;
                 }
-                if (F(i, j, 1) > 255.0){
-                    F(i, j, 1) = 255.0;
+                if (F(i, j, 1) > gamma){
+                    F(i, j, 1) = gamma;
                 }
-                if (F(i, j, 0) < -255.0){
-                    F(i, j, 0) = -255.0;
+                if (F(i, j, 0) < -gamma){
+                    F(i, j, 0) = -gamma;
                 }
-                if (F(i, j, 1) < -255.0){
-                    F(i, j, 1) = -255.0;
+                if (F(i, j, 1) < -gamma){
+                    F(i, j, 1) = -gamma;
                 }
                 if (std::abs(F(i,j,0)) < eps){
                     F(i,j,0) = 0;
@@ -1210,7 +1211,8 @@ void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajo
     const auto& dimensions = G.dimensions();
     Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
 //    float eps = 1e-8f;
-    float eps = 1e-15f;
+    float eps = 1e-4f;
+    float gamma = 10000.0;
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
             float norm = (F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1));
@@ -1221,17 +1223,17 @@ void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajo
                                                   (V(i, j) + (G(i, j, 0) * F(i, j, 0) + G(i, j, 1) * F(i, j, 1))));
                 G(i, j, 0) = (1 - weight_GF) * G(i, j, 0) + lr * weight_GF * update_G(i, j, 0);
                 G(i, j, 1) = (1 - weight_GF) * G(i, j, 1) + lr * weight_GF * update_G(i, j, 1);
-                if (G(i, j, 0) > 255.0){
-                    G(i, j, 0) = 255.0;
+                if (G(i, j, 0) > gamma){
+                    G(i, j, 0) = gamma;
                 }
-                if (G(i, j, 1) > 255.0){
-                    G(i, j, 1) = 255.0;
+                if (G(i, j, 1) > gamma){
+                    G(i, j, 1) = gamma;
                 }
-                if (G(i, j, 0) < -255.0){
-                    G(i, j, 0) = -255.0;
+                if (G(i, j, 0) < -gamma){
+                    G(i, j, 0) = -gamma;
                 }
-                if (G(i, j, 1) < -255.0){
-                    G(i, j, 1) = -255.0;
+                if (G(i, j, 1) < -gamma){
+                    G(i, j, 1) = -gamma;
                 }
                 if (std::abs(G(i,j,0)) < eps){
                     G(i,j,0) = 0;
@@ -1260,22 +1262,23 @@ void update_GF_gradient(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen
 void update_GI(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajor> &I_gradient, const float weight_GI){
     InstrumentationTimer timer("update_GI");
     const auto& dimensions = G.dimensions();
-    float eps = 1e-15f;
+    float eps = 1e-4f;
+    float gamma = 10000.0;
 //    DEBUG_LOG("G: " << std::endl << G);
     G = (1 - weight_GI) * G + weight_GI*I_gradient;
     for (int i = 0; i<dimensions[0]; i++){
         for (int j = 0; j<dimensions[1]; j++){
-            if (G(i, j, 0) > 255.0){
-                G(i, j, 0) = 255.0;
+            if (G(i, j, 0) > gamma){
+                G(i, j, 0) = gamma;
             }
-            if (G(i, j, 1) > 255.0){
-                G(i, j, 1) = 255.0;
+            if (G(i, j, 1) > gamma){
+                G(i, j, 1) = gamma;
             }
-            if (G(i, j, 0) < -255.0){
-                G(i, j, 0) = -255.0;
+            if (G(i, j, 0) < -gamma){
+                G(i, j, 0) = -gamma;
             }
-            if (G(i, j, 1) < -255.0){
-                G(i, j, 1) = -255.0;
+            if (G(i, j, 1) < -gamma){
+                G(i, j, 1) = -gamma;
             }
             if (std::abs(G(i,j,0)) < eps){
                 G(i,j,0) = 0;
