@@ -1503,9 +1503,6 @@ void setup_R_update(const Tensor<float,3,Eigen::RowMajor>& CCM, Matrix3f& A, std
     for (size_t i = 0; i < height*width; ++i){
 //        d = directions_matrix.block<1,3>(i,0).normalized(); // Normalize direction vector
         d = directions_matrix.block<1,3>(i,0); // d[0] is th y component (height first), d[1] the x component (width second)
-        tmp = d[0];
-        d[0] = d[1];
-        d[1] = tmp;
         Identity_minus_outerProducts[i] = Identity - d * d.transpose();
         A += Identity_minus_outerProducts[i];
     }
