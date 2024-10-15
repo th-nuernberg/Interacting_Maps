@@ -1419,7 +1419,7 @@ void update_FR(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::R
         m32(cross, Cx, Cy, update);
     }
 //    std::cout << update << std::endl;
-    F = (1 - weight_FR)*F + weight_FR*update;
+    F = (1 - weight_FR)*F - weight_FR*update;
     for (int i = 0; i<dimensions[0]; i++) {
         for (int j = 0; j < dimensions[1]; j++) {
             if (F(i, j, 0) > gamma){
@@ -1457,7 +1457,6 @@ void update_RF(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, con
     Vector3f B = Vector3f::Zero();
     Eigen::Vector<float, 3> p;
     float tmp;
-
     {
         PROFILE_SCOPE("RF Pre");
         m23(F, Cx, Cy, transformed_F);
@@ -1466,17 +1465,14 @@ void update_RF(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, con
         points_matrix = Tensor2Matrix(points_tensor_2);
         for (size_t i = 0; i < N; ++i) {
             p = points_matrix.block<1, 3>(i, 0);
-            tmp = p[0];
-            p[0] = p[1];
-            p[1] = tmp;
             B += (Identity_minus_outerProducts[i]) * p;
         }
     }
     solution = A.partialPivLu().solve(B);
 //        std::cout << "R update: " << solution_short << std::endl;
-    R(0) = (1 - weight_RF) * R(0) + weight_RF * solution(0);
-    R(1) = (1 - weight_RF) * R(1) + weight_RF * solution(1);
-    R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
+    R(0) = (1 - weight_RF) * R(0) - weight_RF * solution(0);
+    R(1) = (1 - weight_RF) * R(1) - weight_RF * solution(1);
+    R(2) = (1 - weight_RF) * R(2) - weight_RF * solution(2);
 //    if (std::abs(R(0)) < 1e-14 or std::isnan(R(0))) {
 //        R(0) = 0.0;
 //    }
