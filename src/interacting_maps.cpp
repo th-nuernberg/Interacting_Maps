@@ -434,7 +434,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
     cv::Mat value(rows, cols, CV_8UC1, cv::Scalar(255));
 
     // Merge HSV channels
-    std::vector<cv::Mat> hsv_channels = { hue, saturation, value };
+    std::vector<cv::Mat> hsv_channels = {hue, saturation, value};
     cv::Mat hsv_image;
     cv::merge(hsv_channels, hsv_image);
 
@@ -906,8 +906,8 @@ void norm_tensor_along_dim3(const Tensor<float,3,Eigen::RowMajor>& T, Tensor<flo
 // Function to compute C_star
 autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, int N_x, int N_y, float height, float width, float rs) {
     autodiff::Vector3real result;
-    result << width * (-1 + (2 * x) / (N_x - 1)),
-              height * (1 - (2 * y) / (N_y - 1)),
+    result << height * (1 - (2 * y) / (N_y - 1)),
+              width * (-1 + (2 * x) / (N_x - 1)),
               rs;
     return result;
 }
@@ -954,9 +954,9 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
 
             // Compute the function value
             autodiff::Vector3real c_val = C(x, y, N_x, N_y, height, width, rs);
-            CCM(i,j,0) = static_cast<float>(c_val(0));
-            CCM(i,j,1) = static_cast<float>(c_val(1));
-            CCM(i,j,2) = static_cast<float>(c_val(2));
+            CCM(i,j,0) = static_cast<float>(c_val(0)); // y
+            CCM(i,j,1) = static_cast<float>(c_val(1)); // x
+            CCM(i,j,2) = static_cast<float>(c_val(2)); // z
             // Compute the Jacobians
             // Vector3real dCdx;
             // Vector3real dCdy;
@@ -967,14 +967,14 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             Eigen::VectorXd dCdy = autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F);
 
             // C_x = dCdx
-            C_x(i,j,0) = dCdx(0);
-            C_x(i,j,1) = dCdx(1);
-            C_x(i,j,2) = dCdx(2);
+            C_x(i,j,0) = dCdx(0); // y
+            C_x(i,j,1) = dCdx(1); // x
+            C_x(i,j,2) = dCdx(2); // z
 
             // C_y = -dCdy
-            C_y(i,j,0) = -dCdy(0);
-            C_y(i,j,1) = -dCdy(1);
-            C_y(i,j,2) = -dCdy(2);
+            C_y(i,j,0) = -dCdy(0); // y
+            C_y(i,j,1) = -dCdy(1); // x
+            C_y(i,j,2) = -dCdy(2); // z
 
 //            std::cout << "CCM (i: " << i << "), (j: " << j << "):" << CCM << std::endl;
 //            std::cout << "C_x (i: " << i << "), (j: " << j << "):" << C_x << std::endl;
@@ -997,18 +997,18 @@ void crossProduct3x3(const Eigen::Tensor<float,3,Eigen::RowMajor>& A, const Eige
     // Use Eigen's tensor operations to compute the cross product
     // x is the second value in a vector as it corresponds to columns (left right coordinate)
     // y is the first value in a vector as it corresponds to rows (up down coordinate)
-    C.chip(0, 2) = A.chip(2, 2) * B.chip(1, 2) - A.chip(1, 2) * B.chip(2, 2);
-    C.chip(1, 2) = A.chip(0, 2) * B.chip(2, 2) - A.chip(2, 2) * B.chip(0, 2);
-    C.chip(2, 2) = A.chip(1, 2) * B.chip(0, 2) - A.chip(0, 2) * B.chip(1, 2);
+    C.chip(0, 2) = A.chip(2, 2) * B.chip(1, 2) - A.chip(1, 2) * B.chip(2, 2);  // y
+    C.chip(1, 2) = A.chip(0, 2) * B.chip(2, 2) - A.chip(2, 2) * B.chip(0, 2);  // x
+    C.chip(2, 2) = A.chip(1, 2) * B.chip(0, 2) - A.chip(0, 2) * B.chip(1, 2);  // z
 }
 
 void crossProduct1x3(const Eigen::Tensor<float,1>& A, const Eigen::Tensor<float,3,Eigen::RowMajor>& B, Eigen::Tensor<float,3,Eigen::RowMajor>& C){
     // Use Eigen's tensor operations to compute the cross product
     for (int i = 0; i < B.dimension(0); ++i) {
         for (int j = 0; j < B.dimension(1); ++j) {
-            C(i, j, 0) = A(2) * B(i, j, 1) - A(1) * B(i, j, 2);
-            C(i, j, 1) = A(0) * B(i, j, 2) - A(2) * B(i, j, 0);
-            C(i, j, 2) = A(1) * B(i, j, 0) - A(0) * B(i, j, 1);
+            C(i, j, 0) = A(2) * B(i, j, 1) - A(1) * B(i, j, 2);  // y
+            C(i, j, 1) = A(0) * B(i, j, 2) - A(2) * B(i, j, 0);  // x
+            C(i, j, 2) = A(1) * B(i, j, 0) - A(0) * B(i, j, 1);  // z
         }
     }
 }
@@ -1018,9 +1018,9 @@ void crossProduct3x3_loop(const Eigen::Tensor<float,3,Eigen::RowMajor>& A, const
     assert(A.dimensions() == B.dimensions() && "Tensors A and B must have the same shape");
     for (int i = 0; i < A.dimension(0); ++i) {
         for (int j = 0; j < A.dimension(1); ++j) {
-            C(i, j, 0) = A(i, j, 2) * B(i, j, 1) - A(i, j, 1) * B(i, j, 1);
-            C(i, j, 1) = A(i, j, 0) * B(i, j, 2) - A(i, j, 2) * B(i, j, 2);
-            C(i, j, 2) = A(i, j, 1) * B(i, j, 0) - A(i, j, 0) * B(i, j, 0);
+            C(i, j, 0) = A(i, j, 2) * B(i, j, 1) - A(i, j, 1) * B(i, j, 2);  // y
+            C(i, j, 1) = A(i, j, 0) * B(i, j, 2) - A(i, j, 2) * B(i, j, 0);  // x
+            C(i, j, 2) = A(i, j, 1) * B(i, j, 0) - A(i, j, 0) * B(i, j, 1);  // z
         }
     }
 }
@@ -1090,7 +1090,7 @@ void m32(const Tensor<float,3,Eigen::RowMajor> &In, const Tensor<float,3,Eigen::
     sign = dot.unaryExpr(std::ptr_fun(sign_func));
     vector_distance(In, C_y, distance1);
     vector_distance(C_x, C_y, distance2);
-    Out.chip(0,2) = sign * distance1/distance2;
+    Out.chip(1,2) = sign * distance1/distance2;
 
 //    std::cout << "C1 " << C1 << std::endl;
 //    std::cout << "C2 " << C2 << std::endl;
@@ -1106,7 +1106,7 @@ void m32(const Tensor<float,3,Eigen::RowMajor> &In, const Tensor<float,3,Eigen::
     sign = dot.unaryExpr(std::ptr_fun(sign_func));
     vector_distance(In, C_x, distance1);
     vector_distance(C_y, C_x, distance2);
-    Out.chip(1,2) = sign * distance1/distance2;
+    Out.chip(0,2) = sign * distance1/distance2;
 
 //    std::cout << "C1 " << C1 << std::endl;
 //    std::cout << "C2 " << C2 << std::endl;
@@ -1121,9 +1121,9 @@ void m23(const Tensor<float,3,Eigen::RowMajor>& In, const Tensor<float,3,Eigen::
     const auto& dimensions = Cx.dimensions();
     for (int i = 0; i < dimensions[0]; i++){
         for (int j = 0; j < dimensions[1]; j++){
-            Out(i,j,0) = In(i,j,0) * Cx(i,j,0) + In(i,j,1) * Cy(i,j,0);
-            Out(i,j,1) = In(i,j,0) * Cx(i,j,1) + In(i,j,1) * Cy(i,j,1);
-            Out(i,j,2) = In(i,j,0) * Cx(i,j,2) + In(i,j,1) * Cy(i,j,2);
+            Out(i,j,0) = In(i,j,1) * Cx(i,j,0) + In(i,j,0) * Cy(i,j,0);
+            Out(i,j,1) = In(i,j,1) * Cx(i,j,1) + In(i,j,0) * Cy(i,j,1);
+            Out(i,j,2) = In(i,j,1) * Cx(i,j,2) + In(i,j,0) * Cy(i,j,2);
         }
     }
 }
