@@ -97,12 +97,12 @@ Eigen::Tensor<float,3,Eigen::RowMajor> computeGradient(const Eigen::MatrixXfRowM
         // Compute gradient along columns (down-up, y-direction)
         for (int j = 0; j < cols; ++j) {
             for (int i = 1; i < rows - 1; ++i) {
-                gradients(i, j, 0) = (data(i + 1, j) - data(i - 1, j)) / 2.0;
+                gradients(i, j, 0) = (data(i - 1, j) - data(i + 1, j)) / 2.0;
             }
 //            gradients(0, j, 1) = data(1, j) - data(0, j); // Forward difference for the first row
 //            gradients(rows - 1, j, 1) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
-            gradients(0, j, 0) = (data(1, j) - data(0,j)) / 2.0; // Central difference with replicate border
-            gradients(rows - 1, j, 0) = (data(rows-1, j) - data(rows - 2, j)) / 2.0; // Central difference with replicate border
+            gradients(0, j, 0) = (data(0, j) - data(1,j)) / 2.0; // Central difference with replicate border
+            gradients(rows - 1, j, 0) = (data(rows - 2, j) - data(rows - 1, j)) / 2.0; // Central difference with replicate border
         }
         // Compute gradient along rows (left-right, x-direction)
         for (int i = 0; i < rows; ++i) {
