@@ -2119,17 +2119,19 @@ int main() {
     else{
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "012356, eps=1e-8, gamma=255, set F zero every iter, GI=0,8";
+        std::string results_name = "0123456, weightFR=0,2 academic rotation, ts=0,05";
         std::string folder_name = results_name + " " + std::ctime(&time);
-        std::string resource_name = "academic_checker";
+        std::string resource_name = "academic_rotation";
         std::string calib_path = "../res/" + resource_name + "/calib.txt";
         std::string event_path = "../res/" + resource_name + "/events.txt";
         std::string settings_path = "../res/" + resource_name + "/settings.txt";
 
         float start_time_events = 0.0; // in s
-        float end_time_events = 0.049; // in s
+        float end_time_events = 2.0; // in s
         float time_bin_size_in_s = 0.05; // in s
-        int iterations = 10;
+        int iterations = 1500;
+        float imageBase = 0.0;
+        float memoryWeight = 0.99;
 
         std::vector<float> settings;
         read_single_line_txt(settings_path, settings);
@@ -2142,7 +2144,7 @@ int main() {
 
         std::unordered_map<std::string,float> weights;
         weights["weight_FG"] = 0.2; // 0
-        weights["weight_FR"] = 0.8; // 1
+        weights["weight_FR"] = 0.2; // 1
         weights["weight_GF"] = 0.2; // 2
         weights["weight_GI"] = 0.2; // 3
         weights["weight_IG"] = 0.2; // 4
@@ -2150,17 +2152,18 @@ int main() {
         weights["weight_RF"] = 0.8; // 6
         weights["lr"] = 1.0;
         weights["time_step"] = time_bin_size_in_s;
-        weights["event_factor"] = 10.0;
-        weights["eps"] = 0.1;
-        weights["gamma"] = 11;
-        std::vector<int> permutation {0,2,3,4,1,5,6}; // Which update steps to take
+        weights["event_factor"] = 1.0;
+        weights["eps"] = 0.00001;
+        weights["gamma"] = 255;
+        std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
         auto rng = std::default_random_engine {};
 
         //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
         Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
+//        F.setRandom();
         F.setZero();
-//        F.setZero();
+//        F.chip(0,2).setConstant(1);
 //        F.chip(1,2).setConstant(1);
         Tensor<float,3,Eigen::RowMajor> G(height, width, 2);
         G.setRandom();
@@ -2180,11 +2183,11 @@ int main() {
         Tensor<float,1> R(3);
         Tensor<float,1> R2(3);
         Tensor<float,1> R3(3);
-        R.setRandom(); // between 0 and 1
-        R2.setConstant(2);
-        R3.setConstant(1);
-        R = R*R2 - R3; // between -1 and 1
-//        R.setValues({0.1, 0.0, 0.0});
+//        R.setRandom(); // between 0 and 1
+//        R2.setConstant(2);
+//        R3.setConstant(1);
+//        R = R*R2 - R3; // between -1 and 1
+        R.setValues({0.0,0.0,0.0});
 
         //##################################################################################################################
         // Create results_folder
@@ -2215,7 +2218,7 @@ int main() {
         size_t frame_count = binned_events.size();
         std::vector<Tensor<float,2,Eigen::RowMajor>> frames(frame_count);
         create_frames(binned_events, frames, height, width);
-        std::cout << "Created frames out of events" << std::endl;
+        std::cout << "Created frames " << frame_count << " out of " << event_data.size() << " events" << std::endl;
 
         //##################################################################################################################
         // Camera calibration matrix (C/CCM) and dCdx/dCdy
@@ -2236,13 +2239,14 @@ int main() {
 
         //##################################################################################################################
         // Memory Image for I to remember previous image
+
         Tensor<float,2,Eigen::RowMajor> MI(height, width);
-        MI.setConstant(0.0);
+        MI.setConstant(imageBase);
 
         Tensor<float,2,Eigen::RowMajor> decayBase(height, width);
-        decayBase.setConstant(0.0);
+        decayBase.setConstant(imageBase);
 
-        float memoryWeight = 0.99;
+
 
 
 //        Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(height, width, 3);
@@ -2271,6 +2275,10 @@ int main() {
         int counter = 0;
         for (Tensor<float,2,Eigen::RowMajor> V : frames){
 //            std::cout << V << std::endl;
+
+            F.setZero();
+
+
             writeToFile(V, folder_path / "V.txt");
             writeToFile(I, folder_path / "I.txt");
             writeToFile(delta_I, folder_path / "I_gradient.txt");
@@ -2291,8 +2299,6 @@ int main() {
                     }
                 }
             }
-
-            F.setZero();
 
             for (int iter = 0; iter < iterations; ++iter){
 //                std::shuffle(std::begin(permutation), std::end(permutation), rng);
