@@ -1955,7 +1955,7 @@ int test(){
             Eigen::Tensor<float,3,Eigen::RowMajor> C_comp(2,2,3);
             A.setValues({1,2,3});
             B.setValues({{{0,1,2},{0,1,2}},{{0,1,2},{0,1,2}}});
-            C_comp.setValues({{{1,-2,1},{1,-2,1}},{{1,-2,1},{1,-2,1}}});
+            C_comp.setValues({{{-1,2,-1},{-1,2,-1}},{{-1,2,-1},{-1,2,-1}}});
             crossProduct1x3(A, B, C);
             if (isApprox(C_comp, C)){
                 std::cout << "HELPER FUNCTION CROSSPRODUCT1x3 CORRECT" << std::endl;
