@@ -1705,10 +1705,12 @@ int test(){
         }
         //##################################################################################################################
         // gradient I
-        Tensor<float,2,Eigen::RowMajor> delta_I_comparison(n,m);
+        Tensor<float,2,Eigen::RowMajor> delta_I_x_comparison(3,3);
+        Tensor<float,2,Eigen::RowMajor> delta_I_y_comparison(3,3);
 
         I.setValues({{0,1,3}, {1,3,6}, {3,6,10}});
-        delta_I_comparison.setValues({{1,2},{2,3}});
+        delta_I_x_comparison.setValues({{0.5,1.5,1},{1,2.5,1.5},{1.5,3.5,2}});
+        delta_I_y_comparison.setValues({{0.5,1,1.5},{1.5,2.5,3.5},{1,1.5,2}});
         G.chip(1,2).setConstant(1.0);
         Eigen::array<Eigen::Index, 2> dimensions = I.dimensions();
         Eigen::Tensor<float,2,Eigen::RowMajor> delta_I_x(dimensions[0], dimensions[1]);
@@ -1717,9 +1719,9 @@ int test(){
 //        delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle); // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
 //        delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
         delta_I = computeGradient(Tensor2Matrix(I));
-        delta_I_x = delta_I.chip(0,2);
-        delta_I_y = delta_I.chip(1,2);
-        if (isApprox(delta_I_comparison, delta_I_x) and isApprox(delta_I_comparison, delta_I_y)){
+        delta_I_y = delta_I.chip(0,2);
+        delta_I_x = delta_I.chip(1,2);
+        if (isApprox(delta_I_x_comparison, delta_I_x) and isApprox(delta_I_y_comparison, delta_I_y)){
             std::cout << "I GRADIENT FUNCTION CORRECT" << std::endl;
         }else{
             std::cout << "I GRADIENT FUNCTION FALSE" << std::endl;
@@ -1728,14 +1730,15 @@ int test(){
             std::cout << "I gradient y after update" << std::endl;
             std::cout << delta_I_y << std::endl;
             std::cout << "I gradient should be" << std::endl;
-            std::cout << delta_I_comparison << std::endl;
+            std::cout << delta_I_x_comparison << std::endl;
+            std::cout << delta_I_y_comparison << std::endl;
         }
 
         //##################################################################################################################
         // Update I from G
         Tensor<float,2,Eigen::RowMajor> I_comparison(n+1,m+1);
-        delta_I.chip(0,2) = delta_I_comparison;
-        delta_I.chip(1,2) = delta_I_comparison;
+        delta_I.chip(0,2) = delta_I_y_comparison;
+        delta_I.chip(1,2) = delta_I_x_comparison;
         I_comparison.setValues({{1,4,3},{3,5,6},{3,6,10}});
         update_IG(I, delta_I, G, 1.0);
         if (isApprox(I_comparison, I)){
