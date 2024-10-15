@@ -472,7 +472,7 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
 Tensor<float,3,Eigen::RowMajor> create_outward_vector_field(int grid_size) {
     // Create a 2D grid of points using linspace equivalent
     Eigen::VectorXf x = Eigen::VectorXf::LinSpaced(grid_size, -1.0, 1.0);
-    Eigen::VectorXf y = Eigen::VectorXf::LinSpaced(grid_size, -1.0, 1.0);
+    Eigen::VectorXf y = Eigen::VectorXf::LinSpaced(grid_size, 1.0, -1.0);
 
     // Initialize matrices for meshgrid-like behavior (xv, yv)
     Eigen::MatrixXfRowMajor xv(grid_size, grid_size);
