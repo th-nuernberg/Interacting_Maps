@@ -13,6 +13,7 @@
 
 #define PI 3.14159265
 #define EXECUTE_TEST 0
+#define EXECUTE_FRAMEBASED 1
 #define SMALL_MATRIX_METHOD 1
 
 // Define DEBUG_LOG macro that logs with function name in debug mode
@@ -2210,83 +2211,127 @@ int main() {
     if (EXECUTE_TEST){
         test();
     }
-    else{
+    else if (EXECUTE_FRAMEBASED){
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "0123456, weightFR=0,2 academic rotation, ts=0,05";
+        std::string results_name = "012356, ts=0,001, memoryWeight=0,9, it=10000";
         std::string folder_name = results_name + " " + std::ctime(&time);
-        std::string resource_name = "academic_rotation";
+        std::string resource_name = "shapes_rotation";
         std::string calib_path = "../res/" + resource_name + "/calib.txt";
         std::string event_path = "../res/" + resource_name + "/events.txt";
         std::string settings_path = "../res/" + resource_name + "/settings.txt";
 
-        float start_time_events = 0.0; // in s
-        float end_time_events = 2.0; // in s
-        float time_bin_size_in_s = 0.05; // in s
-        int iterations = 1500;
-        float imageBase = 0.0;
-        float memoryWeight = 0.99;
+//        float start_time_events = 0.0; // in s
+//        float end_time_events = 2.0; // in s
+//        float time_bin_size_in_s = 0.05; // in s
+//        int iterations = 1500;
+//        float imageBase = 0.0;
+//        float memoryWeight = 0.2;
 
         std::vector<float> settings;
         read_single_line_txt(settings_path, settings);
 
-//        int height = 180; // in pixels
-//        int width = 240; // in pixels
         int height = settings[0]; // in pixels
         int width = settings[1]; // in pixels
         int N = height*width;
 
         std::unordered_map<std::string,float> weights;
+        weights["start_time"] = 16.0;
+        weights["end_time"] = 17.0;
+        weights["iterations"] = 10000;
+        weights["imageBase"] = 128;
+        weights["memoryWeight"] = 0.9;
         weights["weight_FG"] = 0.2; // 0
-        weights["weight_FR"] = 0.2; // 1
+        weights["weight_FR"] = 0.8; // 1
         weights["weight_GF"] = 0.2; // 2
-        weights["weight_GI"] = 0.2; // 3
+        weights["weight_GI"] = 0.8; // 3
         weights["weight_IG"] = 0.2; // 4
-        weights["weight_IV"] = 0.5; // 5
+        weights["weight_IV"] = 0.8; // 5
         weights["weight_RF"] = 0.8; // 6
         weights["lr"] = 1.0;
-        weights["time_step"] = time_bin_size_in_s;
+        weights["time_step"] = 0.001;
         weights["event_factor"] = 1.0;
-        weights["eps"] = 0.00001;
-        weights["gamma"] = 255;
-        std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
+        weights["eps"] = 0.000001;
+        weights["gamma"] = 5;
+        std::vector<int> permutation {0,1,2,3,5,6}; // Which update steps to take
         auto rng = std::default_random_engine {};
 
         //##################################################################################################################
+        // Video settings
+        float slowdown = 8;
+        float fps = 1/weights["time_step"]; // True speed: time_step=0.05 -> fps = 20
+        fps = fps/slowdown;
+
+        //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
+
+        std::unordered_map<std::string,char> inits;
+        inits["FInit"] = 'r';
+        inits["GInit"] = 'r';
+        inits["RInit"] = 'r';
+        inits["IInit"] = 'r';
         Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
-//        F.setRandom();
-        F.setZero();
-//        F.chip(0,2).setConstant(1);
-//        F.chip(1,2).setConstant(1);
+        Tensor<float,3,Eigen::RowMajor> F_compare(height, width, 2);
+        if (inits["FInit"] == 'z'){
+            F.setZero();
+//            F.chip(0,2).setConstant(1);
+//            F.chip(1,2).setConstant(0);
+        }
+        else if (inits["FInit"] == 'r'){
+            F.setRandom();
+        }
+        else{
+            F.setZero();
+            F.chip(0,2).setConstant(0);
+            F.chip(1,2).setConstant(1);
+        }
+        F_compare = F;
+
         Tensor<float,3,Eigen::RowMajor> G(height, width, 2);
-        G.setRandom();
+        if (inits["GInit"] == 'z'){
+            G.setZero();
+        }
+        else if (inits["GInit"] == 'r'){
+            G.setRandom();
+        }
         Tensor<float,2,Eigen::RowMajor> I(height, width);
-        Tensor<float,2,Eigen::RowMajor> TmpTensor2(height, width);
-        I.setRandom();
-//        I = I * TmpTensor2.setConstant(255.0);
-//        Tensor<float,1,Eigen::RowMajor> row(width+1);
-//        Tensor<float,1,Eigen::RowMajor> col(height+1);
-//        row.setZero();
-//        col.setZero();
-//        I.chip(height,0) = row;
-//        I.chip(width,1) = col;
+        if (inits["IInit"] == 'z'){
+            I.setZero();
+        }
+        else if (inits["IInit"] == 'r'){
+            I.setRandom();
+        }
         Tensor<float,3,Eigen::RowMajor> delta_I(height, width,2);
         delta_I = computeGradient(Tensor2Matrix(I));
         DEBUG_LOG(delta_I);
         Tensor<float,1> R(3);
-        Tensor<float,1> R2(3);
-        Tensor<float,1> R3(3);
-//        R.setRandom(); // between 0 and 1
-//        R2.setConstant(2);
-//        R3.setConstant(1);
-//        R = R*R2 - R3; // between -1 and 1
-        R.setValues({0.0,0.0,0.0});
+        if (inits["RInit"] == 'z'){
+            R.setZero();
+        }
+        else if (inits["RInit"] == 'r'){
+            Tensor<float,1> R2(3);
+            Tensor<float,1> R3(3);
+            R.setRandom(); // between 0 and 1
+            R2.setConstant(2);
+            R3.setConstant(1);
+            R = R*R2 - R3; // between -1 and 1
+        }
+        else{
+            R.setValues({0.0, 1.0, 0.0});
+        }
 
         //##################################################################################################################
         // Create results_folder
         fs::path folder_path = create_folder_and_update_gitignore(folder_name);
         std::cout << "Created Folder " << folder_name << std::endl;
+        fs::path parameters_path = folder_path / "parameters.txt";
+        writeMapToFile(parameters_path, weights);
+        fs::path inits_path = folder_path / "inits.txt";
+        writeMapToFile(inits_path, inits);
+
+        //##################################################################################################################
+        // Write parameters to file
+
 
         //##################################################################################################################
         // Read calibration file
@@ -2298,13 +2343,13 @@ int main() {
         //##################################################################################################################
         // Read events file
         std::vector<Event> event_data;
-        read_events(event_path, event_data, start_time_events, end_time_events, weights["event_factor"]);
+        read_events(event_path, event_data, weights["start_time"], weights["end_time"], weights["event_factor"]);
         std::cout << "Readout events at " << event_path << std::endl;
 
         //##################################################################################################################
         // Bin events
         std::vector<std::vector<Event>> binned_events;
-        binned_events = bin_events(event_data, time_bin_size_in_s);
+        binned_events = bin_events(event_data, weights["time_step"]);
         std::cout << "Binned events" << std::endl;
 
         //##################################################################################################################
@@ -2335,13 +2380,10 @@ int main() {
         // Memory Image for I to remember previous image
 
         Tensor<float,2,Eigen::RowMajor> MI(height, width);
-        MI.setConstant(imageBase);
+        MI.setConstant(weights["imageBase"]);
 
         Tensor<float,2,Eigen::RowMajor> decayBase(height, width);
-        decayBase.setConstant(imageBase);
-
-
-
+        decayBase.setConstant(weights["imageBase"]);
 
 //        Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(height, width, 3);
 //        Tensor<float, 2, Eigen::RowMajor> directions_tensor_2(height*width, 3);
@@ -2366,12 +2408,15 @@ int main() {
         fs::path profiler_path = folder_path / profiler_name;
         Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
         std::cout << "Setup Profiler" << std::endl;
+        std::vector<std::string> imagePaths = {};
+        std::string outputVideoFile = folder_path/ "video.avi";
+        std::string codec = "MJPG";
+
         int counter = 0;
         for (Tensor<float,2,Eigen::RowMajor> V : frames){
 //            std::cout << V << std::endl;
 
-            F.setZero();
-
+//            F.setZero();
 
             writeToFile(V, folder_path / "V.txt");
             writeToFile(I, folder_path / "I.txt");
@@ -2380,7 +2425,7 @@ int main() {
             writeToFile(G, folder_path / "G.txt");
 
             // For each new frame slowly decay the image back to the base gray image
-            MI = (1-memoryWeight)*decayBase + memoryWeight*MI;
+            MI = (1-weights["memoryWeight"])*decayBase + weights["memoryWeight"]*MI;
             MI += V;
             // Image can't have negative intensity Values
             for (int i = 0; i<height; i++){
@@ -2394,17 +2439,23 @@ int main() {
                 }
             }
 
-            for (int iter = 0; iter < iterations; ++iter){
+            for (int iter = 0; iter < int(weights["iterations"]); ++iter){
 //                std::shuffle(std::begin(permutation), std::end(permutation), rng);
                 interacting_maps_step(V, MI, I, delta_I,F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, N);
                 if (iter%100==0){
-                    std::cout << iter << "/" << iterations << "\t";
+                    float F_diff = F_check(F, F_compare, 0.1);
+                    std::cout << iter << "/" << int(weights["iterations"]) << "\t";
                     std::cout << "-V=FG?: " << VFG_check(V, F, G, 0.1) << std::endl;
+                    std::cout << "F vs old: " << F_diff << std::endl;
                     writeToFile(V, folder_path / "V2.txt");
                     writeToFile(I, folder_path / "I2.txt");
                     writeToFile(delta_I, folder_path / "I_gradient2.txt");
                     writeToFile(F, folder_path / "F2.txt");
                     writeToFile(G, folder_path / "G2.txt");
+                    if (F_diff < 1.0){
+                        break;
+                    }
+                    F_compare = F;
                 }
 //                if (iter%2270==0){
 //                    // std::cout << "Here!" << std::endl;
@@ -2430,11 +2481,56 @@ int main() {
             std::string image_name = "VIGF_" + std::to_string(counter) + ".png";
             fs::path image_path = folder_path / image_name;
             create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
+            imagePaths.push_back(image_path);
+            // Create video from images
+            if (!createVideoFromImages(imagePaths, outputVideoFile, codec, fps)) {
+                std::cerr << "Failed to create video." << std::endl;
+            }
             image_name = "VvsFG" + std::to_string(counter) + ".png";
             image_path = folder_path / image_name;
             plot_VvsFG(Tensor2Matrix(V), F, G, image_path, true);
         }
         Instrumentor::Get().EndSession();
+    }
+    else{
+        auto clock_time = std::chrono::system_clock::now();
+        std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
+        std::string results_name = "0123456, weightFR=0,8 academic rotation, ts=0,05";
+        std::string folder_name = results_name + " " + std::ctime(&time);
+        std::string resource_name = "academic_rotation";
+        std::string calib_path = "../res/" + resource_name + "/calib.txt";
+        std::string event_path = "../res/" + resource_name + "/events.txt";
+        std::string settings_path = "../res/" + resource_name + "/settings.txt";
+
+        float start_time_events = 0.0; // in s
+        float end_time_events = 2.0; // in s
+        float time_bin_size_in_s = 0.05; // in s
+        int iterations = 1500;
+        float imageBase = 0.0;
+        float memoryWeight = 0.99;
+
+        std::vector<float> settings;
+        read_single_line_txt(settings_path, settings);
+
+        int height = settings[0]; // in pixels
+        int width = settings[1]; // in pixels
+        int N = height*width;
+
+        std::unordered_map<std::string,float> weights;
+        weights["weight_FG"] = 0.2; // 0
+        weights["weight_FR"] = 0.8; // 1
+        weights["weight_GF"] = 0.2; // 2
+        weights["weight_GI"] = 0.2; // 3
+        weights["weight_IG"] = 0.2; // 4
+        weights["weight_IV"] = 0.5; // 5
+        weights["weight_RF"] = 0.8; // 6
+        weights["lr"] = 1.0;
+        weights["time_step"] = time_bin_size_in_s;
+        weights["event_factor"] = 1.0;
+        weights["eps"] = 0.00001;
+        weights["gamma"] = 255;
+        std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
+        auto rng = std::default_random_engine {};
     }
 
 }
