@@ -54,6 +54,29 @@ std::string Event::toString() const {
     return ss.str();
 }
 
+// Function to write an unordered_map to a file
+template <typename KeyType, typename ValueType>
+void writeMapToFile(const std::string& filePath, const std::unordered_map<KeyType, ValueType>& myMap) {
+    // Open the file in write mode
+    std::ofstream outFile(filePath);
+
+    // Check if the file is opened successfully
+    if (!outFile) {
+        std::cerr << "Error: Could not open the file " << filePath << " for writing!" << std::endl;
+        return;
+    }
+
+    // Iterate through the unordered_map and write key-value pairs to the file
+    for (const auto& pair : myMap) {
+        outFile << pair.first << " " << pair.second << "\n";  // Key and value separated by a space
+    }
+
+    // Close the file after writing
+    outFile.close();
+
+    std::cout << "Map successfully written to " << filePath << std::endl;
+}
+
 std::vector<std::string> split_string(std::stringstream sstream, char delimiter){
     std::string segment;
     std::vector<std::string> seglist;
@@ -66,118 +89,28 @@ std::vector<std::string> split_string(std::stringstream sstream, char delimiter)
     return seglist;
 }
 
-// GRADIENT CALCUATIONS
-
-Eigen::VectorXf gradient(const Eigen::VectorXf& x) {
-    int n = x.size();
-    Eigen::VectorXf grad(n);
-
-    // Central differences in the interior
-    for (int i = 1; i < n - 1; ++i) {
-        grad(i) = (x(i + 1) - x(i - 1)) / 2.0;
-    }
-    
-    // Forward difference at the start
-    grad(0) = x(1) - x(0);
-    
-    // Backward difference at the end
-    grad(n - 1) = x(n - 1) - x(n - 2);
-
-    return grad;
-}
-
-Eigen::Tensor<float,3,Eigen::RowMajor> computeGradient(const Eigen::MatrixXfRowMajor & data, const std::vector<int> direction={0,1}) {
-    int rows = data.rows();
-    int cols = data.cols();
-
-//    DEBUG_LOG("data: " << std::endl << data);
-    // Initialize the tensor: 3 dimensions (rows, cols, gradient direction)
-    if (direction.size() == 2){
-        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 2);
-        // Compute gradient along columns (down-up, y-direction)
-        for (int j = 0; j < cols; ++j) {
-            for (int i = 1; i < rows - 1; ++i) {
-                gradients(i, j, 0) = (data(i - 1, j) - data(i + 1, j)) / 2.0;
-            }
-//            gradients(0, j, 1) = data(1, j) - data(0, j); // Forward difference for the first row
-//            gradients(rows - 1, j, 1) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
-            gradients(0, j, 0) = (data(0, j) - data(1,j)) / 2.0; // Central difference with replicate border
-            gradients(rows - 1, j, 0) = (data(rows - 2, j) - data(rows - 1, j)) / 2.0; // Central difference with replicate border
-        }
-        // Compute gradient along rows (left-right, x-direction)
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 1; j < cols - 1; ++j) {
-                gradients(i, j, 1) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
-            }
-//            gradients(i, 0, 0) = data(i, 1) - data(i, 0); // Forward difference for the first column
-//            gradients(i, cols - 1, 0) = data(i, cols - 1) - data(i, cols - 2); // Backward difference for the last column
-            gradients(i, 0, 1) = (data(i, 1) - data(i,0)) / 2.0; // Central difference with replicate border
-            gradients(i, cols - 1, 1) = (data(i, cols - 1) - data(i, cols - 2)) / 2.0; // Central difference with replicate border
-        }
-        return gradients;
-    }
-    else if (direction[0] == 1){
-        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 1);
-        // Compute gradient along rows (x-direction)
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 1; j < cols - 1; ++j) {
-                gradients(i, j, 0) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
-            }
-//            gradients(i, 0, 0) = data(i, 1) - data(i, 0); // Forward difference for the first column
-//            gradients(i, cols - 1, 0) = data(i, cols - 1) - data(i, cols - 2); // Backward difference for the last colums
-            gradients(i, 0, 0) = (data(i, 1) - data(i,0)) / 2.0; // Central difference with replicate border
-            gradients(i, cols - 1, 0) = (data(i, cols - 1) - data(i, cols - 2)) / 2.0; // Central difference with replicate border
-        }
-        return gradients;
-    }
-    else if (direction[0] == 0) {
-        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 1);
-        // Compute gradient along columns (y-direction)
-        for (int j = 0; j < cols; ++j) {
-            for (int i = 1; i < rows - 1; ++i) {
-                gradients(i, j, 0) = (data(i + 1, j) - data(i - 1, j)) / 2.0;
-            }
-//            gradients(0, j, 0) = data(1, j) - data(0, j); // Forward difference for the first row
-//            gradients(rows - 1, j, 0) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
-            gradients(0, j, 0) = (data(1, j) - data(0,j)) / 2.0; // Central difference with replicate border
-            gradients(rows - 1, j, 0) = (data(rows-1, j) - data(rows - 2, j)) / 2.0; // Central difference with replicate border
-        }
-//        DEBUG_LOG(gradients(0, 0, 0));
-        return gradients;
-    }
-    else{
-        throw std::invalid_argument("invalid directions");
+void writeToFile(const Tensor<float,3,Eigen::RowMajor>& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
     }
 }
 
-Eigen::MatrixXfRowMajor gradient_y(const Eigen::MatrixXfRowMajor& mat) {
-    int rows = mat.rows();
-    int cols = mat.cols();
-    Eigen::MatrixXfRowMajor grad_x(rows-1, cols-1);
-//    // Compute central differences for interior points
-//    grad_x.block(1, 0, rows - 2, cols) = (mat.block(2, 0, rows - 2, cols) - mat.block(0, 0, rows - 2, cols)) / 2.0;
-//    // Compute forward difference for the first row
-//    grad_x.row(0) = mat.row(1) - mat.row(0);
-//    // Compute backward difference for the last row
-//    grad_x.row(rows - 1) = mat.row(rows - 1) - mat.row(rows - 2);
-
-//    grad_x.block(0,0,1,cols-1) = mat.block(1,0,1,cols-1) - mat.block(0,0,1,cols-1);
-    grad_x = mat.block(1,0,rows-1,cols-1) - mat.block(0,0,rows-1,cols-1);
-    return grad_x;
+void writeToFile(const Tensor<float,2,Eigen::RowMajor>& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
 }
 
-Eigen::MatrixXfRowMajor gradient_x(const Eigen::MatrixXfRowMajor& mat) {
-    int rows = mat.rows();
-    int cols = mat.cols();
-    Eigen::MatrixXfRowMajor grad_y(rows-1, cols-1);
-//    // Compute central differences for interior points
-//    grad_y.block(0, 1, rows, cols - 2) = (mat.block(0, 2, rows, cols - 2) - mat.block(0, 0, rows, cols - 2)) / 2.0;
-//    // Compute forward difference for the first column
-//    grad_y.col(0) = mat.col(1) - mat.col(0);
-//    // Compute backward difference for the last column
-//    grad_y.col(cols - 1) = mat.col(cols - 1) - mat.col(cols - 2);
-    grad_y = mat.block(0,1,rows-1,cols-1) - mat.block(0,0,rows-1,cols-1);
-    return grad_y;
+void writeToFile(const Eigen::MatrixXfRowMajor& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
 }
 
 // TENSOR CASTING
@@ -280,30 +213,6 @@ cv::Mat convertTofloat(cv::Mat& mat) {
     mat.convertTo(mat, CV_32F, 1.0 / 255.0); // Scaling from [0, 255] to [0, 1]
 
     return mat;
-}
-
-void writeToFile(const Tensor<float,3,Eigen::RowMajor>& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
-}
-
-void writeToFile(const Tensor<float,2,Eigen::RowMajor>& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
-}
-
-void writeToFile(const Eigen::MatrixXfRowMajor& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
 }
 
 //TODO ensure Tensors are actually const
