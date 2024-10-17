@@ -1963,7 +1963,7 @@ int test(){
         Tensor3f Out2_comparison(1,1,2);
         // TAKE dCdx and dCdy from vector_distance test above
         In3.setValues({{{1,1,1}}});
-        Out2_comparison.setValues({{{(float)(1/std::sqrt(6)), (float)(std::sqrt(6)/std::sqrt(12))}}});
+        Out2_comparison.setValues({{{(float)(std::sqrt(6)/std::sqrt(12)), (float)(1/std::sqrt(6))}}});
         m32(In3, dCdx_small, dCdy_small, Out2);
         if (isApprox(Out2_comparison, Out2, 1e-6)){
             std::cout << "HELPER FUNCTION M32 CORRECT" << std::endl;
