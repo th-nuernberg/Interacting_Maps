@@ -228,6 +228,59 @@ bool isApprox(Tensor<float,2,Eigen::RowMajor>& t1, Tensor<float,2,Eigen::RowMajo
     return mt1.isApprox(mt2, precision);
 }
 
+// OPENCV
+
+// Function to create a video from a sequence of images
+bool createVideoFromImages(const std::vector<std::string>& imagePaths, const std::string& outputVideoFile,
+                           const std::string& codecStr, double fps) {
+    // Check if there are any images
+    if (imagePaths.empty()) {
+        std::cerr << "No images provided." << std::endl;
+        return false;
+    }
+
+    // Read the first image to determine the frame size
+    cv::Mat firstFrame = cv::imread(imagePaths[0]);
+    if (firstFrame.empty()) {
+        std::cerr << "Error: Could not load the first image." << std::endl;
+        return false;
+    }
+
+    // Define the codec using the fourcc code (e.g., "MJPG", "XVID", "MP4V")
+    int codec = cv::VideoWriter::fourcc(codecStr[0], codecStr[1], codecStr[2], codecStr[3]);
+    cv::Size frameSize(firstFrame.cols, firstFrame.rows);  // Frame size of the video
+
+    // Create VideoWriter object
+    cv::VideoWriter videoWriter(outputVideoFile, codec, fps, frameSize);
+    if (!videoWriter.isOpened()) {
+        std::cerr << "Error: Could not open video file for writing." << std::endl;
+        return false;
+    }
+
+    // Loop over all image paths and write them to the video
+    for (const auto& imagePath : imagePaths) {
+        cv::Mat frame = cv::imread(imagePath);
+        if (frame.empty()) {
+            std::cerr << "Warning: Could not load image " << imagePath << ", skipping." << std::endl;
+            continue; // Skip this frame if it can't be loaded
+        }
+
+        // Ensure the frame size is consistent
+        if (frame.size() != frameSize) {
+            std::cerr << "Error: Image " << imagePath << " has a different size than the first image." << std::endl;
+            return false;
+        }
+
+        // Write the frame to the video file
+        videoWriter.write(frame);
+    }
+
+    // Release the video writer
+    videoWriter.release();
+    std::cout << "Video saved successfully to " << outputVideoFile << std::endl;
+    return true;
+}
+
 Eigen::MatrixXfRowMajor undistort_frame(const Eigen::MatrixXfRowMajor& frame, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
     cv::Mat image = eigenToCvMat(frame);
     return cvMatToEigen(undistort_image(image, camera_matrix, distortion_parameters));
