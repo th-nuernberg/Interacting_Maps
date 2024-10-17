@@ -86,98 +86,59 @@ Eigen::VectorXf gradient(const Eigen::VectorXf& x) {
     return grad;
 }
 
-Eigen::Tensor<float,3,Eigen::RowMajor> computeGradient(const Eigen::MatrixXfRowMajor & data, const std::vector<int> direction={0,1}) {
+Eigen::Vector2f gradients computeGradient(const Eigen::MatrixXfRowMajor &data, const std::vector<int> direction={0,1}, int y, int x) {
     int rows = data.rows();
     int cols = data.cols();
-
-//    DEBUG_LOG("data: " << std::endl << data);
-    // Initialize the tensor: 3 dimensions (rows, cols, gradient direction)
+    assert(y<rows);
+    assert(x<cols);
     if (direction.size() == 2){
-        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 2);
+        Eigen::Vector2f gradients;
         // Compute gradient along columns (down-up, y-direction)
-        for (int j = 0; j < cols; ++j) {
-            for (int i = 1; i < rows - 1; ++i) {
-                gradients(i, j, 0) = (data(i - 1, j) - data(i + 1, j)) / 2.0;
-            }
-//            gradients(0, j, 1) = data(1, j) - data(0, j); // Forward difference for the first row
-//            gradients(rows - 1, j, 1) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
-            gradients(0, j, 0) = (data(0, j) - data(1,j)) / 2.0; // Central difference with replicate border
-            gradients(rows - 1, j, 0) = (data(rows - 2, j) - data(rows - 1, j)) / 2.0; // Central difference with replicate border
+
+        if (y==0) {
+            gradients(0) = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
+        }
+        else if (y==rows-1){
+            gradients(0) = (data(y - 2, x) - data(y - 1, x)) / 2.0; // Central difference with replicate border
+        }
+        else{
+            gradients(0) = (data(y - 1, x) - data(y + 1, x)) / 2.0;
         }
         // Compute gradient along rows (left-right, x-direction)
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 1; j < cols - 1; ++j) {
-                gradients(i, j, 1) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
-            }
-//            gradients(i, 0, 0) = data(i, 1) - data(i, 0); // Forward difference for the first column
-//            gradients(i, cols - 1, 0) = data(i, cols - 1) - data(i, cols - 2); // Backward difference for the last column
-            gradients(i, 0, 1) = (data(i, 1) - data(i,0)) / 2.0; // Central difference with replicate border
-            gradients(i, cols - 1, 1) = (data(i, cols - 1) - data(i, cols - 2)) / 2.0; // Central difference with replicate border
+        if (x==0){
+            gradients(1) = (data(y, x + 1) - data(y, x)) / 2.0; // Central difference with replicate border
         }
+        else if (x==cols-1) {
+            gradients(1) = (data(y, x - 1) - data(y, x - 2)) / 2.0; // Central difference with replicate border
+        }
+        else{
+            gradients(1) = (data(y, x + 1) - data(y, x - 1)) / 2.0;
         return gradients;
     }
     else if (direction[0] == 1){
-        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 1);
+        float gradients;
         // Compute gradient along rows (x-direction)
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 1; j < cols - 1; ++j) {
-                gradients(i, j, 0) = (data(i, j + 1) - data(i, j - 1)) / 2.0;
-            }
-//            gradients(i, 0, 0) = data(i, 1) - data(i, 0); // Forward difference for the first column
-//            gradients(i, cols - 1, 0) = data(i, cols - 1) - data(i, cols - 2); // Backward difference for the last colums
-            gradients(i, 0, 0) = (data(i, 1) - data(i,0)) / 2.0; // Central difference with replicate border
-            gradients(i, cols - 1, 0) = (data(i, cols - 1) - data(i, cols - 2)) / 2.0; // Central difference with replicate border
+        if(x==0){
+            gradients = (data(y, x + 1) - data(i,0)) / 2.0; // Central difference with replicate border
+        }else if(x=cols-1){
+            gradients = (data(y, x - 1) - data(i, x - 2)) / 2.0; // Central difference with replicate border
+        }else{
+            gradients = (data(y, x + 1) - data(i, j - 1)) / 2.0;
         }
         return gradients;
     }
-    else if (direction[0] == 0) {
-        Eigen::Tensor<float,3,Eigen::RowMajor> gradients(rows, cols, 1);
-        // Compute gradient along columns (y-direction)
-        for (int j = 0; j < cols; ++j) {
-            for (int i = 1; i < rows - 1; ++i) {
-                gradients(i, j, 0) = (data(i + 1, j) - data(i - 1, j)) / 2.0;
-            }
-//            gradients(0, j, 0) = data(1, j) - data(0, j); // Forward difference for the first row
-//            gradients(rows - 1, j, 0) = data(rows - 1, j) - data(rows - 2, j); // Backward difference for the last row
-            gradients(0, j, 0) = (data(1, j) - data(0,j)) / 2.0; // Central difference with replicate border
-            gradients(rows - 1, j, 0) = (data(rows-1, j) - data(rows - 2, j)) / 2.0; // Central difference with replicate border
+    else if (direction[0] == 0){
+        if (y==0) {
+            gradients = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
+        }else if (y==rows-1){
+            gradients = (data(y - 2, x) - data(y - 1, x)) / 2.0; // Central difference with replicate border
+        }else{
+            gradients = (data(y - 1, x) - data(y + 1, x)) / 2.0;
         }
-//        DEBUG_LOG(gradients(0, 0, 0));
-        return gradients;
     }
     else{
         throw std::invalid_argument("invalid directions");
     }
-}
-
-Eigen::MatrixXfRowMajor gradient_y(const Eigen::MatrixXfRowMajor& mat) {
-    int rows = mat.rows();
-    int cols = mat.cols();
-    Eigen::MatrixXfRowMajor grad_x(rows-1, cols-1);
-//    // Compute central differences for interior points
-//    grad_x.block(1, 0, rows - 2, cols) = (mat.block(2, 0, rows - 2, cols) - mat.block(0, 0, rows - 2, cols)) / 2.0;
-//    // Compute forward difference for the first row
-//    grad_x.row(0) = mat.row(1) - mat.row(0);
-//    // Compute backward difference for the last row
-//    grad_x.row(rows - 1) = mat.row(rows - 1) - mat.row(rows - 2);
-
-//    grad_x.block(0,0,1,cols-1) = mat.block(1,0,1,cols-1) - mat.block(0,0,1,cols-1);
-    grad_x = mat.block(1,0,rows-1,cols-1) - mat.block(0,0,rows-1,cols-1);
-    return grad_x;
-}
-
-Eigen::MatrixXfRowMajor gradient_x(const Eigen::MatrixXfRowMajor& mat) {
-    int rows = mat.rows();
-    int cols = mat.cols();
-    Eigen::MatrixXfRowMajor grad_y(rows-1, cols-1);
-//    // Compute central differences for interior points
-//    grad_y.block(0, 1, rows, cols - 2) = (mat.block(0, 2, rows, cols - 2) - mat.block(0, 0, rows, cols - 2)) / 2.0;
-//    // Compute forward difference for the first column
-//    grad_y.col(0) = mat.col(1) - mat.col(0);
-//    // Compute backward difference for the last column
-//    grad_y.col(cols - 1) = mat.col(cols - 1) - mat.col(cols - 2);
-    grad_y = mat.block(0,1,rows-1,cols-1) - mat.block(0,0,rows-1,cols-1);
-    return grad_y;
 }
 
 // TENSOR CASTING
@@ -1174,218 +1135,115 @@ void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::Row
     std::cout << "Time elapsed: " << elapsed.count() << " seconds" << std::endl;
 }
 
-void update_FG(Tensor<float,3,Eigen::RowMajor>& F, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& G, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
+void update_FG(Eigen::Vector2f& F, float V, Eigen::Vector2f& G, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_FG");
     PROFILE_FUNCTION();
-    const auto& dimensions = F.dimensions();
-    Tensor<float,3,Eigen::RowMajor> update_F(dimensions);
+    Eigen::Vector2f update_F;
     update_F.setZero();
-    for (int i = 0; i<dimensions[0]; i++) {
-        for (int j = 0; j < dimensions[1]; j++) {
-            float norm = std::abs((G(i, j, 0) * G(i, j, 0) + G(i, j, 1) * G(i, j, 1)));
-            if (norm != 0.0) {
-                update_F(i, j, 0) = F(i, j, 0) - ((G(i, j, 0) / norm) *
-                                                  (V(i, j) + (F(i, j, 0) * G(i, j, 0) + F(i, j, 1) * G(i, j, 1))));
-                update_F(i, j, 1) = F(i, j, 1) - ((G(i, j, 1) / norm) *
-                                                  (V(i, j) + (F(i, j, 0) * G(i, j, 0) + F(i, j, 1) * G(i, j, 1))));
-                F(i, j, 0) = (1 - weight_FG) * F(i, j, 0) + lr * weight_FG * update_F(i, j, 0);
-                F(i, j, 1) = (1 - weight_FG) * F(i, j, 1) + lr * weight_FG * update_F(i, j, 1);
-                if (F(i, j, 0) > gamma){
-                    F(i, j, 0) = gamma;
-                }
-                if (F(i, j, 1) > gamma){
-                    F(i, j, 1) = gamma;
-                }
-                if (F(i, j, 0) < -gamma){
-                    F(i, j, 0) = -gamma;
-                }
-                if (F(i, j, 1) < -gamma){
-                    F(i, j, 1) = -gamma;
-                }
-                if (std::abs(F(i,j,0)) < eps){
-                    F(i,j,0) = 0;
-                }
-                if (std::abs(F(i,j,1)) < eps){
-                    F(i,j,1) = 0;
-                }
-            }
+    float norm = std::abs((G(0) * G(0) + G(1) * G(1)));
+    if (norm != 0.0) {
+        update_F(0) = F(0) - ((G(0) / norm) * (V + (F(0) * G(0) + F(1) * G(1))));
+        update_F(1) = F(1) - ((G(1) / norm) * (V + (F(0) * G(0) + F(1) * G(1))));
+        F(0) = (1 - weight_FG) * F(0) + lr * weight_FG * update_F(0);
+        F(1) = (1 - weight_FG) * F(1) + lr * weight_FG * update_F(1);
+        if (F(0) > gamma){
+            F(0) = gamma;
+        }
+        if (F(1) > gamma){
+            F(1) = gamma;
+        }
+        if (F(0) < -gamma){
+            F(0) = -gamma;
+        }
+        if (F(1) < -gamma){
+            F(1) = -gamma;
+        }
+        if (std::abs(F(0)) < eps){
+            F(0) = 0;
+        }
+        if (std::abs(F(1)) < eps){
+            F(1) = 0;
         }
     }
 }
 
-void update_GF(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
+void update_GF(Eigen::Vector2f& G, float V, Eigen::Vector2f& F, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_GF");
     PROFILE_FUNCTION();
-    const auto& dimensions = G.dimensions();
-    Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
-    for (int i = 0; i<dimensions[0]; i++){
-        for (int j = 0; j<dimensions[1]; j++){
-            float norm = std::abs((F(i,j,0) * F(i,j,0) + F(i,j,1) * F(i,j,1)));
-            if (norm != 0.0) {
-                update_G(i, j, 0) = G(i, j, 0) - ((F(i, j, 0) / norm) *
-                                                  (V(i, j) + (G(i, j, 0) * F(i, j, 0) + G(i, j, 1) * F(i, j, 1))));
-                update_G(i, j, 1) = G(i, j, 1) - ((F(i, j, 1) / norm) *
-                                                  (V(i, j) + (G(i, j, 0) * F(i, j, 0) + G(i, j, 1) * F(i, j, 1))));
-                G(i, j, 0) = (1 - weight_GF) * G(i, j, 0) + lr * weight_GF * update_G(i, j, 0);
-                G(i, j, 1) = (1 - weight_GF) * G(i, j, 1) + lr * weight_GF * update_G(i, j, 1);
-                if (G(i, j, 0) > gamma){
-                    G(i, j, 0) = gamma;
-                }
-                if (G(i, j, 1) > gamma){
-                    G(i, j, 1) = gamma;
-                }
-                if (G(i, j, 0) < -gamma){
-                    G(i, j, 0) = -gamma;
-                }
-                if (G(i, j, 1) < -gamma){
-                    G(i, j, 1) = -gamma;
-                }
-                if (std::abs(G(i,j,0)) < eps){
-                    G(i,j,0) = 0;
-                }
-                if (std::abs(G(i,j,1)) < eps){
-                    G(i,j,1) = 0;
-                }
-            }
+    Eigen::Vector2f update_G;
+    update_G.setZero();
+    float norm = std::abs((F(0) * F(0) + F(1) * F(1)));
+    if (norm != 0.0) {
+        update_G(0) = G(0) - ((F(0) / norm) * (V + (G(0) * F(0) + G(1) * F(1))));
+        update_G(1) = G(1) - ((F(1) / norm) * (V + (G(0) * F(0) + G(1) * F(1))));
+        G(0) = (1 - weight_GF) * G(0) + lr * weight_GF * update_G(0);
+        G(1) = (1 - weight_GF) * G(0) + lr * weight_GF * update_G(1);
+        if (G(0) > gamma){
+            G(0) = gamma;
+        }
+        if (G(1) > gamma){
+            G(1) = gamma;
+        }
+        if (G(0) < -gamma){
+            G(0) = -gamma;
+        }
+        if (G(1) < -gamma){
+            G(1) = -gamma;
+        }
+        if (std::abs(G(0)) < eps){
+            G(0) = 0;
+        }
+        if (std::abs(G(1)) < eps){
+            G(1) = 0;
         }
     }
 }
 
-void update_GF_gradient(Tensor<float,3,Eigen::RowMajor>& G, Tensor<float,2,Eigen::RowMajor>& V, Tensor<float,3,Eigen::RowMajor>& F, const float lr, const float weight_GF){
-//    InstrumentationTimer timer("update_GF_gradient");
+void update_GI(Eigen::Vector2f& G, Eigen::Vector2f& I_gradient, const float weight_GI, float eps=1e-8, float gamma=255.0){
     PROFILE_FUNCTION();
-    const auto& dimensions = G.dimensions();
-    Tensor<float,3,Eigen::RowMajor> update_G(dimensions);
-    for (int i = 0; i<dimensions[0]; i++){
-        for (int j = 0; j<dimensions[1]; j++){
-            update_G(i,j,0) = 2 * F(i,j,0) * (V(i,j) + F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1));
-            update_G(i,j,1) = 2 * F(i,j,1) * (V(i,j) + F(i,j,0) * G(i,j,0) + F(i,j,1) * G(i,j,1));
-        }
-    }
-    G += lr * weight_GF * update_G;
-}
-
-void update_GI(Tensor<float,3,Eigen::RowMajor> &G, Tensor<float,3,Eigen::RowMajor> &I_gradient, const float weight_GI, float eps=1e-8, float gamma=255.0){
-//    InstrumentationTimer timer("update_GI");
-    PROFILE_FUNCTION();
-    const auto& dimensions = G.dimensions();
-//    DEBUG_LOG("G: " << std::endl << G);
     G = (1 - weight_GI) * G + weight_GI*I_gradient;
-    for (int i = 0; i<dimensions[0]; i++){
-        for (int j = 0; j<dimensions[1]; j++){
-            if (G(i, j, 0) > gamma){
-                G(i, j, 0) = gamma;
-            }
-            if (G(i, j, 1) > gamma){
-                G(i, j, 1) = gamma;
-            }
-            if (G(i, j, 0) < -gamma){
-                G(i, j, 0) = -gamma;
-            }
-            if (G(i, j, 1) < -gamma){
-                G(i, j, 1) = -gamma;
-            }
-            if (std::abs(G(i,j,0)) < eps){
-                G(i,j,0) = 0;
-            }
-            if (std::abs(G(i,j,1)) < eps){
-                G(i,j,1) = 0;
-            }
-        }
+    if (G(0) > gamma){
+        G(0) = gamma;
     }
-//    DEBUG_LOG("G: " << std::endl << G);
+    if (G(1) > gamma){
+        G(1) = gamma;
+    }
+    if (G(0) < -gamma){
+        G(0) = -gamma;
+    }
+    if (G(1) < -gamma){
+        G(1) = -gamma;
+    }
+    if (std::abs(G(0)) < eps){
+        G(0) = 0;
+    }
+    if (std::abs(G(1)) < eps){
+        G(1) = 0;
+    }
 }
 
-void update_IV(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,2,Eigen::RowMajor> &MI, const float weight_IV=0.5, const float time_step=0.05){
-    //    InstrumentationTimer timer("update_IV");
+void update_IV(float I, float MI, const float weight_IV=0.5, const float time_step=0.05){
     PROFILE_FUNCTION();
-    const auto& dimensions_V = MI.dimensions();
-    const auto& dimensions = I.dimensions();
-//    Eigen::array<Eigen::Index, 2> offsets = {0, 0};
-//    Eigen::array<Eigen::Index, 2> extents = {dimensions_V.at(0), dimensions_V.at(1)};
-//    DEBUG_LOG("I: " << I);
-//    DEBUG_LOG("Cum_V: " << cum_V);
-//    I.slice(offsets,extents) = (1-weight_IV) * I.slice(offsets,extents) + weight_IV*MI;
     I = (1-weight_IV)*I + weight_IV*MI;
-//    DEBUG_LOG("I: " << I);
-//    for (int i = 0; i<dimensions[0]; i++){
-//        for (int j = 0; j<dimensions[1]; j++){
-//            if (I(i,j)>0){
-//                if (I(i,j)>time_step){
-//                    I(i,j) -= time_step;
-//                }
-//                else{
-//                    I(i,j) = 0;
-//                }
-//            }
-//            if (I(i,j)<0){
-//                if (I(i,j)<time_step){
-//                    I(i,j) += time_step;
-//                }
-//                else{
-//                    I(i,j) = 0;
-//                }
-//            }
-//        }
-//    }
 }
 
-void update_IG(Tensor<float,2,Eigen::RowMajor> &I, Tensor<float,3,Eigen::RowMajor> &I_gradient, Tensor<float,3,Eigen::RowMajor> &G, const float weight_IG=0.5){
-//    InstrumentationTimer timer("update_IG");
+void update_IG(float &I, Eigen::Vector2f& G, Eigen::Vector2f& I_gradient, const float weight_IG=0.5, int y, int x){
     PROFILE_FUNCTION();
-    const auto& dimensions = I.dimensions();
-
-//    DEBUG_LOG("I: " << std::endl << I);
-    Tensor<float,3,Eigen::RowMajor> temp_map = G - I_gradient;
-    Tensor<float,3,Eigen::RowMajor> x_update(dimensions[0], dimensions[1], 1);
-    Tensor<float,3,Eigen::RowMajor> y_update(dimensions[0], dimensions[1], 1);
-    DEBUG_LOG("temp_map: " << std::endl << temp_map)
+    Eigen::Vector2f temp_map = G - I_gradient;
+    float x_update;
+    float y_update;
     std::vector<int> y_direction = {0};
     std::vector<int> x_direction = {1};
-    y_update = computeGradient(Tensor2Matrix(temp_map.chip(0,2)), y_direction);
-    x_update = computeGradient(Tensor2Matrix(temp_map.chip(1,2)), x_direction);
+    y_update = computeGradient(Tensor2Matrix(temp_map.chip(0,2)), y_direction, int y, int x);
+    x_update = computeGradient(Tensor2Matrix(temp_map.chip(1,2)), x_direction, int y, int x);
     DEBUG_LOG("x_update: " << std::endl << x_update)
     DEBUG_LOG("y_update: " << std::endl << y_update)
     array<int, 2> two_dims{{int(dimensions[0]), int(dimensions[1])}};
     Tensor<float,2,Eigen::RowMajor> x_update2 = x_update.reshape(two_dims);
     Tensor<float,2,Eigen::RowMajor> y_update2 = y_update.reshape(two_dims);
-
     I = I + weight_IG * (- x_update2 - y_update2);
-//    for (int i = 0; i<dimensions[0]; i++){
-//        for (int j = 0; j<dimensions[1]; j++){
-//            if (I(i,j)<0){
-//                I(i,j) = 0;
-//            }
-//            if (I(i,j)>255.0){
-//                I(i,j) = 255.0;
-//            }
-//
-//        }
-//    }
-//    DEBUG_LOG("I: " << std::endl << I);
 
-//    std::cout << G << std::endl;
-//    std::cout << I_gradient << std::endl;
-//    std::cout << temp_map << std::endl;
-//    x_update.setZero();
-//    y_update.setZero();
-//    for (int i = 0; i<dimensions[0]-1; i++){
-//        for (int j = 0; j<dimensions[1]-1; j++){
-//            if (i==0){
-////                std::cout << temp_map(i,j,0) << std::endl;
-//                x_update(i,j) = temp_map(i,j,0);
-//            }
-//            else{
-//                x_update(i,j) = temp_map(i,j,0) - temp_map(i-1,j,0);
-//            }
-//            if (j==0){
-//                y_update(i,j) = temp_map(i,j,1);
-//            }
-//            else{
-//                y_update(i,j) = temp_map(i,j,1) - temp_map(i,j-1,1);
-//            }
-//        }
-    }
+}
 //    std::cout << x_update << std::endl;
 //    std::cout << y_update << std::endl;
 
@@ -1470,9 +1328,9 @@ void update_RF(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, con
     }
     solution = A.partialPivLu().solve(B);
 //        std::cout << "R update: " << solution_short << std::endl;
-    R(0) = (1 - weight_RF) * R(0) - weight_RF * solution(0);
-    R(1) = (1 - weight_RF) * R(1) - weight_RF * solution(1);
-    R(2) = (1 - weight_RF) * R(2) - weight_RF * solution(2);
+    R(0) = (1 - weight_RF) * R(0) + weight_RF * solution(0);
+    R(1) = (1 - weight_RF) * R(1) + weight_RF * solution(1);
+    R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
 //    if (std::abs(R(0)) < 1e-14 or std::isnan(R(0))) {
 //        R(0) = 0.0;
 //    }
@@ -2245,9 +2103,6 @@ int main() {
 
         Tensor<float,2,Eigen::RowMajor> decayBase(height, width);
         decayBase.setConstant(imageBase);
-
-
-
 
 //        Tensor<float, 3, Eigen::RowMajor> directions_tensor_3(height, width, 3);
 //        Tensor<float, 2, Eigen::RowMajor> directions_tensor_2(height*width, 3);
