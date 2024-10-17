@@ -86,36 +86,33 @@ Eigen::VectorXf gradient(const Eigen::VectorXf& x) {
     return grad;
 }
 
-Eigen::Vector2f gradients computeGradient(const Eigen::MatrixXfRowMajor &data, const std::vector<int> direction={0,1}, int y, int x) {
+Eigen::Vector2f computeGradient(const Eigen::MatrixXfRowMajor &data, int y, int x) {
     int rows = data.rows();
     int cols = data.cols();
-    assert(y<rows);
-    assert(x<cols);
-    if (direction.size() == 2){
-        Eigen::Vector2f gradients;
-        // Compute gradient along columns (down-up, y-direction)
-
-        if (y==0) {
-            gradients(0) = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
-        }
-        else if (y==rows-1){
-            gradients(0) = (data(y - 2, x) - data(y - 1, x)) / 2.0; // Central difference with replicate border
-        }
-        else{
-            gradients(0) = (data(y - 1, x) - data(y + 1, x)) / 2.0;
-        }
-        // Compute gradient along rows (left-right, x-direction)
-        if (x==0){
-            gradients(1) = (data(y, x + 1) - data(y, x)) / 2.0; // Central difference with replicate border
-        }
-        else if (x==cols-1) {
-            gradients(1) = (data(y, x - 1) - data(y, x - 2)) / 2.0; // Central difference with replicate border
-        }
-        else{
-            gradients(1) = (data(y, x + 1) - data(y, x - 1)) / 2.0;
-        return gradients;
+    assert(y < rows);
+    assert(x < cols);
+    Eigen::Vector2f gradients;
+    // Compute gradient along columns (down-up, y-direction)
+    if (y == 0) {
+        gradients(0) = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
+    } else if (y == rows - 1) {
+        gradients(0) = (data(y - 2, x) - data(y - 1, x)) / 2.0; // Central difference with replicate border
+    } else {
+        gradients(0) = (data(y - 1, x) - data(y + 1, x)) / 2.0;
     }
-    else if (direction[0] == 1){
+    // Compute gradient along rows (left-right, x-direction)
+    if (x == 0) {
+        gradients(1) = (data(y, x + 1) - data(y, x)) / 2.0; // Central difference with replicate border
+    } else if (x == cols - 1) {
+        gradients(1) = (data(y, x - 1) - data(y, x - 2)) / 2.0; // Central difference with replicate border
+    } else {
+        gradients(1) = (data(y, x + 1) - data(y, x - 1)) / 2.0;
+    }
+    return gradients;
+}
+
+float computeGradient(const Eigen::MatrixXfRowMajor &data, const int direction, const int y, const int x) {
+    if (direction == 1){
         float gradients;
         // Compute gradient along rows (x-direction)
         if(x==0){
@@ -127,7 +124,8 @@ Eigen::Vector2f gradients computeGradient(const Eigen::MatrixXfRowMajor &data, c
         }
         return gradients;
     }
-    else if (direction[0] == 0){
+    else if (direction == 0){
+    // Compute gradient along cols (y-direction)
         if (y==0) {
             gradients = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
         }else if (y==rows-1){
