@@ -1122,6 +1122,18 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
     return diff.lpNorm<Infinity>();
 }
 
+float F_check(Eigen::Tensor<float,3,Eigen::RowMajor>& F1, Eigen::Tensor<float,3,Eigen::RowMajor>& F2, float precision){
+    const auto& dimensions = F1.dimensions();
+    Eigen::MatrixXfRowMajor dot(dimensions[0], dimensions[1]);
+    Eigen::MatrixXfRowMajor diff(dimensions[0], dimensions[1]);
+    for (int i = 0; i<dimensions[0]; i++){
+        for (int j = 0; j<dimensions[1]; j++){
+            diff(i,j) = (std::abs(F1(i,j,0)-F2(i,j,0)) + std::abs(F1(i,j,1)-F2(i,j,1)));
+        }
+    }
+    return diff.lpNorm<2>();
+}
+
 // Function to time the performance of a given dot product computation function
 template<typename Func>
 void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::RowMajor>& A, const Eigen::Tensor<float,3,Eigen::RowMajor>& B, Eigen::Tensor<float,2,Eigen::RowMajor>& D, int iterations) {
