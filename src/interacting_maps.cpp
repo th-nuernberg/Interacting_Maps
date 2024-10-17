@@ -1507,7 +1507,7 @@ void update_FR(Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::R
         m32(cross, Cx, Cy, update);
     }
 //    std::cout << update << std::endl;
-    F = (1 - weight_FR)*F - weight_FR*update;
+    F = (1 - weight_FR)*F + weight_FR*update;
     for (int i = 0; i<dimensions[0]; i++) {
         for (int j = 0; j < dimensions[1]; j++) {
             if (F(i, j, 0) > gamma){
@@ -1558,9 +1558,9 @@ void update_RF(Tensor<float,1>& R, const Tensor<float,3,Eigen::RowMajor>& F, con
     }
     solution = A.partialPivLu().solve(B);
 //        std::cout << "R update: " << solution_short << std::endl;
-    R(0) = (1 - weight_RF) * R(0) - weight_RF * solution(0);
-    R(1) = (1 - weight_RF) * R(1) - weight_RF * solution(1);
-    R(2) = (1 - weight_RF) * R(2) - weight_RF * solution(2);
+    R(0) = (1 - weight_RF) * R(0) + weight_RF * solution(0);
+    R(1) = (1 - weight_RF) * R(1) + weight_RF * solution(1);
+    R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
 //    if (std::abs(R(0)) < 1e-14 or std::isnan(R(0))) {
 //        R(0) = 0.0;
 //    }
@@ -1983,10 +1983,16 @@ int test(){
 //        std::cout << dCdy << std::endl;
 //        std::cout << "Implemented find_C function with autodiff" << std::endl;
         float epsilon = 1e-6;
-        if (std::abs(CCM(1,1,0) - 1/std::sqrt(3)) < epsilon and std::abs(dCdx(1,1,0) - 4*std::sqrt(3)/9) < epsilon and std::abs(dCdx(1,1,1) - 2/(std::sqrt(3)*3)) < epsilon){
-            std::cout << "HELPER FUNCTION FIND_C CORRECT" << std::endl;
+        if (std::abs(CCM(1,1,1) - 1/std::sqrt(3)) < epsilon){
+            std::cout << "CCM CORRECT" << std::endl;
         }else{
-            std::cout << "HELPER FUNCTION FIND_C FALSE" << std::endl;
+            std::cout << "CCM FALSE" << std::endl;
+        }
+        if(std::abs(dCdx(1,1,1) - 4*std::sqrt(3)/9) < epsilon and std::abs(dCdx(1,1,0) - 2/(std::sqrt(3)*3)) < epsilon){
+            std::cout << "dCdx CORRECT" << std::endl;
+        }
+        else{
+            std::cout << "dCdx FALSE" << std::endl;
         }
 
 
