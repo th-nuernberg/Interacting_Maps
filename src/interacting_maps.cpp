@@ -111,7 +111,32 @@ Eigen::Vector2f computeGradient(const Eigen::MatrixXfRowMajor &data, int y, int 
     return gradients;
 }
 
-void computeGradient(const Eigen::Tensor3f &data, Eigen::Tensor3f &gradients, int y, int x) {
+void computeGradient(const Eigen::Tensor2f& data, Eigen::Tensor3f& gradients, int y, int x) {
+    // Compute gradient for update_IG
+    const auto& dimensions = data.dimensions();
+    int rows = dimensions[0];
+    int cols = dimensions[1];
+    assert(y < rows);
+    assert(x < cols);
+    // Compute gradient along columns (down-up, y-direction)
+    if (y == 0) {
+        gradients(y, x, 0) = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
+    } else if (y == rows - 1) {
+        gradients(y, x, 0) = (data(y - 2, x) - data(y - 1, x)) / 2.0; // Central difference with replicate border
+    } else {
+        gradients(y, x, 0) = (data(y - 1, x) - data(y + 1, x)) / 2.0;
+    }
+    // Compute gradient along rows (left-right, x-direction)
+    if (x == 0) {
+        gradients(y, x, 1) = (data(y, x + 1) - data(y, x)) / 2.0; // Central difference with replicate border
+    } else if (x == cols - 1) {
+        gradients(y, x, 1) = (data(y, x - 1) - data(y, x - 2)) / 2.0; // Central difference with replicate border
+    } else {
+        gradients(y, x, 1) = (data(y, x + 1) - data(y, x - 1)) / 2.0;
+    }
+}
+
+void computeGradient(const Eigen::Tensor3f& data, Eigen::Tensor3f& gradients, int y, int x) {
     // Compute gradient for update_IG
     const auto& dimensions = data.dimensions();
     int rows = dimensions[0];
@@ -192,7 +217,7 @@ Eigen::Tensor<float,1> Vector2Tensor(const Eigen::VectorXf& input) {
     return result;
 }
 
-Eigen::MatrixXfRowMajor Tensor2Matrix(const Eigen::Tensor<float,2,Eigen::RowMajor>& input){
+Eigen::MatrixXfRowMajor Tensor2Matrix(const Tensor2f& input){
     Eigen::array<Eigen::Index, 2> dims = input.dimensions();
 //
 //    // As OpenCV uses a RowMajor layout, all Eigen::Matrix are also RowMajor. Tensors are ColMajor by default and it is
@@ -206,17 +231,17 @@ Eigen::MatrixXfRowMajor Tensor2Matrix(const Eigen::Tensor<float,2,Eigen::RowMajo
     return result;
 }
 
-Eigen::Tensor<float,2> Matrix2Tensor(const Eigen::MatrixXfRowMajor& input) {
+Tensor2f Matrix2Tensor(const Eigen::MatrixXfRowMajor& input) {
     // Returns ColMajorData
 
     // Get Pointer to data
     float const *data_ptr = &input(0);
     // Map data to Tensor
-    Eigen::TensorMap<const Eigen::Tensor<float,2,Eigen::RowMajor>> result(data_ptr, input.rows(), input.cols());
+    Eigen::TensorMap<const Tensor2f> result(data_ptr, input.rows(), input.cols());
     // Swap the layout and preserve the order of the dimensions
     array<int, 2> shuffle({1, 0});
-    Tensor<float, 2> col_major_result =  result.swap_layout().shuffle(shuffle);
-    return col_major_result;
+//    Tensor2f col_major_result = result.swap_layout().shuffle(shuffle);
+    return result;
 }
 
 // OPENCV PART
@@ -354,7 +379,7 @@ cv::Mat frame2grayscale(const Eigen::MatrixXfRowMajor& frame) {
     return grayscale_frame;
 }
 
-cv::Mat V2image(const Eigen::MatrixXfRowMajor& V) {
+cv::Mat V2image(const Eigen::MatrixXfRowMajor& V, const float cutoff=0.1) {
     // Determine the shape of the image
     long rows = V.rows();
     long cols = V.cols();
@@ -365,10 +390,10 @@ cv::Mat V2image(const Eigen::MatrixXfRowMajor& V) {
     // Process on_events (V > 0)
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
-            if (V(i, j) > 0) {
+            if (V(i, j) > cutoff) {
                 image.at<cv::Vec3b>(i, j)[1] = 255; // Set green channel
             }
-            if (V(i, j) < 0) {
+            if (V(i, j) < -cutoff) {
                 image.at<cv::Vec3b>(i, j)[2] = 255; // Set red channel
             }
         }
@@ -508,8 +533,8 @@ cv::Mat create_colorwheel(int grid_size) {
 }
 
 // Function to create the VIGF image
-cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& G, const Tensor<float,3,Eigen::RowMajor>& F, const std::string& path = "VIGF", bool save = false) {
-    cv::Mat V_img = V2image(V);
+cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& G, const Tensor<float,3,Eigen::RowMajor>& F, const std::string& path = "VIGF", const bool save = false, const float cutoff=0.1) {
+    cv::Mat V_img = V2image(V, cutoff);
     cv::Mat I_img = frame2grayscale(I);
     cv::Mat G_img = vector_field2image(G);
     cv::Mat F_img = vector_field2image(F);
@@ -966,9 +991,9 @@ void crossProduct3x3(const Tensor3f& A, const Vector3f& B, Vector3f& C, int y, i
 
 
 void crossProduct1x3(const Eigen::Tensor<float,1>& A, const Tensor3f& B, Tensor3f& C){
-    const auto& dimensions = A.dimensions();
+    const auto& dimensions = B.dimensions();
     for (size_t i = 0; i < dimensions[0]; ++i){
-        for (size_t j = 0; j < dimensions[1]; ++i){
+        for (size_t j = 0; j < dimensions[1]; ++j){
             C(i, j, 0) = A(2) * B(i, j, 1) - A(1) * B(i, j, 2);  // y
             C(i, j, 1) = A(0) * B(i, j, 2) - A(2) * B(i, j, 0);  // x
             C(i, j, 2) = A(1) * B(i, j, 0) - A(0) * B(i, j, 1);  // z
@@ -1171,8 +1196,12 @@ void update_GF(Eigen::Tensor3f& G, Eigen::Tensor2f V, Eigen::Tensor3f& F, int y,
     }
 }
 
-void update_GI(Eigen::Tensor3f& G, Eigen::Tensor3f& I_gradient, int y, int x, const float weight_GI, float eps=1e-8, float gamma=255.0){
+void update_GI(Eigen::Tensor3f& G, const Eigen::Tensor3f& I_gradient, const int y, const int x, const float weight_GI, const float eps=1e-8, const float gamma=255.0){
     PROFILE_FUNCTION();
+    DEBUG_LOG(G(y, x, 0));
+    DEBUG_LOG(I_gradient(y, x, 0));
+    DEBUG_LOG(G(y, x, 1));
+    DEBUG_LOG(I_gradient(y, x, 1));
     G(y, x, 0) = (1 - weight_GI) * G(y, x, 0) + weight_GI*I_gradient(y, x, 0);
     G(y, x, 1) = (1 - weight_GI) * G(y, x, 1) + weight_GI*I_gradient(y, x, 1);
     if (G(y, x, 0) > gamma){
@@ -1193,11 +1222,16 @@ void update_GI(Eigen::Tensor3f& G, Eigen::Tensor3f& I_gradient, int y, int x, co
     if (std::abs(G(y, x, 1)) < eps){
         G(y, x, 1) = 0;
     }
+    DEBUG_LOG(G(y, x, 0));
+    DEBUG_LOG(G(y, x, 1));
 }
 
 void update_IV(Eigen::Tensor2f& I, Eigen::Tensor2f& MI, int y, int x, const float weight_IV=0.5, const float time_step=0.05){
     PROFILE_FUNCTION();
     I(y, x) = (1-weight_IV)*I(y, x) + weight_IV*MI(y, x);
+    if (I(y,x)<0.001 and I(y,x)>-0.001){
+        I(y,x) = 0.0;
+    }
 }
 
 void updateGIDiffGradient(Tensor3f& G, Tensor3f& I_gradient, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, int y, int x){
@@ -1272,14 +1306,14 @@ void update_FR(Tensor3f& F, const Tensor3f& CCM, const Tensor3f& Cx, const Tenso
 void setup_R_update(const Tensor3f& CCM, Matrix3f& A, Vector3f& B, std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, std::unique_ptr<Vector3f[]>& points){
     PROFILE_FUNCTION();
     const auto &dimensions = CCM.dimensions();
-    int height, rows = dimensions[0];
-    int width, cols = dimensions[1];
+    int rows = dimensions[0];
+    int cols = dimensions[1];
     Matrix3f Identity = Matrix3f::Identity();
     Vector3f d;
     B.setZero();
 
-    for (size_t i = 0; i < height; ++i){
-        for (size_t j = 0; j < width; ++j){
+    for (size_t i = 0; i < rows; ++i){
+        for (size_t j = 0; j < cols; ++j){
             d(0) = CCM(i, j, 0);
             d(1) = CCM(i, j, 1);
             d(2) = CCM(i, j, 2);
@@ -1319,17 +1353,33 @@ void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const T
     R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
 }
 
-void event_step(Tensor2f& V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f&GIDiffGradient, Tensor3f& F, Tensor3f G, Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
+void event_step(Tensor2f& V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f& G, Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
     PROFILE_FUNCTION();
     Eigen::array<Eigen::Index, 2> dimensions = V.dimensions();
 
-    update_IV(I, MI, y, x, weights["weight_IV"], weights["time_step"]);
-    computeGradient(I, delta_I, y, x);
+    update_IV(MI, V, y, x, weights["weight_IV"], weights["time_step"]);
 
+    // Image (MI) got changed through update by V. we need to update all surrounding gradient values. Because of the change at this pixel
+    if (y>0){
+        computeGradient(MI, delta_I, y-1, x);
+    }
+    if (x>0){
+        computeGradient(MI, delta_I, y, x-1);
+    }
+    if (y<dimensions[0]){
+        computeGradient(MI, delta_I, y+1, x);
+    }
+    if (x<dimensions[1]){
+        computeGradient(MI, delta_I, y, x+1);
+    }
+
+    // We need to update the gradient at the current pixel, since surrounding image values could have changed through decay.
+    computeGradient(MI, delta_I, y, x);
+    DEBUG_LOG(I(y,x));
     update_GI(G, delta_I, y, x, weights["weight_GI"], weights["eps"], weights["gamma"]);
-    updateGIDiffGradient(G, delta_I, GIDiff, GIDiffGradient, y, x);
+//    updateGIDiffGradient(G, delta_I, GIDiff, GIDiffGradient, y, x);
 
-    update_IG(I, GIDiffGradient, y, x, weights["weight_IG"]);
+//    update_IG(I, GIDiffGradient, y, x, weights["weight_IG"]);
 //    computeGradient(I, delta_I, y, x);
 
     for (const auto& element : permutation){
@@ -1899,9 +1949,9 @@ int main() {
     else{
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "0123456, weightFR=0,2 academic rotation, ts=0,05";
+        std::string results_name = "Event Based - Basic";
         std::string folder_name = results_name + " " + std::ctime(&time);
-        std::string resource_name = "academic_rotation";
+        std::string resource_name = "shapes_rotation";
         std::string calib_path = "../res/" + resource_name + "/calib.txt";
         std::string event_path = "../res/" + resource_name + "/events.txt";
         std::string settings_path = "../res/" + resource_name + "/settings.txt";
@@ -1910,21 +1960,26 @@ int main() {
         float end_time_events = 2.0; // in s
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 1500;
-        float imageBase = 0.0;
+        float imageBase = 10.0;
         float memoryWeight = 0.99;
+
+        // Plotting
+        float cutoff = 0.1;
 
         std::vector<float> settings;
         read_single_line_txt(settings_path, settings);
 
 //        int height = 180; // in pixels
 //        int width = 240; // in pixels
-        int height, rows = settings[0]; // in pixels
-        int width, cols = settings[1]; // in pixels
+        int height = settings[0]; // in pixels
+        int rows = settings[0]; // in pixels
+        int width = settings[1]; // in pixels
+        int cols = settings[1]; // in pixels
         int N = height*width;
 
         std::unordered_map<std::string,float> weights;
         weights["weight_FG"] = 0.2; // 0
-        weights["weight_FR"] = 0.2; // 1
+        weights["weight_FR"] = 0.8; // 1
         weights["weight_GF"] = 0.2; // 2
         weights["weight_GI"] = 0.2; // 3
         weights["weight_IG"] = 0.2; // 4
@@ -1935,7 +1990,8 @@ int main() {
         weights["event_factor"] = 1.0;
         weights["eps"] = 0.00001;
         weights["gamma"] = 255;
-        std::vector<int> permutation {0,1,2,3,4,5,6}; // Which update steps to take
+        weights["decay_param"] = 1e-1; // exp: 1e6; linear: 0.000001
+        std::vector<int> permutation {}; // Which update steps to take
         auto rng = std::default_random_engine {};
 
         //##################################################################################################################
@@ -1945,11 +2001,11 @@ int main() {
         Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
         F.setZero();
         Tensor<float,3,Eigen::RowMajor> G(height, width, 2);
-        G.setRandom();
+        G.setZero();
         Tensor<float,2,Eigen::RowMajor> I(height, width);
         I.setRandom();
         Tensor<float,3,Eigen::RowMajor> delta_I(height, width,2);
-        delta_I.setRandom();
+        delta_I.setZero();
         Tensor<float,3,Eigen::RowMajor> GIDiff(height, width,2);
         GIDiff.setRandom();
         Tensor<float,3,Eigen::RowMajor> GIDiffGradient(height, width,2);
@@ -2022,6 +2078,10 @@ int main() {
         Tensor<float,2,Eigen::RowMajor> decayBase(height, width);
         decayBase.setConstant(imageBase);
 
+        Tensor<float,2,Eigen::RowMajor> expDecay(height, width);
+        expDecay.setConstant(1.0);
+
+
         std::string profiler_name = "Profiler.json";
         fs::path profiler_path = folder_path / profiler_name;
         Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
@@ -2041,20 +2101,10 @@ int main() {
 //            MI = (1-memoryWeight)*decayBase + memoryWeight*MI;
 //            MI += V;
 //            // Image can't have negative intensity Values
-//            for (int i = 0; i<height; i++){
-//                for (int j = 0; j<width; j++){
-//                    if (MI(i,j) < 0.0){
-//                        MI(i,j) = 0.0;
-//                    }
-//                    if (MI(i,j) > 255.0){
-//                        MI(i,j) = 255.0;
-//                    }
-//                }
-//            }
+
 
             int y = event.coordinates[0];
             int x = event.coordinates[1];
-            MI(y, x) += event.polarity * weights["event_factor"];
             V(y, x) = event.polarity * weights["event_factor"];
             //void event_step(Tensor2f& V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f G,
             // Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
@@ -2068,22 +2118,42 @@ int main() {
 //                    writeToFile(F, folder_path / "F2.txt");
 //                    writeToFile(G, folder_path / "G2.txt");
 //                }
+            V(y,x) = 0.0;
 
-            if (counter * 0.05 < event.time){
+            if (counter * 0.1 < event.time){
                 counter++;
-                writeToFile(V, folder_path / "V2.txt");
-                writeToFile(I, folder_path / "I2.txt");
-                writeToFile(delta_I, folder_path / "I_gradient2.txt");
-                writeToFile(F, folder_path / "F2.txt");
-                writeToFile(G, folder_path / "G2.txt");
+                expDecay = -expDecay * (0.1f/weights["decay_param"]);
+                MI = MI - imageBase;
+                MI = MI * Matrix2Tensor(Tensor2Matrix(expDecay).array().exp());
+                MI = MI + imageBase;
+
+                expDecay.setConstant(1.0);
+                for (int i = 0; i<height; i++){
+                    for (int j = 0; j<width; j++){
+                        if (MI(i,j) < 0.0){
+                            MI(i,j) = 0.0;
+                        }
+                        if (MI(i,j) > 255.0){
+                            MI(i,j) = 255.0;
+                        }
+                    }
+                }
+
+
+                writeToFile(V, folder_path / "V.txt");
+                writeToFile(MI, folder_path / "MI.txt");
+                writeToFile(I, folder_path / "I.txt");
+                writeToFile(delta_I, folder_path / "I_gradient.txt");
+                writeToFile(F, folder_path / "F.txt");
+                writeToFile(G, folder_path / "G.txt");
                 std::cout << "Time: " << event.time << std::endl;
                 std::cout << "R: " << R << std::endl;
                 std::string image_name = "VIGF_" + std::to_string(counter) + ".png";
                 fs::path image_path = folder_path / image_name;
-                create_VIGF(Tensor2Matrix(V), Tensor2Matrix(I), G, F, image_path, true);
+                create_VIGF(Tensor2Matrix(V), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
                 image_name = "VvsFG" + std::to_string(counter) + ".png";
                 image_path = folder_path / image_name;
-                plot_VvsFG(Tensor2Matrix(V), F, G, image_path, true);
+                plot_VvsFG(Tensor2Matrix(MI), F, G, image_path, true);
             }
         }
         Instrumentor::Get().EndSession();
