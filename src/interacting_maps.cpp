@@ -34,15 +34,9 @@
 #define PROFILE_FUNCTION()
 #endif
 
-namespace fs = std::filesystem;
-
-namespace Eigen{
-    typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXfRowMajor;
-    typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRowMajor;
-    typedef Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXiRowMajor;
-    typedef Eigen::Tensor<float,2,Eigen::RowMajor> Tensor2f;
-    typedef Eigen::Tensor<float,3,Eigen::RowMajor> Tensor3f;
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  STRING OPERATIONS  /////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::ostream& operator << (std::ostream &os, const Event &e) {
     return (os << "Time: " << e.time << " Coords: " << e.coordinates[0] << " " << e.coordinates[1] << " Polarity: " << e.polarity);
@@ -57,41 +51,23 @@ std::string Event::toString() const {
 std::vector<std::string> split_string(std::stringstream sstream, char delimiter){
     std::string segment;
     std::vector<std::string> seglist;
-
     while(std::getline(sstream, segment, delimiter))
     {
         seglist.push_back(segment);
     }
-
     return seglist;
 }
 
-// GRADIENT CALCUATIONS
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  GRADIENT CALCULATIONS  /////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Eigen::VectorXf gradient(const Eigen::VectorXf& x) {
-    int n = x.size();
-    Eigen::VectorXf grad(n);
-
-    // Central differences in the interior
-    for (int i = 1; i < n - 1; ++i) {
-        grad(i) = (x(i + 1) - x(i - 1)) / 2.0;
-    }
-    
-    // Forward difference at the start
-    grad(0) = x(1) - x(0);
-    
-    // Backward difference at the end
-    grad(n - 1) = x(n - 1) - x(n - 2);
-
-    return grad;
-}
-
-Eigen::Vector2f computeGradient(const Eigen::MatrixXfRowMajor &data, int y, int x) {
+Vector2f computeGradient(const MatrixXfRowMajor &data, int y, int x) {
     int rows = data.rows();
     int cols = data.cols();
     assert(y < rows);
     assert(x < cols);
-    Eigen::Vector2f gradients;
+    Vector2f gradients;
     // Compute gradient along columns (down-up, y-direction)
     if (y == 0) {
         gradients(0) = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
@@ -111,13 +87,17 @@ Eigen::Vector2f computeGradient(const Eigen::MatrixXfRowMajor &data, int y, int 
     return gradients;
 }
 
-void computeGradient(const Eigen::Tensor2f& data, Eigen::Tensor3f& gradients, int y, int x) {
+void computeGradient(const Tensor2f& data, Tensor3f& gradients, int y, int x) {
     // Compute gradient for update_IG
-    const auto& dimensions = data.dimensions();
-    int rows = dimensions[0];
-    int cols = dimensions[1];
+    const auto& ddimensions = data.dimensions();
+    int rows = ddimensions[0];
+    int cols = ddimensions[1];
+    const auto& gdimensions = gradients.dimensions();
+    assert(ddimensions[0] == gdimensions[0]);
+    assert(ddimensions[1] == gdimensions[1]);
     assert(y < rows);
     assert(x < cols);
+
     // Compute gradient along columns (down-up, y-direction)
     if (y == 0) {
         gradients(y, x, 0) = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
@@ -136,7 +116,7 @@ void computeGradient(const Eigen::Tensor2f& data, Eigen::Tensor3f& gradients, in
     }
 }
 
-void computeGradient(const Eigen::Tensor3f& data, Eigen::Tensor3f& gradients, int y, int x) {
+void computeGradient(const Tensor3f& data, Tensor3f& gradients, int y, int x) {
     // Compute gradient for update_IG
     const auto& dimensions = data.dimensions();
     int rows = dimensions[0];
@@ -161,97 +141,47 @@ void computeGradient(const Eigen::Tensor3f& data, Eigen::Tensor3f& gradients, in
     }
 }
 
-float computeGradient(const Eigen::MatrixXfRowMajor &data, const int direction, const int y, const int x) {
-    int rows = data.rows();
-    int cols = data.cols();
-    assert(y < rows);
-    assert(x < cols);
-    float gradients;
-    if (direction == 1){
-        // Compute gradient along rows (x-direction)
-        if(x==0){
-            gradients = (data(y, x + 1) - data(y,0)) / 2.0; // Central difference with replicate border
-        }else if(x==cols-1){
-            gradients = (data(y, x - 1) - data(y, x - 2)) / 2.0; // Central difference with replicate border
-        }else{
-            gradients = (data(y, x + 1) - data(y, x - 1)) / 2.0;
-        }
-        return gradients;
-    }
-    else if (direction == 0){
-    // Compute gradient along cols (y-direction)
-        if (y==0) {
-            gradients = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
-        }else if (y==rows-1){
-            gradients = (data(y - 2, x) - data(y - 1, x)) / 2.0; // Central difference with replicate border
-        }else{
-            gradients = (data(y - 1, x) - data(y + 1, x)) / 2.0;
-        }
-    }
-    else{
-        throw std::invalid_argument("invalid directions");
-    }
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  CONVERSION FUNCTIONS  //////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// TENSOR CASTING
-
-Eigen::VectorXf Tensor2Vector(const Eigen::Tensor<float,1>& input) {
-    Eigen::array<Eigen::Index, 1> dims = input.dimensions();
-    const float* data_ptr = input.data();
-    Eigen::Map<const Eigen::VectorXf> result(data_ptr, dims[0]);
-    return result;
-}
-
-Eigen::VectorXf Tensor2VectorRM(const Eigen::Tensor<float,1,Eigen::RowMajor>& input) {
+VectorXf Tensor2Vector(const Tensor1f& input) {
     // RowMajor Version
-    Eigen::array<Eigen::Index, 1> dims = input.dimensions();
+    array<Index, 1> dims = input.dimensions();
     const float* data_ptr = input.data();
-    Eigen::Map<const Eigen::VectorXf> result(data_ptr, dims[0]);
+    Map<const VectorXf> result(data_ptr, dims[0]);
     return result;
 }
 
-Eigen::Tensor<float,1> Vector2Tensor(const Eigen::VectorXf& input) {
+Tensor1f Vector2Tensor(const VectorXf& input) {
     const int cols = input.cols();
     const float* data_ptr = input.data();
-    Eigen::TensorMap<const Eigen::Tensor<float,1>> result(data_ptr, cols);
+    TensorMap<const Tensor1f> result(data_ptr, cols);
     return result;
 }
 
-Eigen::MatrixXfRowMajor Tensor2Matrix(const Tensor2f& input){
-    Eigen::array<Eigen::Index, 2> dims = input.dimensions();
-//
-//    // As OpenCV uses a RowMajor layout, all Eigen::Matrix are also RowMajor. Tensors are ColMajor by default and it is
-//    // recommended to only uses ColMajor Tensors. So at conversion the layout needs to be considered.
-//    Eigen::Tensor<float,2,RowMajor> row_major(dims[0], dims[1]);
-//    // Swap the layout and preserve the order of the dimensions; https://eigen.tuXfamily.org/dox/unsupported/eigen_tensors.html
-//    Eigen::array<int,2> shuffle({1, 0});
-//    row_major = input.swap_layout().shuffle(shuffle);
+MatrixXfRowMajor Tensor2Matrix(const Tensor2f& input){
+    array<Index, 2> dims = input.dimensions();
     const float* data_ptr = &input(0); // Points to beginning of array;
-    Eigen::Map<const Eigen::MatrixXfRowMajor> result(data_ptr, dims[0], dims[1]);
+    Map<const MatrixXfRowMajor> result(data_ptr, dims[0], dims[1]);
     return result;
 }
 
-Tensor2f Matrix2Tensor(const Eigen::MatrixXfRowMajor& input) {
-    // Returns ColMajorData
-
+Tensor2f Matrix2Tensor(const MatrixXfRowMajor& input) {
     // Get Pointer to data
     float const *data_ptr = &input(0);
     // Map data to Tensor
-    Eigen::TensorMap<const Tensor2f> result(data_ptr, input.rows(), input.cols());
+    TensorMap<const Tensor2f> result(data_ptr, input.rows(), input.cols());
     // Swap the layout and preserve the order of the dimensions
-    array<int, 2> shuffle({1, 0});
-//    Tensor2f col_major_result = result.swap_layout().shuffle(shuffle);
     return result;
 }
 
-// OPENCV PART
-
-cv::Mat eigenToCvMat(const Eigen::MatrixXfRowMajor& eigen_matrix) {
+cv::Mat eigenToCvMat(const MatrixXfRowMajor& eigen_matrix) {
     // Map Eigen matrix data to cv::Mat without copying
     return cv::Mat(eigen_matrix.rows(), eigen_matrix.cols(), CV_32F, (void*)eigen_matrix.data());
 }
 
-cv::Mat eigenToCvMatCopy(const Eigen::MatrixXfRowMajor& eigen_matrix) {
+cv::Mat eigenToCvMatCopy(const MatrixXfRowMajor& eigen_matrix) {
     // Create a cv::Mat and copy Eigen matrix data into it
     cv::Mat mat(eigen_matrix.rows(), eigen_matrix.cols(), CV_32F);
     for (int i = 0; i < eigen_matrix.rows(); ++i) {
@@ -262,21 +192,21 @@ cv::Mat eigenToCvMatCopy(const Eigen::MatrixXfRowMajor& eigen_matrix) {
     return mat;
 }
 
-Eigen::MatrixXfRowMajor cvMatToEigen(const cv::Mat& mat) {
+MatrixXfRowMajor cvMatToEigen(const cv::Mat& mat) {
     // Ensure the cv::Mat has the correct type
     CV_Assert(mat.type() == CV_32F);
-    Eigen::array<Eigen::Index, 2> dims;
+    array<Index, 2> dims;
     dims[0] = mat.rows;
     dims[1] = mat.cols;
     const float* data_ptr = mat.ptr<float>();
-    Eigen::Map<const Eigen::MatrixXfRowMajor> result(data_ptr, dims[0], dims[1]);
+    Map<const MatrixXfRowMajor> result(data_ptr, dims[0], dims[1]);
     return result;
 }
 
-Eigen::MatrixXfRowMajor cvMatToEigenCopy(const cv::Mat& mat) {
+MatrixXfRowMajor cvMatToEigenCopy(const cv::Mat& mat) {
     // Ensure the cv::Mat has the correct type
     CV_Assert(mat.type() == CV_32F);
-    Eigen::MatrixXfRowMajor eigen_matrix(mat.rows, mat.cols);
+    MatrixXfRowMajor eigen_matrix(mat.rows, mat.cols);
     for (int i = 0; i < mat.rows; ++i) {
         for (int j = 0; j < mat.cols; ++j) {
             eigen_matrix(i, j) = mat.at<float>(i, j);
@@ -295,44 +225,11 @@ cv::Mat convertTofloat(cv::Mat& mat) {
     return mat;
 }
 
-void writeToFile(const Tensor<float,3,Eigen::RowMajor>& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  OpenCV FUNCTIONS  //////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void writeToFile(const Tensor<float,2,Eigen::RowMajor>& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
-}
-
-void writeToFile(const Eigen::MatrixXfRowMajor& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
-}
-
-//TODO ensure Tensors are actually const
-bool isApprox(Tensor<float,3,Eigen::RowMajor>& t1, Tensor<float,3,Eigen::RowMajor>& t2, const float precision = 1e-8){
-    Map<VectorXf> mt1(t1.data(), t1.size());
-    Map<VectorXf> mt2(t2.data(), t2.size());
-    return mt1.isApprox(mt2, precision);
-}
-
-bool isApprox(Tensor<float,2,Eigen::RowMajor>& t1, Tensor<float,2,Eigen::RowMajor>& t2, const float precision = 1e-8){
-    Map<VectorXf> mt1(t1.data(), t1.size());
-    Map<VectorXf> mt2(t2.data(), t2.size());
-    return mt1.isApprox(mt2, precision);
-}
-
-Eigen::MatrixXfRowMajor undistort_frame(const Eigen::MatrixXfRowMajor& frame, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
+MatrixXfRowMajor undistort_frame(const MatrixXfRowMajor& frame, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
     cv::Mat image = eigenToCvMat(frame);
     return cvMatToEigen(undistort_image(image, camera_matrix, distortion_parameters));
 }
@@ -346,7 +243,7 @@ cv::Mat undistort_image(const cv::Mat& image, const cv::Mat& camera_matrix, cons
     return undistorted_image;
 }
 
-std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const Eigen::MatrixXfRowMajor& camera_matrix, const Eigen::MatrixXfRowMajor& distortion_coefficients) {
+std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const MatrixXfRowMajor& camera_matrix, const MatrixXfRowMajor& distortion_coefficients) {
     std::vector<cv::Mat> undistorted_images;
 
     // Convert Eigen matrices to cv::Mat
@@ -359,9 +256,9 @@ std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const 
     return undistorted_images;
 }
 
-// Function to convert Eigen::MatrixXfRowMajor to grayscale image
-cv::Mat frame2grayscale(const Eigen::MatrixXfRowMajor& frame) {
-    // Convert Eigen::MatrixXfRowMajor to cv::Mat
+// Function to convert MatrixXfRowMajor to grayscale image
+cv::Mat frame2grayscale(const MatrixXfRowMajor& frame) {
+    // Convert MatrixXfRowMajor to cv::Mat
     cv::Mat frame_cv = eigenToCvMat(frame);
 
     // Find min and max polarity
@@ -379,7 +276,7 @@ cv::Mat frame2grayscale(const Eigen::MatrixXfRowMajor& frame) {
     return grayscale_frame;
 }
 
-cv::Mat V2image(const Eigen::MatrixXfRowMajor& V, const float cutoff=0.1) {
+cv::Mat V2image(const MatrixXfRowMajor& V, const float cutoff=0.1) {
     // Determine the shape of the image
     long rows = V.rows();
     long cols = V.cols();
@@ -402,7 +299,7 @@ cv::Mat V2image(const Eigen::MatrixXfRowMajor& V, const float cutoff=0.1) {
     return image;
 }
 
-cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_field) {
+cv::Mat vector_field2image(const Tensor3f& vector_field) {
     const int rows = vector_field.dimension(0);
     const int cols = vector_field.dimension(1);
 
@@ -456,14 +353,14 @@ cv::Mat vector_field2image(const Eigen::Tensor<float,3,Eigen::RowMajor>& vector_
 }
 
 // Function to create outward vector field using Eigen
-Tensor<float,3,Eigen::RowMajor> create_outward_vector_field(int grid_size) {
+Tensor3f create_outward_vector_field(int grid_size) {
     // Create a 2D grid of points using linspace equivalent
-    Eigen::VectorXf x = Eigen::VectorXf::LinSpaced(grid_size, -1.0, 1.0);
-    Eigen::VectorXf y = Eigen::VectorXf::LinSpaced(grid_size, 1.0, -1.0);
+    VectorXf x = VectorXf::LinSpaced(grid_size, -1.0, 1.0);
+    VectorXf y = VectorXf::LinSpaced(grid_size, 1.0, -1.0);
 
     // Initialize matrices for meshgrid-like behavior (xv, yv)
-    Eigen::MatrixXfRowMajor xv(grid_size, grid_size);
-    Eigen::MatrixXfRowMajor yv(grid_size, grid_size);
+    MatrixXfRowMajor xv(grid_size, grid_size);
+    MatrixXfRowMajor yv(grid_size, grid_size);
 
     // Create meshgrid by repeating x and y values across rows and columns
     for (int i = 0; i < grid_size; ++i) {
@@ -472,7 +369,7 @@ Tensor<float,3,Eigen::RowMajor> create_outward_vector_field(int grid_size) {
     }
 
     // Create a 3D Tensor to store the 2D vector field (x, y components at each point)
-    Tensor<float,3,Eigen::RowMajor> vectors(grid_size, grid_size, 2);
+    Tensor3f vectors(grid_size, grid_size, 2);
 
     // Calculate distances from origin and store the normalized vectors
     for (int i = 0; i < grid_size; ++i) {
@@ -514,7 +411,7 @@ cv::Mat create_circular_band_mask(const cv::Size& image_size, float inner_radius
 
 // Function to create the color wheel with a circular band
 cv::Mat create_colorwheel(int grid_size) {
-    Tensor<float,3,Eigen::RowMajor> vector_field = create_outward_vector_field(grid_size);
+    Tensor3f vector_field = create_outward_vector_field(grid_size);
 
     cv::Mat image;
     image = vector_field2image(vector_field);
@@ -533,7 +430,7 @@ cv::Mat create_colorwheel(int grid_size) {
 }
 
 // Function to create the VIGF image
-cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor<float,3,Eigen::RowMajor>& G, const Tensor<float,3,Eigen::RowMajor>& F, const std::string& path = "VIGF", const bool save = false, const float cutoff=0.1) {
+cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor3f& G, const Tensor3f& F, const std::string& path = "VIGF", const bool save = false, const float cutoff=0.1) {
     cv::Mat V_img = V2image(V, cutoff);
     cv::Mat I_img = frame2grayscale(I);
     cv::Mat G_img = vector_field2image(G);
@@ -618,7 +515,7 @@ cv::Mat createColorbar(double globalMin, double globalMax, int height, int width
     return colorbarColored;
 }
 
-cv::Mat plot_VvsFG(const MatrixXfRowMajor& V, const Tensor<float,3,Eigen::RowMajor>& F, const Tensor<float,3,Eigen::RowMajor>& G, const std::string& path = "VvsFG", bool save = false){
+cv::Mat plot_VvsFG(const MatrixXfRowMajor& V, const Tensor3f& F, const Tensor3f& G, const std::string& path = "VvsFG", bool save = false){
     long rows = V.rows();
     long cols = V.cols();
     cv::Mat image(rows + 50, cols * 3 + 50, CV_8UC3, cv::Scalar(0, 0, 0));
@@ -631,7 +528,7 @@ cv::Mat plot_VvsFG(const MatrixXfRowMajor& V, const Tensor<float,3,Eigen::RowMaj
     // Calculate the dot product of F and G, convert to cvMat
     MatrixXfRowMajor FdotG(rows, cols);
     cv::Mat FdotG_img;
-    FdotG = Tensor2Matrix(-(F*G).sum(Eigen::array<int,1>({2})));
+    FdotG = Tensor2Matrix(-(F*G).sum(array<int,1>({2})));
     FdotG_img = eigenToCvMat(FdotG); // Multiply FG elementwise then sum over 3rd dim > dot product
 
     // Calculate the difference between V and the dot product
@@ -708,7 +605,34 @@ cv::Mat plot_VvsFG(const MatrixXfRowMajor& V, const Tensor<float,3,Eigen::RowMaj
     return finalImage;
 }
 
-// INTERACTING MAPS
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  FILE FUNCTIONS  ////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void writeToFile(const Tensor3f& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
+}
+
+void writeToFile(const Tensor2f& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
+}
+
+void writeToFile(const MatrixXfRowMajor& t, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
+}
+
 fs::path create_folder_and_update_gitignore(const std::string& folder_name) {
     // Get the absolute path of the current working directory
     fs::path current_directory = fs::current_path();
@@ -767,7 +691,7 @@ void read_single_line_txt(const std::string& file_path, std::vector<float>& cali
 Calibration_Data get_calibration_data(const std::vector<float>& raw_data, int frame_height, int frame_width){
     Calibration_Data data;
     data.focal_point = std::vector<float>(raw_data.begin(), raw_data.begin()+2);
-    data.camera_matrix = Eigen::MatrixXf({{data.focal_point[0], 0, raw_data[2]},
+    data.camera_matrix = MatrixXf({{data.focal_point[0], 0, raw_data[2]},
                                               {0, data.focal_point[1], raw_data[3]},
                                               {0, 0, 1}});
     data.distortion_coefficients = std::vector<float>(raw_data.begin()+4, raw_data.end());
@@ -801,6 +725,10 @@ void read_events(const std::string& file_path, std::vector<Event>& events, float
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// EVENT HANDLING  //////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin_size = 0.05){
     std::vector<std::vector<Event>> bins;
     if (events.empty()) {
@@ -833,10 +761,10 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin
     return bins;
 }
 
-void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor<float,2,Eigen::RowMajor>>& frames, const int camera_height, const int camera_width){
+void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor2f>& frames, const int camera_height, const int camera_width){
     int i = 0;
-    Tensor<float,2,Eigen::RowMajor> frame(camera_height, camera_width);
-    Tensor<float,2,Eigen::RowMajor> cum_frame(camera_height, camera_width);
+    Tensor2f frame(camera_height, camera_width);
+    Tensor2f cum_frame(camera_height, camera_width);
     for (std::vector<Event> event_vector : bucketed_events){
 
         frame.setZero();
@@ -855,28 +783,25 @@ void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::
 
 }
 
-void create_sparse_matrix(const int N, const Tensor<float,2,Eigen::RowMajor>& V, SpMat& result){
-    // Step 1: Create the repeated identity matrix part
-    std::vector<Triplet<float>> tripletList;
-    tripletList.reserve(N*3*2);
-    for (int i = 0; i<N*3; i++){
-        tripletList.push_back(Triplet<float>(i,i%3,1.0));
-    }
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  INTERACTING MAPS HELPER FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Step 2: Create the diagonal and off-diagonal values from V
-    int j = 3;
-    array<long,1> one_dim{{V.size()}};
-    Eigen::Tensor<float,1,Eigen::RowMajor> k = V.reshape(one_dim);
-    for (int i = 0; i<N*3; i++){
-        tripletList.push_back(Triplet<float>(i,j,k(i)));
-        if (i%3 == 2){
-            j++;
-        }
-    }
-    result.setFromTriplets(tripletList.begin(), tripletList.end());
+//TODO ensure Tensors are actually const
+bool isApprox(Tensor3f& t1, Tensor3f& t2, const float precision = 1e-8){
+    Map<VectorXf> mt1(t1.data(), t1.size());
+    Map<VectorXf> mt2(t2.data(), t2.size());
+    return mt1.isApprox(mt2, precision);
 }
 
-void norm_tensor_along_dim3(const Tensor<float,3,Eigen::RowMajor>& T, Tensor<float,2,Eigen::RowMajor>& norm){
+bool isApprox(Tensor2f& t1, Tensor2f& t2, const float precision = 1e-8){
+    Map<VectorXf> mt1(t1.data(), t1.size());
+    Map<VectorXf> mt2(t2.data(), t2.size());
+    return mt1.isApprox(mt2, precision);
+}
+
+
+void norm_tensor_along_dim3(const Tensor3f& T, Tensor2f& norm){
     array<int,1> dims({2});
     norm = T.square().sum(dims).sqrt();
 }
@@ -898,7 +823,7 @@ autodiff::Vector3real C(autodiff::real x, autodiff::real y, int N_x, int N_y, fl
 }
 
 // Jacobian for x value tested by hand
-void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor<float,3,Eigen::RowMajor>& CCM, Tensor<float,3,Eigen::RowMajor>& C_x, Tensor<float,3,Eigen::RowMajor>& C_y) {
+void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor3f& CCM, Tensor3f& C_x, Tensor3f& C_y) {
     float height = tan(view_angle_y / 2);
     float width = tan(view_angle_x / 2);
 
@@ -907,8 +832,8 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
     DEBUG_LOG("Height: " << height);
     DEBUG_LOG("Width: " << width);
     // Create grid of points
-    Eigen::MatrixXf XX(N_y, N_x);
-    Eigen::MatrixXf YY(N_y, N_x);
+    MatrixXf XX(N_y, N_x);
+    MatrixXf YY(N_y, N_x);
     for (int i = 0; i < N_y; ++i) {
         for (int j = 0; j < N_x; ++j) {
             XX(i, j) = float(j);
@@ -921,10 +846,10 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
 
     // Compute the camera calibration map (CCM) and the Jacobians
     // std::vector<std::vector<autodiff::Vector3real>> CCM;
-    // Tensor<float,3,Eigen::RowMajor> CCM_T;
-    // Tensor<float,3,Eigen::RowMajor> C_x;
-    // Tensor<float,3,Eigen::RowMajor> C_y;
-    // std::vector<std::vector<Eigen::VectorXf>> C_y;
+    // Tensor3f CCM_T;
+    // Tensor3f C_x;
+    // Tensor3f C_y;
+    // std::vector<std::vector<VectorXf>> C_y;
     for (int i = 0; i < N_y; ++i) {
         for (int j = 0; j < N_x; ++j) {
             autodiff::real x = XX(i, j);
@@ -941,8 +866,8 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             autodiff::VectorXreal F;
 
             // NEEDS TO STAY D O U B L E
-            Eigen::VectorXd dCdx = autodiff::jacobian(C, wrt(x), at(x,y,N_x, N_y, height, width, rs), F);
-            Eigen::VectorXd dCdy = autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F);
+            VectorXd dCdx = autodiff::jacobian(C, wrt(x), at(x,y,N_x, N_y, height, width, rs), F);
+            VectorXd dCdy = autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F);
 
             // C_x = dCdx
             C_x(i,j,0) = dCdx(0); // y
@@ -990,7 +915,7 @@ void crossProduct3x3(const Tensor3f& A, const Vector3f& B, Vector3f& C, int y, i
 }
 
 
-void crossProduct1x3(const Eigen::Tensor<float,1>& A, const Tensor3f& B, Tensor3f& C){
+void crossProduct1x3(const Tensor<float,1>& A, const Tensor3f& B, Tensor3f& C){
     const auto& dimensions = B.dimensions();
     for (size_t i = 0; i < dimensions[0]; ++i){
         for (size_t j = 0; j < dimensions[1]; ++j){
@@ -1002,12 +927,12 @@ void crossProduct1x3(const Eigen::Tensor<float,1>& A, const Tensor3f& B, Tensor3
 
 }
 
-void vector_distance(const Tensor<float,3,Eigen::RowMajor> &vec1, const Tensor<float,3,Eigen::RowMajor> &vec2, Tensor<float,2,Eigen::RowMajor> &distance){
+void vector_distance(const Tensor3f &vec1, const Tensor3f &vec2, Tensor2f &distance){
     PROFILE_FUNCTION();
     const auto& dimensions = vec1.dimensions();
-    Tensor<float,3,Eigen::RowMajor> cross_product(dimensions);
-    Tensor<float,2,Eigen::RowMajor> norm(dimensions[0], dimensions[1]);
-    Tensor<float,2,Eigen::RowMajor> norm2(dimensions[0], dimensions[1]);
+    Tensor3f cross_product(dimensions);
+    Tensor2f norm(dimensions[0], dimensions[1]);
+    Tensor2f norm2(dimensions[0], dimensions[1]);
     crossProduct3x3(vec1, vec2, cross_product);
     norm_tensor_along_dim3(cross_product, norm);
     norm_tensor_along_dim3(vec2, norm2);
@@ -1030,7 +955,7 @@ float sign_func(float x){
 
 // Function to time the performance of a given dot product computation function
 template<typename Func>
-void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::RowMajor>& A, const Eigen::Tensor<float,3,Eigen::RowMajor>& B, Eigen::Tensor<float,2,Eigen::RowMajor>& D, int iterations) {
+void timeDotProductComputation(Func func, const Tensor3f& A, const Tensor3f& B, Tensor2f& D, int iterations) {
     auto start = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < iterations; ++i) {
@@ -1043,7 +968,7 @@ void timeDotProductComputation(Func func, const Eigen::Tensor<float,3,Eigen::Row
 }
 
 // Function using nested loops to compute the dot product
-void computeDotProductWithLoops(const Eigen::Tensor<float,3,Eigen::RowMajor>& A, const Eigen::Tensor<float,3,Eigen::RowMajor>& B, Eigen::Tensor<float,2,Eigen::RowMajor>& D) {
+void computeDotProductWithLoops(const Tensor3f& A, const Tensor3f& B, Tensor2f& D) {
     PROFILE_FUNCTION();
 
     const int height = A.dimension(0);
@@ -1063,7 +988,7 @@ void computeDotProductWithLoops(const Eigen::Tensor<float,3,Eigen::RowMajor>& A,
 }
 
 // // Function using .chip() to compute the dot product
-// void computeDotProductWithChip(const Eigen::Tensor<float,3,Eigen::RowMajor>& A, const Eigen::Tensor<float,3,Eigen::RowMajor>& B, Eigen::Tensor<float,2,Eigen::RowMajor>& D) {
+// void computeDotProductWithChip(const Tensor3f& A, const Tensor3f& B, Tensor2f& D) {
 //     const int m = A.dimension(0);
 //     const int n = A.dimension(1);
 //     Tensor<float, 1> a_slice;
@@ -1080,14 +1005,14 @@ void computeDotProductWithLoops(const Eigen::Tensor<float,3,Eigen::RowMajor>& A,
 //     }
 // }
 
-void m32(const Tensor<float,3,Eigen::RowMajor> &In, const Tensor<float,3,Eigen::RowMajor> &C_x, const Tensor<float,3,Eigen::RowMajor> &C_y, Tensor<float,3,Eigen::RowMajor> &Out){
+void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f &Out){
     const auto& dimensions = In.dimensions();
-    Tensor<float,3,Eigen::RowMajor> C1(dimensions);
-    Tensor<float,3,Eigen::RowMajor> C2(dimensions);
-    Tensor<float,2,Eigen::RowMajor> dot(dimensions[0], dimensions[1]);
-    Tensor<float,2,Eigen::RowMajor> sign(dimensions[0], dimensions[1]);
-    Tensor<float,2,Eigen::RowMajor> distance1(dimensions[0], dimensions[1]);
-    Tensor<float,2,Eigen::RowMajor> distance2(dimensions[0], dimensions[1]);
+    Tensor3f C1(dimensions);
+    Tensor3f C2(dimensions);
+    Tensor2f dot(dimensions[0], dimensions[1]);
+    Tensor2f sign(dimensions[0], dimensions[1]);
+    Tensor2f distance1(dimensions[0], dimensions[1]);
+    Tensor2f distance2(dimensions[0], dimensions[1]);
 
 //    std::cout << "In " << In << std::endl;
 //    std::cout << "C_x " << C_x << std::endl;
@@ -1132,10 +1057,50 @@ void m23(const Tensor3f& In, const Tensor3f& Cx, const Tensor3f& Cy, Vector3f& O
     Out(2) = In(y, x, 1) * Cx(y, x, 2) + In(y, x, 0) * Cy(y, x, 2);
 }
 
-void update_FG(Eigen::Tensor3f& F, Eigen::Tensor2f& V, Eigen::Tensor3f& G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
+void setup_R_update(const Tensor3f& CCM, Matrix3f& A, Vector3f& B, std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, std::unique_ptr<Vector3f[]>& points){
+    PROFILE_FUNCTION();
+    const auto &dimensions = CCM.dimensions();
+    int rows = dimensions[0];
+    int cols = dimensions[1];
+    Matrix3f Identity = Matrix3f::Identity();
+    Vector3f d;
+    B.setZero();
+
+    for (size_t i = 0; i < rows; ++i){
+        for (size_t j = 0; j < cols; ++j){
+            d(0) = CCM(i, j, 0);
+            d(1) = CCM(i, j, 1);
+            d(2) = CCM(i, j, 2);
+            Identity_minus_outerProducts[i * cols + j] = Identity - d * d.transpose();
+            A += Identity_minus_outerProducts[i * cols + j];
+            points[i * cols + j].setZero();
+        }
+    }
+}
+
+float VFG_check(Tensor2f& V, Tensor3f& F, Tensor3f& G, float precision){
+//    InstrumentationTimer timer("VFG_check");
+    const auto& dimensions = F.dimensions();
+    MatrixXfRowMajor dot(dimensions[0], dimensions[1]);
+    MatrixXfRowMajor diff(dimensions[0], dimensions[1]);
+
+    for (int i = 0; i<dimensions[0]; i++){
+        for (int j = 0; j<dimensions[1]; j++){
+            dot(i,j) = -(F(i,j,0)*G(i,j,0) + F(i,j,1)*G(i,j,1));
+            diff(i,j) = (V(i,j) - dot(i,j));
+        }
+    }
+    return diff.lpNorm<Infinity>();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  INTERACTING MAPS UPDATE FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void update_FG(Tensor3f& F, Tensor2f& V, Tensor3f& G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_FG");
     PROFILE_FUNCTION();
-    Eigen::Vector2f update_F;
+    Vector2f update_F;
     update_F.setZero();
     float norm = std::abs((G(y, x, 0) * G(y, x, 0) + G(y, x, 1) * G(y, x, 1)));
     if (norm != 0.0) {
@@ -1164,10 +1129,10 @@ void update_FG(Eigen::Tensor3f& F, Eigen::Tensor2f& V, Eigen::Tensor3f& G, int y
     }
 }
 
-void update_GF(Eigen::Tensor3f& G, Eigen::Tensor2f V, Eigen::Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
+void update_GF(Tensor3f& G, Tensor2f V, Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_GF");
     PROFILE_FUNCTION();
-    Eigen::Vector2f update_G;
+    Vector2f update_G;
     update_G.setZero();
     float norm = std::abs((F(y, x, 0) * F(y, x, 0) + F(y, x, 1) * F(y, x, 1)));
     if (norm != 0.0) {
@@ -1196,7 +1161,7 @@ void update_GF(Eigen::Tensor3f& G, Eigen::Tensor2f V, Eigen::Tensor3f& F, int y,
     }
 }
 
-void update_GI(Eigen::Tensor3f& G, const Eigen::Tensor3f& I_gradient, const int y, const int x, const float weight_GI, const float eps=1e-8, const float gamma=255.0){
+void update_GI(Tensor3f& G, const Tensor3f& I_gradient, const int y, const int x, const float weight_GI, const float eps=1e-8, const float gamma=255.0){
     PROFILE_FUNCTION();
     DEBUG_LOG(G(y, x, 0));
     DEBUG_LOG(I_gradient(y, x, 0));
@@ -1226,7 +1191,7 @@ void update_GI(Eigen::Tensor3f& G, const Eigen::Tensor3f& I_gradient, const int 
     DEBUG_LOG(G(y, x, 1));
 }
 
-void update_IV(Eigen::Tensor2f& I, Eigen::Tensor2f& MI, int y, int x, const float weight_IV=0.5, const float time_step=0.05){
+void update_IV(Tensor2f& I, Tensor2f& MI, int y, int x, const float weight_IV=0.5, const float time_step=0.05){
     PROFILE_FUNCTION();
     I(y, x) = (1-weight_IV)*I(y, x) + weight_IV*MI(y, x);
     if (I(y,x)<0.001 and I(y,x)>-0.001){
@@ -1240,30 +1205,10 @@ void updateGIDiffGradient(Tensor3f& G, Tensor3f& I_gradient, Tensor3f& GIDiff, T
     computeGradient(GIDiff, GIDiffGradient, y, x);
 }
 
-void update_IG(Eigen::Tensor2f& I, Eigen::Tensor3f& GIDiffGradient, int y, int x, const float weight_IG=0.5){
+void update_IG(Tensor2f& I, Tensor3f& GIDiffGradient, int y, int x, const float weight_IG=0.5){
     PROFILE_FUNCTION();
     I(y, x) = I(y, x) + weight_IG * (- GIDiffGradient(y, x, 0) - GIDiffGradient(y, x, 1));
 }
-//    std::cout << x_update << std::endl;
-//    std::cout << y_update << std::endl;
-
-    // # Gradient Implementation, the paper mentions an effect in x-direction which gets computed as a difference between matrix components in x-direction. 
-    // # This is very similar to how gradients are implemented which is why they are used here. The temp map consists of an x and a y component since, the
-    // # gradient of I consists of two components. One for the x and one for the y direction.
-    // x_update = jnp.gradient(temp_map[:,:,0])
-    // y_update = jnp.gradient(temp_map[:,:,1])
-    // return (1 - weight_IG)*I + weight_IG*(I - x_update[0] - y_update[1])
-
-    // Like Paper Implementation
-    // x_update = np.zeros((temp_map.shape[:-1]))
-    // y_update = np.zeros((temp_map.shape[:-1]))
-    // x_update[0,:] = temp_map[0,:,0] # - 0 // Out of bound entries are set to 0
-    // x_update[1:,:] = temp_map[1:,:,0] - temp_map[:-1,:,0]
-    // y_update[:,0] = temp_map[:,0,1] # - 0 // Out of bound entries are set to 0
-    // y_update[:,1:] = temp_map[:,1:,1] - temp_map[:,:-1,1]
-    // return (1 - weight_IG)*I + weight_IG*(I - x_update - y_update)
-
-
 
 void update_FR(Tensor3f& F, const Tensor3f& CCM, const Tensor3f& Cx, const Tensor3f& Cy, const Tensor<float,1>& R, const float weight_FR, float eps=1e-8, float gamma=255.0){
     PROFILE_FUNCTION();
@@ -1303,27 +1248,6 @@ void update_FR(Tensor3f& F, const Tensor3f& CCM, const Tensor3f& Cx, const Tenso
     }
 }
 
-void setup_R_update(const Tensor3f& CCM, Matrix3f& A, Vector3f& B, std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, std::unique_ptr<Vector3f[]>& points){
-    PROFILE_FUNCTION();
-    const auto &dimensions = CCM.dimensions();
-    int rows = dimensions[0];
-    int cols = dimensions[1];
-    Matrix3f Identity = Matrix3f::Identity();
-    Vector3f d;
-    B.setZero();
-
-    for (size_t i = 0; i < rows; ++i){
-        for (size_t j = 0; j < cols; ++j){
-            d(0) = CCM(i, j, 0);
-            d(1) = CCM(i, j, 1);
-            d(2) = CCM(i, j, 2);
-            Identity_minus_outerProducts[i * cols + j] = Identity - d * d.transpose();
-            A += Identity_minus_outerProducts[i * cols + j];
-            points[i * cols + j].setZero();
-        }
-    }
-}
-
 void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const Tensor3f& Cx, const Tensor3f& Cy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, const int y, const int x, const float weight_RF) {
     //InstrumentationTimer timer1("update_RF");
     PROFILE_FUNCTION();
@@ -1332,7 +1256,7 @@ void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const T
     int cols = dimensions[1];
     Vector3f transformed_F(3);
     Vector3f point(3);
-    Eigen::Vector3f solution(3);
+    Vector3f solution(3);
     {
         PROFILE_SCOPE("RF Pre");
         // Transform F from 2D image space to 3D world space with C
@@ -1353,9 +1277,13 @@ void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const T
     R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  INTERACTING MAPS MAIN FUNCTION  ////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void event_step(Tensor2f& V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f& G, Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
     PROFILE_FUNCTION();
-    Eigen::array<Eigen::Index, 2> dimensions = V.dimensions();
+    array<Index, 2> dimensions = V.dimensions();
 
     update_IV(MI, V, y, x, weights["weight_IV"], weights["time_step"]);
 
@@ -1403,20 +1331,7 @@ void event_step(Tensor2f& V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tenso
      }
  }
 
-float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3,Eigen::RowMajor>& F, Eigen::Tensor<float,3,Eigen::RowMajor>& G, float precision){
-//    InstrumentationTimer timer("VFG_check");
-    const auto& dimensions = F.dimensions();
-    Eigen::MatrixXfRowMajor dot(dimensions[0], dimensions[1]);
-    Eigen::MatrixXfRowMajor diff(dimensions[0], dimensions[1]);
 
-    for (int i = 0; i<dimensions[0]; i++){
-        for (int j = 0; j<dimensions[1]; j++){
-            dot(i,j) = -(F(i,j,0)*G(i,j,0) + F(i,j,1)*G(i,j,1));
-            diff(i,j) = (V(i,j) - dot(i,j));
-        }
-    }
-    return diff.lpNorm<Infinity>();
-}
 //
 //int test(){
 //    //##################################################################################################################
@@ -1440,29 +1355,29 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //
 //    //##################################################################################################################
 //    // Camera calibration matrix (C/CCM) and dCdx/dCdy
-//    Tensor<float,3,Eigen::RowMajor> CCM(n,m,3);
+//    Tensor3f CCM(n,m,3);
 //    CCM.setZero();
-//    Tensor<float,3,Eigen::RowMajor> dCdx(n,m,3);
+//    Tensor3f dCdx(n,m,3);
 //    dCdx.setZero();
-//    Tensor<float,3,Eigen::RowMajor> dCdy(n,m,3);
+//    Tensor3f dCdy(n,m,3);
 //    dCdy.setZero();
 //
 //    //##################################################################################################################
 //    // Optic flow F, temporal derivative V, spatial derivative G
-//    Tensor<float,3,Eigen::RowMajor> F(n,m,2);
+//    Tensor3f F(n,m,2);
 //    F.setZero();
 //    F.chip(1,2).setConstant(1.0);
-//    Tensor<float,2,Eigen::RowMajor> V(n,m);
+//    Tensor2f V(n,m);
 //    V.setZero();
-//    Tensor<float,3,Eigen::RowMajor> G(n,m,2);
+//    Tensor3f G(n,m,2);
 //    G.setZero();
 //    G.chip(1,2).setConstant(-1.0);
 //
 //    //##################################################################################################################
 //    // Intesity I
-//    Tensor<float,2,Eigen::RowMajor> I(n+1,m+1);
+//    Tensor2f I(n+1,m+1);
 //    I.setZero();
-//    Tensor<float,3,Eigen::RowMajor> delta_I(n,m,2);
+//    Tensor3f delta_I(n,m,2);
 //    delta_I.setRandom();
 //
 //    //##################################################################################################################
@@ -1474,16 +1389,16 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        std::cout << "TESTING CONVERSION" << std::endl;
 //        //##############################################################################################################
 //        // Test Tensor casts
-//        Tensor<float,2,Eigen::RowMajor> T2M (N,M);
+//        Tensor2f T2M (N,M);
 //        Tensor<float,1> T2V (N);
 //        Tensor<float,2> M2T_res (N,M);
 //        Tensor<float,1> V2T_res (N);
 //        T2M.setConstant(1.0);
 //        T2V.setConstant(1.0);
-//        Eigen::MatrixXfRowMajor M2T (N,M);
-//        Eigen::VectorXf V2T (N);
-//        Eigen::MatrixXfRowMajor T2M_res (N,M);
-//        Eigen::VectorXf T2V_res (N);
+//        MatrixXfRowMajor M2T (N,M);
+//        VectorXf V2T (N);
+//        MatrixXfRowMajor T2M_res (N,M);
+//        VectorXf T2V_res (N);
 //        M2T.setConstant(2.0);
 //        V2T.setConstant(2.0);
 //        T2M_res = Tensor2Matrix(T2M);
@@ -1494,12 +1409,12 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //
 //        //##################################################################################################################
 //        // TESTING OPENCV CONVERSION
-//        Eigen::MatrixXfRowMajor eigen_matrix = Eigen::MatrixXfRowMajor::Constant(3, 3, 2.0);
+//        MatrixXfRowMajor eigen_matrix = MatrixXfRowMajor::Constant(3, 3, 2.0);
 //        cv::Mat mat = eigenToCvMat(eigen_matrix);
 //        std::cout << "Implemented Eigen to CV" << std::endl << mat << std::endl;
 //
 //        cv::Mat mat2(3, 3, CV_32F, cv::Scalar::all(1));
-//        Eigen::MatrixXfRowMajor eigen_matrix2 = cvMatToEigen(mat2);
+//        MatrixXfRowMajor eigen_matrix2 = cvMatToEigen(mat2);
 //        std::cout << "Implemented CV to eigen" << std::endl << eigen_matrix2 << std::endl;
 //
 //        std::cout << "CONVERSION TEST PASSED" << std::endl;
@@ -1509,7 +1424,7 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        std::cout << "TESTING UPDATE FUNCTIONS" << std::endl;
 //        //##################################################################################################################
 //        // Update F/G from G/F
-//        Tensor<float,3,Eigen::RowMajor> F_comparison(n,m,2);
+//        Tensor3f F_comparison(n,m,2);
 //        F.setConstant(0.0);
 //        F.chip(1,2).setConstant(1.0);
 //        V(0,0) = 1;
@@ -1535,16 +1450,16 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        }
 //        //##################################################################################################################
 //        // gradient I
-//        Tensor<float,2,Eigen::RowMajor> delta_I_x_comparison(3,3);
-//        Tensor<float,2,Eigen::RowMajor> delta_I_y_comparison(3,3);
+//        Tensor2f delta_I_x_comparison(3,3);
+//        Tensor2f delta_I_y_comparison(3,3);
 //
 //        I.setValues({{0,1,3}, {1,3,6}, {3,6,10}});
 //        delta_I_x_comparison.setValues({{0.5,1.5,1},{1,2.5,1.5},{1.5,3.5,2}});
 //        delta_I_y_comparison.setValues({{0.5,1,1.5},{1.5,2.5,3.5},{1,1.5,2}});
 //        G.chip(1,2).setConstant(1.0);
-//        Eigen::array<Eigen::Index, 2> dimensions = I.dimensions();
-//        Eigen::Tensor<float,2,Eigen::RowMajor> delta_I_x(dimensions[0], dimensions[1]);
-//        Eigen::Tensor<float,2,Eigen::RowMajor> delta_I_y(dimensions[0], dimensions[1]);
+//        array<Index, 2> dimensions = I.dimensions();
+//        Tensor2f delta_I_x(dimensions[0], dimensions[1]);
+//        Tensor2f delta_I_y(dimensions[0], dimensions[1]);
 //        array<int, 2> shuffle({1, 0});
 ////        delta_I.chip(0,2) = Matrix2Tensor(gradient_x(Tensor2Matrix(I))).swap_layout().shuffle(shuffle); // Swap Layout of delta_I_x back 2 RowMajor as Matrix2Tensor returns ColMajor.
 ////        delta_I.chip(1,2) = Matrix2Tensor(gradient_y(Tensor2Matrix(I))).swap_layout().shuffle(shuffle);
@@ -1566,7 +1481,7 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //
 //        //##################################################################################################################
 //        // Update I from G
-//        Tensor<float,2,Eigen::RowMajor> I_comparison(n+1,m+1);
+//        Tensor2f I_comparison(n+1,m+1);
 //        delta_I.chip(0,2) = delta_I_y_comparison;
 //        delta_I.chip(1,2) = delta_I_x_comparison;
 //        I_comparison.setValues({{1,4,3},{3,5,6},{3,6,10}});
@@ -1599,7 +1514,7 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //
 //        //##################################################################################################################
 //        // Update G from I
-//        Tensor<float,3,Eigen::RowMajor> G_comparison(n,m,2);
+//        Tensor3f G_comparison(n,m,2);
 //        G.setValues({{{1,4},{2,3}},{{3,2},{4,1}}});
 //        delta_I.setValues({{{1,0},{0,1}},{{0,1},{1,0}}});
 //        G_comparison.setValues({{{1,2},{1,2}},{{1.5,1.5},{2.5,0.5}}});
@@ -1648,7 +1563,7 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        //##################################################################################################################
 //        // Create frames
 //        size_t frame_count = binned_events.size();
-//        std::vector<Tensor<float,2,Eigen::RowMajor>> frames(frame_count);
+//        std::vector<Tensor2f> frames(frame_count);
 //        create_frames(binned_events, frames, 180, 240);
 //        std::cout << "Implemented event binning and event frame creation" << std::endl;
 //        std::cout << "FILE READOUT AND EVENT HANDLING TEST PASSED" << std::endl;
@@ -1735,11 +1650,11 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        //##################################################################################################################
 //        // Tensor cross product
 //        // Define the dimensions of the tensors
-//        Eigen::array<Eigen::Index, 3> dimensions = {n, m, 3};
+//        array<Index, 3> dimensions = {n, m, 3};
 //        // Initialize tensors A and B with random values
-//        Eigen::Tensor<float,3,Eigen::RowMajor> A(dimensions);
-//        Eigen::Tensor<float,3,Eigen::RowMajor> B(dimensions);
-//        Eigen::Tensor<float,3,Eigen::RowMajor> D(dimensions);
+//        Tensor3f A(dimensions);
+//        Tensor3f B(dimensions);
+//        Tensor3f D(dimensions);
 //        A.setRandom();
 //        B.setRandom();
 //
@@ -1765,7 +1680,7 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        std::cout << "Time for loop-based implementation: " << duration_loop.count()/iterations << " seconds\n";
 //        std::cout << "Implemented cross product for Tensors" << std::endl;
 //        // Define the resulting tensor D with shape (m, n)
-//        Eigen::Tensor<float,2,Eigen::RowMajor> E(n, m);
+//        Tensor2f E(n, m);
 //        // Time the dot product computation using nested loops
 //        std::cout << "Timing dot product computation with loops:" << std::endl;
 //        timeDotProductComputation(computeDotProductWithLoops, A, B, E, 1000);
@@ -1779,10 +1694,10 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        //##################################################################################################################
 //        // Tensor cross product 1x3
 //        {
-//            Eigen::Tensor<float,1> A(3);
-//            Eigen::Tensor<float,3,Eigen::RowMajor> B(2,2,3);
-//            Eigen::Tensor<float,3,Eigen::RowMajor> C(2,2,3);
-//            Eigen::Tensor<float,3,Eigen::RowMajor> C_comp(2,2,3);
+//            Tensor<float,1> A(3);
+//            Tensor3f B(2,2,3);
+//            Tensor3f C(2,2,3);
+//            Tensor3f C_comp(2,2,3);
 //            A.setValues({1,2,3});
 //            B.setValues({{{0,1,2},{0,1,2}},{{0,1,2},{0,1,2}}});
 //            C_comp.setValues({{{-1,2,-1},{-1,2,-1}},{{-1,2,-1},{-1,2,-1}}});
@@ -1806,30 +1721,30 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //
 //        //##################################################################################################################
 //        // Camera calibration matrix (C/CCM) and dCdx/dCdy
-//        Tensor<float,3,Eigen::RowMajor> CCM(n,m,3);
+//        Tensor3f CCM(n,m,3);
 //        CCM.setZero();
-//        Tensor<float,3,Eigen::RowMajor> dCdx(n,m,3);
+//        Tensor3f dCdx(n,m,3);
 //        dCdx.setZero();
-//        Tensor<float,3,Eigen::RowMajor> dCdy(n,m,3);
+//        Tensor3f dCdy(n,m,3);
 //        dCdy.setZero();
 //        find_C(m, n, PI/2, PI/2, 1.0f, CCM, dCdx, dCdy);
 //
 //        //##################################################################################################################
 //        // Optic flow F, temporal derivative V, spatial derivative G
-//        Tensor<float,3,Eigen::RowMajor> F(n,m,2);
+//        Tensor3f F(n,m,2);
 //        F.setConstant(0.1);
 //        F.chip(1,2).setConstant(1.0);
-//        Tensor<float,2,Eigen::RowMajor> V(n,m);
+//        Tensor2f V(n,m);
 //        V.setConstant(1.0);
-//        Tensor<float,3,Eigen::RowMajor> G(n,m,2);
+//        Tensor3f G(n,m,2);
 //        G.setConstant(0.0);
 //        G.chip(1,2).setConstant(-1.0);
 //
 //        //##################################################################################################################
 //        // Intesity I
-//        Tensor<float,2,Eigen::RowMajor> I(n+1,m+1);
+//        Tensor2f I(n+1,m+1);
 //        I.setValues({{1,4,0},{9,16,0},{0,0,0}});
-//        Tensor<float,3,Eigen::RowMajor> delta_I(n,m,2);
+//        Tensor3f delta_I(n,m,2);
 //        delta_I.setZero();
 //
 //        //##################################################################################################################
@@ -1866,7 +1781,7 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        std::cout << "TESTING OPENCV FUNCTIONS" << std::endl;
 //        //##################################################################################################################
 //        // Convert to grayscale image
-//        Eigen::MatrixXfRowMajor grayscale_test = Eigen::MatrixXfRowMajor::Random(100,100);
+//        MatrixXfRowMajor grayscale_test = MatrixXfRowMajor::Random(100,100);
 //        cv::Mat grayscale_image = frame2grayscale(grayscale_test);
 //        cv::imshow("Grayscale Image", grayscale_image);
 ////        cv::waitKey(0);
@@ -1874,14 +1789,14 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 //        //##################################################################################################################
 //        // TESTING UNDISTORT IMAGE
 //        // Camera matrix (3x3)
-//        Eigen::MatrixXfRowMajor camera_matrix_eigen(3, 3);
+//        MatrixXfRowMajor camera_matrix_eigen(3, 3);
 //        camera_matrix_eigen << 800, 0, 320,
 //                0, 800, 240,
 //                0, 0, 1;
 //        cv::Mat camera_matrix_cv = eigenToCvMat(camera_matrix_eigen);
 //
 //        // Distortion coefficients (1x5)
-//        Eigen::MatrixXfRowMajor distortion_coefficients_eigen(1, 5);
+//        MatrixXfRowMajor distortion_coefficients_eigen(1, 5);
 //        distortion_coefficients_eigen << 0.1, -0.05, 0, 0, 0; // Simple distortion
 //        cv::Mat distortion_coefficients_cv = eigenToCvMat(distortion_coefficients_eigen);
 //
@@ -1894,13 +1809,13 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 ////        cv::waitKey(0);
 //
 //        // V to Image
-//        Eigen::MatrixXfRowMajor V2image_eigen = Eigen::MatrixXfRowMajor::Random(100,100);
+//        MatrixXfRowMajor V2image_eigen = MatrixXfRowMajor::Random(100,100);
 //        cv::Mat V2image_cv = V2image(V2image_eigen);
 //        cv::imshow("V Image", V2image_cv);
 ////        cv::waitKey(0);
 //
 //        // Vectorfield to Image
-//        Eigen::Tensor<float,3,Eigen::RowMajor> vector_field(100,100,2);
+//        Tensor3f vector_field(100,100,2);
 //        // Fill example tensor data (normally you would have real data)
 //        for (int i = 0; i < 100; ++i) {
 //            for (int j = 0; j < 100; ++j) {
@@ -1913,10 +1828,10 @@ float VFG_check(Eigen::Tensor<float,2,Eigen::RowMajor>& V, Eigen::Tensor<float,3
 ////        cv::waitKey(0);
 //
 //        // Matrix V I F G to OpenCV Image
-//        Eigen::MatrixXfRowMajor Vimage = Eigen::MatrixXfRowMajor::Random(100, 100);  // Example data
-//        Eigen::MatrixXfRowMajor Iimage = Eigen::MatrixXfRowMajor::Random(100+1, 100+1);  // Example data
-//        Eigen::Tensor<float,3,Eigen::RowMajor> Fimage(100, 100, 2);          // Example data
-//        Eigen::Tensor<float,3,Eigen::RowMajor> Gimage(100, 100, 2);          // Example data
+//        MatrixXfRowMajor Vimage = MatrixXfRowMajor::Random(100, 100);  // Example data
+//        MatrixXfRowMajor Iimage = MatrixXfRowMajor::Random(100+1, 100+1);  // Example data
+//        Tensor3f Fimage(100, 100, 2);          // Example data
+//        Tensor3f Gimage(100, 100, 2);          // Example data
 //
 //        // Fill example tensor data (normally you would have real data)
 //        for (int i = 0; i < 100; ++i) {
@@ -1996,19 +1911,19 @@ int main() {
 
         //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
-        Tensor<float,2,Eigen::RowMajor> V(height, width);
+        Tensor2f V(height, width);
         V.setZero();
-        Tensor<float,3,Eigen::RowMajor> F(height, width, 2);
+        Tensor3f F(height, width, 2);
         F.setZero();
-        Tensor<float,3,Eigen::RowMajor> G(height, width, 2);
+        Tensor3f G(height, width, 2);
         G.setZero();
-        Tensor<float,2,Eigen::RowMajor> I(height, width);
+        Tensor2f I(height, width);
         I.setRandom();
-        Tensor<float,3,Eigen::RowMajor> delta_I(height, width,2);
+        Tensor3f delta_I(height, width,2);
         delta_I.setZero();
-        Tensor<float,3,Eigen::RowMajor> GIDiff(height, width,2);
+        Tensor3f GIDiff(height, width,2);
         GIDiff.setRandom();
-        Tensor<float,3,Eigen::RowMajor> GIDiffGradient(height, width,2);
+        Tensor3f GIDiffGradient(height, width,2);
         GIDiffGradient.setRandom();
         Tensor<float,1> R(3);
         Tensor<float,1> R2(3);
@@ -2046,17 +1961,17 @@ int main() {
         //##################################################################################################################
         // Create frames
         size_t frame_count = binned_events.size();
-        std::vector<Tensor<float,2,Eigen::RowMajor>> frames(frame_count);
+        std::vector<Tensor2f> frames(frame_count);
         create_frames(binned_events, frames, height, width);
         std::cout << "Created frames " << frame_count << " out of " << event_data.size() << " events" << std::endl;
 
         //##################################################################################################################
         // Camera calibration matrix (C/CCM) and dCdx/dCdy
-        Tensor<float,3,Eigen::RowMajor> CCM(height, width,3);
+        Tensor3f CCM(height, width,3);
         CCM.setZero();
-        Tensor<float,3,Eigen::RowMajor> dCdx(height, width,3);
+        Tensor3f dCdx(height, width,3);
         dCdx.setZero();
-        Tensor<float,3,Eigen::RowMajor> dCdy(height, width,3);
+        Tensor3f dCdy(height, width,3);
         dCdy.setZero();
         find_C(width, height, calibration_data.view_angles[1], calibration_data.view_angles[0], 1.0f, CCM, dCdx, dCdy);
         std::cout << "Calculated Camera Matrix" << std::endl;
@@ -2072,15 +1987,14 @@ int main() {
         //##################################################################################################################
         // Memory Image for I to remember previous image
 
-        Tensor<float,2,Eigen::RowMajor> MI(height, width);
+        Tensor2f MI(height, width);
         MI.setConstant(imageBase);
 
-        Tensor<float,2,Eigen::RowMajor> decayBase(height, width);
+        Tensor2f decayBase(height, width);
         decayBase.setConstant(imageBase);
 
-        Tensor<float,2,Eigen::RowMajor> expDecay(height, width);
+        Tensor2f expDecay(height, width);
         expDecay.setConstant(1.0);
-
 
         std::string profiler_name = "Profiler.json";
         fs::path profiler_path = folder_path / profiler_name;
