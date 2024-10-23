@@ -16,6 +16,9 @@ include_directories(
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
+# Find dv-processing package
+find_package(dv-processing REQUIRED)
+
 # Add the src directory
 add_subdirectory(src)
 
@@ -30,7 +33,7 @@ set(SOURCES
 add_executable(Executable ${SOURCES})
 
 # Link libraries
-target_link_libraries(Executable ${OpenCV_LIBS})
+target_link_libraries(Executable ${OpenCV_LIBS} dv::processing)
 
 # Set the output directory for the executable
 set_target_properties(Executable PROPERTIES
