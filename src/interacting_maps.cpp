@@ -261,19 +261,17 @@ cv::Mat frame2grayscale(const MatrixXfRowMajor& frame) {
     // Convert MatrixXfRowMajor to cv::Mat
     cv::Mat frame_cv = eigenToCvMat(frame);
 
-    // Find min and max polarity
-    double min_polarity, max_polarity;
-    cv::minMaxLoc(frame_cv, &min_polarity, &max_polarity);
-
-    // Normalize the frame
-    cv::Mat normalized_frame;
-    frame_cv.convertTo(normalized_frame, CV_32FC3, 1.0 / (max_polarity - min_polarity), -min_polarity / (max_polarity - min_polarity));
+//    // Find min and max polarity
+//    double min_polarity, max_polarity;
+//    cv::minMaxLoc(frame_cv, &min_polarity, &max_polarity);
+//
+//    // Normalize the frame
+//    frame_cv.convertTo(frame_cv, CV_32FC3, 1.0 / (max_polarity - min_polarity), -min_polarity / (max_polarity - min_polarity));
 
     // Scale to 0-255 and convert to CV_8U
-    cv::Mat grayscale_frame;
-    normalized_frame.convertTo(grayscale_frame, CV_8UC1, 255.0);
+    frame_cv.convertTo(frame_cv, CV_8UC1, 255.0);
 
-    return grayscale_frame;
+    return frame_cv;
 }
 
 cv::Mat V2image(const MatrixXfRowMajor& V, const float cutoff=0.1) {
@@ -1097,15 +1095,15 @@ float VFG_check(Tensor2f& V, Tensor3f& F, Tensor3f& G, float precision){
 //  INTERACTING MAPS UPDATE FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void update_FG(Tensor3f& F, Tensor2f& V, Tensor3f& G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
+void update_FG(Tensor3f& F, float V, Tensor3f& G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_FG");
     PROFILE_FUNCTION();
     Vector2f update_F;
     update_F.setZero();
     float norm = std::abs((G(y, x, 0) * G(y, x, 0) + G(y, x, 1) * G(y, x, 1)));
     if (norm != 0.0) {
-        update_F(0) = F(y, x, 0) - ((G(y, x, 0) / norm) * (V(y, x) + (F(y, x, 0) * G(y, x, 0) + F(y, x, 1) * G(y, x, 1))));
-        update_F(1) = F(y, x, 1) - ((G(y, x, 1) / norm) * (V(y, x) + (F(y, x, 0) * G(y, x, 0) + F(y, x, 1) * G(y, x, 1))));
+        update_F(0) = F(y, x, 0) - ((G(y, x, 0) / norm) * (V + (F(y, x, 0) * G(y, x, 0) + F(y, x, 1) * G(y, x, 1))));
+        update_F(1) = F(y, x, 1) - ((G(y, x, 1) / norm) * (V + (F(y, x, 0) * G(y, x, 0) + F(y, x, 1) * G(y, x, 1))));
         F(y, x, 0) = (1 - weight_FG) * F(y, x, 0) + lr * weight_FG * update_F(0);
         F(y, x, 1) = (1 - weight_FG) * F(y, x, 1) + lr * weight_FG * update_F(1);
         if (F(y, x, 0) > gamma){
@@ -1129,15 +1127,15 @@ void update_FG(Tensor3f& F, Tensor2f& V, Tensor3f& G, int y, int x, const float 
     }
 }
 
-void update_GF(Tensor3f& G, Tensor2f V, Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
+void update_GF(Tensor3f& G,float V, Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_GF");
     PROFILE_FUNCTION();
     Vector2f update_G;
     update_G.setZero();
     float norm = std::abs((F(y, x, 0) * F(y, x, 0) + F(y, x, 1) * F(y, x, 1)));
     if (norm != 0.0) {
-        update_G(0) = G(y, x, 0) - ((F(y, x, 0) / norm) * (V(y, x) + (G(y, x, 0) * F(y, x, 0) + G(y, x, 1) * F(y, x, 1))));
-        update_G(1) = G(y, x, 1) - ((F(y, x, 1) / norm) * (V(y, x) + (G(y, x, 0) * F(y, x, 0) + G(y, x, 1) * F(y, x, 1))));
+        update_G(0) = G(y, x, 0) - ((F(y, x, 0) / norm) * (V + (G(y, x, 0) * F(y, x, 0) + G(y, x, 1) * F(y, x, 1))));
+        update_G(1) = G(y, x, 1) - ((F(y, x, 1) / norm) * (V + (G(y, x, 0) * F(y, x, 0) + G(y, x, 1) * F(y, x, 1))));
         G(y, x, 0) = (1 - weight_GF) * G(y, x, 0) + lr * weight_GF * update_G(0);
         G(y, x, 1) = (1 - weight_GF) * G(y, x, 0) + lr * weight_GF * update_G(1);
         if (G(y, x, 0) > gamma){
@@ -1191,9 +1189,9 @@ void update_GI(Tensor3f& G, const Tensor3f& I_gradient, const int y, const int x
     DEBUG_LOG(G(y, x, 1));
 }
 
-void update_IV(Tensor2f& I, Tensor2f& MI, int y, int x, const float weight_IV=0.5, const float time_step=0.05){
+void update_IV(Tensor2f& I, float V, int y, int x, const float weight_IV=0.5, const float time_step=0.05){
     PROFILE_FUNCTION();
-    I(y, x) = (1-weight_IV)*I(y, x) + weight_IV*MI(y, x);
+    I(y, x) = (1-weight_IV)*I(y, x) + weight_IV*V;
     if (I(y,x)<0.001 and I(y,x)>-0.001){
         I(y,x) = 0.0;
     }
@@ -1281,30 +1279,34 @@ void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const T
 //  INTERACTING MAPS MAIN FUNCTION  ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void event_step(Tensor2f& V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f& G, Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
+void event_step(const float V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f& G, Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
     PROFILE_FUNCTION();
-    array<Index, 2> dimensions = V.dimensions();
+    array<Index, 2> dimensions = I.dimensions();
 
     update_IV(MI, V, y, x, weights["weight_IV"], weights["time_step"]);
 
     // Image (MI) got changed through update by V. we need to update all surrounding gradient values. Because of the change at this pixel
     if (y>0){
         computeGradient(MI, delta_I, y-1, x);
+        update_GI(G, delta_I, y-1, x, weights["weight_GI"], weights["eps"], weights["gamma"]);
     }
     if (x>0){
         computeGradient(MI, delta_I, y, x-1);
+        update_GI(G, delta_I, y, x-1, weights["weight_GI"], weights["eps"], weights["gamma"]);
     }
     if (y<dimensions[0]){
         computeGradient(MI, delta_I, y+1, x);
+        update_GI(G, delta_I, y+1, x, weights["weight_GI"], weights["eps"], weights["gamma"]);
     }
     if (x<dimensions[1]){
         computeGradient(MI, delta_I, y, x+1);
+        update_GI(G, delta_I, y, x+1, weights["weight_GI"], weights["eps"], weights["gamma"]);
     }
 
     // We need to update the gradient at the current pixel, since surrounding image values could have changed through decay.
-    computeGradient(MI, delta_I, y, x);
-    DEBUG_LOG(I(y,x));
-    update_GI(G, delta_I, y, x, weights["weight_GI"], weights["eps"], weights["gamma"]);
+//    computeGradient(MI, delta_I, y, x);
+//    DEBUG_LOG(I(y,x));
+//    update_GI(G, delta_I, y, x, weights["weight_GI"], weights["eps"], weights["gamma"]);
 //    updateGIDiffGradient(G, delta_I, GIDiff, GIDiffGradient, y, x);
 
 //    update_IG(I, GIDiffGradient, y, x, weights["weight_IG"]);
@@ -1911,14 +1913,15 @@ int main() {
 
         //##################################################################################################################
         // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
-        Tensor2f V(height, width);
-        V.setZero();
+        Tensor2f V_Vis(height, width);
+        V_Vis.setZero();
+        float V;
         Tensor3f F(height, width, 2);
         F.setZero();
         Tensor3f G(height, width, 2);
         G.setZero();
         Tensor2f I(height, width);
-        I.setRandom();
+        I.setConstant(128.0);
         Tensor3f delta_I(height, width,2);
         delta_I.setZero();
         Tensor3f GIDiff(height, width,2);
@@ -2019,7 +2022,8 @@ int main() {
 
             int y = event.coordinates[0];
             int x = event.coordinates[1];
-            V(y, x) = event.polarity * weights["event_factor"];
+            V = event.polarity * weights["event_factor"];
+            V_Vis(y, x) = event.polarity * weights["event_factor"];
             //void event_step(Tensor2f& V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f G,
             // Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
             event_step(V, MI, I, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_points[y*cols + x], weights, permutation, y, x);
@@ -2032,16 +2036,21 @@ int main() {
 //                    writeToFile(F, folder_path / "F2.txt");
 //                    writeToFile(G, folder_path / "G2.txt");
 //                }
-            V(y,x) = 0.0;
 
             if (counter * 0.1 < event.time){
                 counter++;
+                // Decay the intensity image to a base value
                 expDecay = -expDecay * (0.1f/weights["decay_param"]);
                 MI = MI - imageBase;
                 MI = MI * Matrix2Tensor(Tensor2Matrix(expDecay).array().exp());
                 MI = MI + imageBase;
 
+//                // Decay the gradient of the image to 0
+//                delta_I.chip(0,2) = delta_I.chip(0,2) * Matrix2Tensor(Tensor2Matrix(expDecay).array().exp());
+//                delta_I.chip(1,2) = delta_I.chip(1,2) * Matrix2Tensor(Tensor2Matrix(expDecay).array().exp());
+
                 expDecay.setConstant(1.0);
+
                 for (int i = 0; i<height; i++){
                     for (int j = 0; j<width; j++){
                         if (MI(i,j) < 0.0){
@@ -2054,7 +2063,7 @@ int main() {
                 }
 
 
-                writeToFile(V, folder_path / "V.txt");
+                writeToFile(V_Vis, folder_path / "V.txt");
                 writeToFile(MI, folder_path / "MI.txt");
                 writeToFile(I, folder_path / "I.txt");
                 writeToFile(delta_I, folder_path / "I_gradient.txt");
@@ -2064,10 +2073,10 @@ int main() {
                 std::cout << "R: " << R << std::endl;
                 std::string image_name = "VIGF_" + std::to_string(counter) + ".png";
                 fs::path image_path = folder_path / image_name;
-                create_VIGF(Tensor2Matrix(V), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+                create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
                 image_name = "VvsFG" + std::to_string(counter) + ".png";
                 image_path = folder_path / image_name;
-                plot_VvsFG(Tensor2Matrix(MI), F, G, image_path, true);
+                plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
             }
         }
         Instrumentor::Get().EndSession();
