@@ -202,7 +202,7 @@ cv::Mat frame2grayscale(const MatrixXfRowMajor& frame);
  * @param cutoff Events with intensity less than cutoff are not visualised
  * @return opencv matrix of the colorcoded event frame
  */
-cv::Mat V2image(const MatrixXfRowMajor& V, const float cutoff=0.1);
+cv::Mat V2image(const MatrixXfRowMajor& V, const float cutoff);
 
 /**
  * Converts a vector field to an opencv image. Vectors are color coded according to their direction
@@ -245,7 +245,7 @@ cv::Mat create_colorwheel(int grid_size);
  * @param cutoff Events with intensity less than cutoff are not visualised
  * @return bgr image of the joined visualisation as opencv matrix
  */
-cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor3f& G, const Tensor3f& F, const std::string& path = "VIGF", const bool save = false, const float cutoff=0.1);
+cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor3f& G, const Tensor3f& F, const std::string& path, const bool save, const float cutoff);
 
 /**
  * Creates a colorbar of given height and width representing given max and min values with a specific colormap
@@ -256,7 +256,7 @@ cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const 
  * @param colormapType which colormap to use, default is VIRIDIS
  * @return returns an image of the colormap to be included in plots
  */
-cv::Mat createColorbar(double globalMin, double globalMax, int height, int width, int colormapType = cv::COLORMAP_VIRIDIS);
+cv::Mat createColorbar(double globalMin, double globalMax, int height, int width, int colormapType);
 
 /**
  * Plots the Event information (as stand in for the temporal gradient) against the dot product of
@@ -268,7 +268,7 @@ cv::Mat createColorbar(double globalMin, double globalMax, int height, int width
  * @param save if a save to disk is desired
  * @return bgr image of the plot as opencv matrix
  */
-cv::Mat plot_VvsFG(const MatrixXfRowMajor& V, const Tensor3f& F, const Tensor3f& G, const std::string& path = "VvsFG", bool save = false);
+cv::Mat plot_VvsFG(const MatrixXfRowMajor& V, const Tensor3f& F, const Tensor3f& G, const std::string& path, bool save);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  FILE FUNCTIONS  ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -328,7 +328,7 @@ Calibration_Data get_calibration_data(const std::vector<float>& raw_data, int fr
  * @param event_factor allows scaling the event intensity with an factor
  * @param max_events upper limit on the amount of events to save if end_time is not reached before
  */
-void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, float event_factor = 1.0, int max_events = INT32_MAX);
+void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, float event_factor, int max_events);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // EVENT HANDLING  //////////////////////////////////////////////////////////////////////////////////////////////
@@ -340,7 +340,7 @@ void read_events(const std::string& file_path, std::vector<Event>& events, float
  * @param bin_size
  * @return
  */
-std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin_size = 0.05);
+std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin_size);
 
 void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor2f>& frames, const int camera_height, const int camera_width);
 
@@ -349,9 +349,9 @@ void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //TODO ensure Tensors are actually const
-bool isApprox(Tensor3f& t1, Tensor3f& t2, const float precision = 1e-8);
+bool isApprox(Tensor3f& t1, Tensor3f& t2, const float precision);
 
-bool isApprox(Tensor2f& t1, Tensor2f& t2, const float precision = 1e-8);
+bool isApprox(Tensor2f& t1, Tensor2f& t2, const float precision);
 
 void norm_tensor_along_dim3(const Tensor3f& T, Tensor2f& norm);
 
@@ -397,19 +397,19 @@ float VFG_check(Tensor2f& V, Tensor3f& F, Tensor3f& G, float precision);
 //  INTERACTING MAPS UPDATE FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void update_FG(Tensor3f& F, Tensor2f& V, Tensor3f& G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0);
+void update_FG(Tensor3f& F, Tensor2f& V, Tensor3f& G, int y, int x, const float lr, const float weight_FG, float eps, float gamma);
 
-void update_GF(Tensor3f& G, Tensor2f V, Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0);
+void update_GF(Tensor3f& G, Tensor2f V, Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps, float gamma);
 
-void update_GI(Tensor3f& G, const Tensor3f& I_gradient, const int y, const int x, const float weight_GI, const float eps=1e-8, const float gamma=255.0);
+void update_GI(Tensor3f& G, const Tensor3f& I_gradient, const int y, const int x, const float weight_GI, const float eps, const float gamma);
 
-void update_IV(Tensor2f& I, Tensor2f& MI, int y, int x, const float weight_IV=0.5, const float time_step=0.05);
+void update_IV(Tensor2f& I, Tensor2f& MI, int y, int x, const float weight_IV, const float time_step);
 
 void updateGIDiffGradient(Tensor3f& G, Tensor3f& I_gradient, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, int y, int x);
 
-void update_IG(Tensor2f& I, Tensor3f& GIDiffGradient, int y, int x, const float weight_IG=0.5);
+void update_IG(Tensor2f& I, Tensor3f& GIDiffGradient, int y, int x, const float weight_IG);
 
-void update_FR(Tensor3f& F, const Tensor3f& CCM, const Tensor3f& Cx, const Tensor3f& Cy, const Tensor<float,1>& R, const float weight_FR, float eps=1e-8, float gamma=255.0);
+void update_FR(Tensor3f& F, const Tensor3f& CCM, const Tensor3f& Cx, const Tensor3f& Cy, const Tensor<float,1>& R, const float weight_FR, float eps, float gamma);
 
 void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const Tensor3f& Cx, const Tensor3f& Cy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, const int y, const int x, const float weight_RF);
 
