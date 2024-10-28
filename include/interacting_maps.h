@@ -25,7 +25,7 @@ namespace Eigen{
 struct Event{
     float time;
     std::vector<int> coordinates;
-    float polarity;
+    int polarity;
     std::string toString() const;
 };
 
@@ -403,7 +403,7 @@ void update_GF(Tensor3f& G, Tensor2f V, Tensor3f& F, int y, int x, const float l
 
 void update_GI(Tensor3f& G, const Tensor3f& I_gradient, const int y, const int x, const float weight_GI, const float eps, const float gamma);
 
-void update_IV(Tensor2f& I, Tensor2f& MI, int y, int x, const float weight_IV, const float time_step);
+void update_IV(Tensor2f& I, float  V, Tensor2f& decayTimeSurface, int y, int x, float time, float minPotential, float maxPotential, float neutralPotential, float decayParam);
 
 void updateGIDiffGradient(Tensor3f& G, Tensor3f& I_gradient, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, int y, int x);
 

@@ -260,6 +260,7 @@ std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const 
 cv::Mat frame2grayscale(const MatrixXfRowMajor& frame) {
     // Convert MatrixXfRowMajor to cv::Mat
     cv::Mat frame_cv = eigenToCvMat(frame);
+    cv::Mat output;
 
 //    // Find min and max polarity
 //    double min_polarity, max_polarity;
@@ -269,9 +270,9 @@ cv::Mat frame2grayscale(const MatrixXfRowMajor& frame) {
 //    frame_cv.convertTo(frame_cv, CV_32FC3, 1.0 / (max_polarity - min_polarity), -min_polarity / (max_polarity - min_polarity));
 
     // Scale to 0-255 and convert to CV_8U
-    frame_cv.convertTo(frame_cv, CV_8UC1, 255.0);
+    frame_cv.convertTo(output, CV_8UC1, 1.0);
 
-    return frame_cv;
+    return output;
 }
 
 cv::Mat V2image(const MatrixXfRowMajor& V, const float cutoff=0.1) {
@@ -698,14 +699,14 @@ Calibration_Data get_calibration_data(const std::vector<float>& raw_data, int fr
     return data;
 }
 
-void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, float event_factor = 1.0, int max_events = INT32_MAX){
+void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, int max_events = INT32_MAX){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
         std::ifstream event_file(path);
         int counter = 0;
-        float time, polarity;
-        int width, height;
+        float time;
+        int width, height, polarity;
         while (event_file >> time >> width >> height >> polarity){
             if (time < start_time) continue;
             if (time > end_time) break;
@@ -714,7 +715,7 @@ void read_events(const std::string& file_path, std::vector<Event>& events, float
             event.time = time;
             std::vector<int> coords = {height, width};
             event.coordinates = coords;
-            event.polarity = (polarity*2 - 1) * event_factor;
+            event.polarity = (polarity*2 - 1);
             events.push_back(event);
             counter++;
         }
@@ -759,7 +760,7 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin
     return bins;
 }
 
-void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor2f>& frames, const int camera_height, const int camera_width){
+void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor2f>& frames, const int camera_height, const int camera_width, float eventContribution){
     int i = 0;
     Tensor2f frame(camera_height, camera_width);
     Tensor2f cum_frame(camera_height, camera_width);
@@ -769,7 +770,7 @@ void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::
         cum_frame.setZero();
         for (Event event : event_vector){
 //            std::cout << event << std::endl;
-            frame(event.coordinates.at(0), event.coordinates.at(1)) = event.polarity;
+            frame(event.coordinates.at(0), event.coordinates.at(1)) = event.polarity * eventContribution;
 //            cum_frame(event.coordinates.at(0), event.coordinates.at(1)) += (float)event.polarity;
         }
         frames[i] = frame;
@@ -1055,7 +1056,7 @@ void m23(const Tensor3f& In, const Tensor3f& Cx, const Tensor3f& Cy, Vector3f& O
     Out(2) = In(y, x, 1) * Cx(y, x, 2) + In(y, x, 0) * Cy(y, x, 2);
 }
 
-void setup_R_update(const Tensor3f& CCM, Matrix3f& A, Vector3f& B, std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, std::unique_ptr<Vector3f[]>& points){
+void setup_R_update(const Tensor3f& CCM, Matrix3f& A, Vector3f& B, std::vector<std::vector<Matrix3f>>& Identity_minus_outerProducts, std::vector<std::vector<Vector3f>>& points){
     PROFILE_FUNCTION();
     const auto &dimensions = CCM.dimensions();
     int rows = dimensions[0];
@@ -1069,9 +1070,9 @@ void setup_R_update(const Tensor3f& CCM, Matrix3f& A, Vector3f& B, std::unique_p
             d(0) = CCM(i, j, 0);
             d(1) = CCM(i, j, 1);
             d(2) = CCM(i, j, 2);
-            Identity_minus_outerProducts[i * cols + j] = Identity - d * d.transpose();
-            A += Identity_minus_outerProducts[i * cols + j];
-            points[i * cols + j].setZero();
+            Identity_minus_outerProducts[i][j] = Identity - d * d.transpose();
+            A += Identity_minus_outerProducts[i][j];
+            points[i][j].setZero();
         }
     }
 }
@@ -1127,7 +1128,7 @@ void update_FG(Tensor3f& F, float V, Tensor3f& G, int y, int x, const float lr, 
     }
 }
 
-void update_GF(Tensor3f& G,float V, Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
+void update_GF(Tensor3f& G, float V, Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_GF");
     PROFILE_FUNCTION();
     Vector2f update_G;
@@ -1189,12 +1190,20 @@ void update_GI(Tensor3f& G, const Tensor3f& I_gradient, const int y, const int x
     DEBUG_LOG(G(y, x, 1));
 }
 
-void update_IV(Tensor2f& I, float V, int y, int x, const float weight_IV=0.5, const float time_step=0.05){
+void contribute(Tensor2f& I, float V, int y, int x, float minPotential, float maxPotential){
+    I(y, x) = std::min(std::max(I(y, x) + V, minPotential), maxPotential);
+
+}
+
+void decay(Tensor2f& I, Tensor2f& decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
+    I(y, x) = (I(y, x) - neutralPotential) * expf(-(time - decayTimeSurface(y, x)) / decayParam) + neutralPotential;
+    decayTimeSurface(y, x) = time;
+}
+
+void update_IV(Tensor2f& I, const float V, Tensor2f& decayTimeSurface, const int y, const int x, const float time, const float minPotential, const float maxPotential, const float neutralPotential, const float decayParam){
     PROFILE_FUNCTION();
-    I(y, x) = (1-weight_IV)*I(y, x) + weight_IV*V;
-    if (I(y,x)<0.001 and I(y,x)>-0.001){
-        I(y,x) = 0.0;
-    }
+    contribute(I, V, y, x, minPotential, maxPotential);
+    decay(I, decayTimeSurface, y, x, time, neutralPotential, decayParam);
 }
 
 void updateGIDiffGradient(Tensor3f& G, Tensor3f& I_gradient, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, int y, int x){
@@ -1246,7 +1255,7 @@ void update_FR(Tensor3f& F, const Tensor3f& CCM, const Tensor3f& Cx, const Tenso
     }
 }
 
-void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const Tensor3f& Cx, const Tensor3f& Cy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, const int y, const int x, const float weight_RF) {
+void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const Tensor3f& Cx, const Tensor3f& Cy, const Matrix3f& A, Vector3f& B, const std::vector<std::vector<Matrix3f>>& Identity_minus_outerProducts, std::vector<std::vector<Vector3f>>& old_points, const float weight_RF, std::vector<Event>& frameEvents) {
     //InstrumentationTimer timer1("update_RF");
     PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
@@ -1257,16 +1266,18 @@ void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const T
     Vector3f solution(3);
     {
         PROFILE_SCOPE("RF Pre");
-        // Transform F from 2D image space to 3D world space with C
-        m23(F, Cx, Cy, transformed_F, y, x);
-        // calculate crossproduct between world space F and calibration matrix.
-        // this gives us the point on which the line stands
-        crossProduct3x3(C, transformed_F, point, y, x);
-        // right hand side B consists of a sum of a points
-        // subtract the contribution of the old_point at y,x and add the contribution of the new point
-        B = B - Identity_minus_outerProducts[y*cols + x]*old_point + Identity_minus_outerProducts[y*cols + x]*point;
-        // new point is now old
-        old_point = point;
+        for (auto event : frameEvents){
+            // Transform F from 2D image space to 3D world space with C
+            m23(F, Cx, Cy, transformed_F, event.coordinates[0], event.coordinates[1]);
+            // calculate crossproduct between world space F and calibration matrix.
+            // this gives us the point on which the line stands
+            crossProduct3x3(C, transformed_F, point, event.coordinates[0], event.coordinates[1]);
+            // right hand side B consists of a sum of a points
+            // subtract the contribution of the old_point at y,x and add the contribution of the new point
+            B = B - Identity_minus_outerProducts[event.coordinates[0]][event.coordinates[1]]*old_points[event.coordinates[0]][event.coordinates[1]] + Identity_minus_outerProducts[event.coordinates[0]][event.coordinates[1]]*point;
+            // new point is now old
+            old_points[event.coordinates[0]][event.coordinates[1]] = point;
+        }
     }
     // solve for the new rotation vector
     solution = A.partialPivLu().solve(B);
@@ -1279,37 +1290,37 @@ void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const T
 //  INTERACTING MAPS MAIN FUNCTION  ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void event_step(const float V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f& G, Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
+void event_step(const float V, Tensor2f& MI, Tensor2f& decayTimeSurface, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f& G, Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const Matrix3f& Identity_minus_outerProducts, std::vector<std::vector<Vector3f>>& old_points, std::unordered_map<std::string,float>& parameters, std::vector<int>& permutation, int y, int x, float time){
     PROFILE_FUNCTION();
-    array<Index, 2> dimensions = I.dimensions();
+    array<Index, 2> dimensions = MI.dimensions();
 
-    update_IV(MI, V, y, x, weights["weight_IV"], weights["time_step"]);
+    update_IV(MI, V, decayTimeSurface, y, x, time, parameters["minPotential"], parameters["maxPotential"], parameters["neutralPotential"], parameters["decayParam"]);
 
-    // Image (MI) got changed through update by V. we need to update all surrounding gradient values. Because of the change at this pixel
-    if (y>0){
-        computeGradient(MI, delta_I, y-1, x);
-        update_GI(G, delta_I, y-1, x, weights["weight_GI"], weights["eps"], weights["gamma"]);
-    }
-    if (x>0){
-        computeGradient(MI, delta_I, y, x-1);
-        update_GI(G, delta_I, y, x-1, weights["weight_GI"], weights["eps"], weights["gamma"]);
-    }
-    if (y<dimensions[0]){
-        computeGradient(MI, delta_I, y+1, x);
-        update_GI(G, delta_I, y+1, x, weights["weight_GI"], weights["eps"], weights["gamma"]);
-    }
-    if (x<dimensions[1]){
-        computeGradient(MI, delta_I, y, x+1);
-        update_GI(G, delta_I, y, x+1, weights["weight_GI"], weights["eps"], weights["gamma"]);
-    }
+//        // Image (MI) got changed through update by V. we need to update all surrounding gradient values. Because of the change at this pixel
+//    if (y>0){
+//        computeGradient(MI, delta_I, y-1, x);
+//        update_GI(G, delta_I, y-1, x, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
+//    }
+//    if (x>0){
+//        computeGradient(MI, delta_I, y, x-1);
+//        update_GI(G, delta_I, y, x-1, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
+//    }
+//    if (y<dimensions[0]){
+//        computeGradient(MI, delta_I, y+1, x);
+//        update_GI(G, delta_I, y+1, x, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
+//    }
+//    if (x<dimensions[1]){
+//        computeGradient(MI, delta_I, y, x+1);
+//        update_GI(G, delta_I, y, x+1, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
+//    }
 
-    // We need to update the gradient at the current pixel, since surrounding image values could have changed through decay.
+////     We need to update the gradient at the current pixel, since surrounding image values could have changed through decay.
 //    computeGradient(MI, delta_I, y, x);
-//    DEBUG_LOG(I(y,x));
-//    update_GI(G, delta_I, y, x, weights["weight_GI"], weights["eps"], weights["gamma"]);
+    DEBUG_LOG(I(y,x));
+//    update_GI(G, delta_I, y, x, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
 //    updateGIDiffGradient(G, delta_I, GIDiff, GIDiffGradient, y, x);
 
-//    update_IG(I, GIDiffGradient, y, x, weights["weight_IG"]);
+//    update_IG(I, GIDiffGradient, y, x, parameters["weight_IG"]);
 //    computeGradient(I, delta_I, y, x);
 
     for (const auto& element : permutation){
@@ -1317,17 +1328,17 @@ void event_step(const float V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Ten
             default:
                 std::cout << "Unknown number in permutation" << std::endl;
             case 0:
-                update_FG(F, V, G, y, x, weights["lr"], weights["weight_FG"], weights["eps"], weights["gamma"]);
+                update_FG(F, V, G, y, x, parameters["lr"], parameters["weight_FG"], parameters["eps"], parameters["gamma"]);
                 break;
             case 1:
-                update_FR(F, CCM, dCdx, dCdy, R, weights["weight_FR"], weights["eps"], weights["gamma"]);
+                update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
                 break;
             case 2:
-                update_GF(G, V, F, y, x, weights["lr"], weights["weight_GF"], weights["eps"], weights["gamma"]);
+                update_GF(G, V, F, y, x, parameters["lr"], parameters["weight_GF"], parameters["eps"], parameters["gamma"]);
                 break;
             case 3:
                 //void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const Tensor3f& Cx, const Tensor3f& Cy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, const int y, const int x, const float weight_RF) {
-                update_RF(R, F, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_point, y, x, weights["weight_RF"]);
+//                update_RF(R, F, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_points, y, x, parameters["weight_RF"]);
                 break;
          }
      }
@@ -1566,7 +1577,8 @@ void event_step(const float V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Ten
 //        // Create frames
 //        size_t frame_count = binned_events.size();
 //        std::vector<Tensor2f> frames(frame_count);
-//        create_frames(binned_events, frames, 180, 240);
+//        float eventContribution
+//        create_frames(binned_events, frames, 180, 240, eventContribution);
 //        std::cout << "Implemented event binning and event frame creation" << std::endl;
 //        std::cout << "FILE READOUT AND EVENT HANDLING TEST PASSED" << std::endl;
 //    }
@@ -1761,15 +1773,15 @@ void event_step(const float V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Ten
 //        //##################################################################################################################
 //        // Testing Interacting Maps step
 //        std::unordered_map<std::string,float> weights;
-//        weights["weight_FG"] = 0.2;
-//        weights["weight_FR"] = 0.8;
-//        weights["weight_GF"] = 0.2;
-//        weights["weight_GI"] = 0.5;
-//        weights["weight_IG"] = 0.2;
-//        weights["weight_IV"] = 0.2;
-//        weights["weight_RF"] = 0.8;
-//        weights["lr"] = 1.0; // optimisation of FG,GF alone is inaccurate with this; why is was this in the Paper?
-//        weights["time_step"] = 0.05f;
+//        parameters["weight_FG"] = 0.2;
+//        parameters["weight_FR"] = 0.8;
+//        parameters["weight_GF"] = 0.2;
+//        parameters["weight_GI"] = 0.5;
+//        parameters["weight_IG"] = 0.2;
+//        parameters["weight_IV"] = 0.2;
+//        parameters["weight_RF"] = 0.8;
+//        parameters["lr"] = 1.0; // optimisation of FG,GF alone is inaccurate with this; why is was this in the Paper?
+//        parameters["time_step"] = 0.05f;
 //        std::vector<int> permutation {0,1,2,3,4,5,6};
 //        for (int i = 0; i < 100; ++i){
 //            interacting_maps_step(V, V, I, delta_I, F, G, R, CCM, dCdx, dCdy, A, Identity_minus_outerProducts, weights, permutation, nm);
@@ -1874,10 +1886,10 @@ int main() {
         std::string settings_path = "../res/" + resource_name + "/settings.txt";
 
         float start_time_events = 0.0; // in s
-        float end_time_events = 2.0; // in s
+        float end_time_events = 0.2; // in s
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 1500;
-        float imageBase = 10.0;
+        
         float memoryWeight = 0.99;
 
         // Plotting
@@ -1894,21 +1906,25 @@ int main() {
         int cols = settings[1]; // in pixels
         int N = height*width;
 
-        std::unordered_map<std::string,float> weights;
-        weights["weight_FG"] = 0.2; // 0
-        weights["weight_FR"] = 0.8; // 1
-        weights["weight_GF"] = 0.2; // 2
-        weights["weight_GI"] = 0.2; // 3
-        weights["weight_IG"] = 0.2; // 4
-        weights["weight_IV"] = 0.5; // 5
-        weights["weight_RF"] = 0.8; // 6
-        weights["lr"] = 1.0;
-        weights["time_step"] = time_bin_size_in_s;
-        weights["event_factor"] = 1.0;
-        weights["eps"] = 0.00001;
-        weights["gamma"] = 255;
-        weights["decay_param"] = 1e-1; // exp: 1e6; linear: 0.000001
-        std::vector<int> permutation {}; // Which update steps to take
+        std::unordered_map<std::string,float> parameters;
+        parameters["weight_FG"] = 1.0; // 0
+        parameters["weight_FR"] = 0.8; // 1
+        parameters["weight_GF"] = 0.2; // 2
+        parameters["weight_GI"] = 0.2; // 3
+        parameters["weight_IG"] = 0.2; // 4
+        parameters["weight_IV"] = 0.5; // 5
+        parameters["weight_RF"] = 0.8; // 6
+        parameters["lr"] = 1.0;
+        parameters["time_step"] = time_bin_size_in_s;
+        parameters["eventContribution"] = 25.5;
+        parameters["eps"] = 0.00001;
+        parameters["gamma"] = 255;
+        parameters["decayParam"] = 1e-2; // exp: 1e6; linear: 0.000001
+        parameters["minPotential"] = 0.0;
+        parameters["maxPotential"] = 255;
+        parameters["neutralPotential"] = 128;
+        parameters["fps"] = 30;
+        std::vector<int> permutation {0}; // Which update steps to take
         auto rng = std::default_random_engine {};
 
         //##################################################################################################################
@@ -1917,11 +1933,26 @@ int main() {
         V_Vis.setZero();
         float V;
         Tensor3f F(height, width, 2);
-        F.setZero();
+        Tensor3f F1(height, width, 2);
+        Tensor3f F2(height, width, 2);
+        Tensor3f F3(height, width, 2);
+
+        F1.setConstant(1.0);
+        F2.setConstant(2.0);
+        F3.setConstant(0.01);
+        F.setRandom();
+        F = F*F2 - F1;
+        F = F * F3;
+//        F.setZero();
+
+//        F.setConstant(0.0);
+//        F.chip(0,2) = F1.chip(0,2);
         Tensor3f G(height, width, 2);
         G.setZero();
         Tensor2f I(height, width);
         I.setConstant(128.0);
+        Tensor2f decayTimeSurface(height, width);
+        decayTimeSurface.setZero();
         Tensor3f delta_I(height, width,2);
         delta_I.setZero();
         Tensor3f GIDiff(height, width,2);
@@ -1931,11 +1962,11 @@ int main() {
         Tensor<float,1> R(3);
         Tensor<float,1> R2(3);
         Tensor<float,1> R3(3);
-//        R.setRandom(); // between 0 and 1
-//        R2.setConstant(2);
-//        R3.setConstant(1);
-//        R = R*R2 - R3; // between -1 and 1
-        R.setValues({0.0,0.0,0.0});
+        R.setRandom(); // between 0 and 1
+        R2.setConstant(2);
+        R3.setConstant(1);
+        R = R*R2 - R3; // between -1 and 1
+//        R.setValues({0.0,0.0,0.0});
 
         //##################################################################################################################
         // Create results_folder
@@ -1952,7 +1983,7 @@ int main() {
         //##################################################################################################################
         // Read events file
         std::vector<Event> event_data;
-        read_events(event_path, event_data, start_time_events, end_time_events, weights["event_factor"]);
+        read_events(event_path, event_data, start_time_events, end_time_events);
         std::cout << "Readout events at " << event_path << std::endl;
 
         //##################################################################################################################
@@ -1965,7 +1996,7 @@ int main() {
         // Create frames
         size_t frame_count = binned_events.size();
         std::vector<Tensor2f> frames(frame_count);
-        create_frames(binned_events, frames, height, width);
+        create_frames(binned_events, frames, height, width, parameters["eventContribution"]);
         std::cout << "Created frames " << frame_count << " out of " << event_data.size() << " events" << std::endl;
 
         //##################################################################################################################
@@ -1983,18 +2014,28 @@ int main() {
         // A matrix and outerProducts for update_R
         Matrix3f A = Matrix3f::Zero();
         Vector3f B = Vector3f::Zero();
-        std::unique_ptr<Matrix3f[]> Identity_minus_outerProducts(new Matrix3f[rows * cols]);
-        std::unique_ptr<Vector3f[]> old_points(new Vector3f[rows * cols]);
+        // Create a 2D vector with uninitialized elements
+        std::vector<std::vector<Matrix3f>> Identity_minus_outerProducts;
+        std::vector<std::vector<Vector3f>> old_points;
+        Identity_minus_outerProducts.resize(rows);  // Resize to have the number of rows
+        old_points.resize(rows);  // Resize to have the number of rows
+
+        for (int i = 0; i < rows; ++i) {
+            Identity_minus_outerProducts[i].resize(cols);  // Resize each row but do not initialize
+            old_points[i].resize(cols);  // Resize each row but do not initialize
+        }
+
+
         setup_R_update(CCM, A, B, Identity_minus_outerProducts, old_points);
 
         //##################################################################################################################
         // Memory Image for I to remember previous image
 
         Tensor2f MI(height, width);
-        MI.setConstant(imageBase);
+        MI.setConstant(parameters["neutralPotential"]);
 
         Tensor2f decayBase(height, width);
-        decayBase.setConstant(imageBase);
+        decayBase.setConstant(parameters["neutralPotential"]);
 
         Tensor2f expDecay(height, width);
         expDecay.setConstant(1.0);
@@ -2004,65 +2045,23 @@ int main() {
         Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
         std::cout << "Setup Profiler" << std::endl;
         int counter = 0;
+        std::vector<Event> frameEvents;
         for (Event event : event_data){
-
-//            F.setZero();
-
-//            writeToFile(V, folder_path / "V.txt");
-//            writeToFile(I, folder_path / "I.txt");
-//            writeToFile(delta_I, folder_path / "I_gradient.txt");
-//            writeToFile(F, folder_path / "F.txt");
-//            writeToFile(G, folder_path / "G.txt");
-
-            // For each new frame slowly decay the image back to the base gray image
-//            MI = (1-memoryWeight)*decayBase + memoryWeight*MI;
-//            MI += V;
-//            // Image can't have negative intensity Values
-
 
             int y = event.coordinates[0];
             int x = event.coordinates[1];
-            V = event.polarity * weights["event_factor"];
-            V_Vis(y, x) = event.polarity * weights["event_factor"];
-            //void event_step(Tensor2f& V, Tensor2f& MI, Tensor2f& I, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f G,
-            // Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::unique_ptr<Matrix3f[]>& Identity_minus_outerProducts, Vector3f& old_point, std::unordered_map<std::string,float>& weights, std::vector<int>& permutation, int y, int x){
-            event_step(V, MI, I, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_points[y*cols + x], weights, permutation, y, x);
-//                if (iter%100==0){
-//                    std::cout << iter << "/" << iterations << "\t";
-//                    std::cout << "-V=FG?: " << VFG_check(V, F, G, 0.1) << std::endl;
-//                    writeToFile(V, folder_path / "V2.txt");
-//                    writeToFile(I, folder_path / "I2.txt");
-//                    writeToFile(delta_I, folder_path / "I_gradient2.txt");
-//                    writeToFile(F, folder_path / "F2.txt");
-//                    writeToFile(G, folder_path / "G2.txt");
+            V = (float) event.polarity * parameters["eventContribution"];
+            V_Vis(y, x) = (float) event.polarity * parameters["eventContribution"];
+
+            frameEvents.push_back(event);
+
+            event_step(V, MI, decayTimeSurface, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts[y][x], old_points, parameters, permutation, y, x, event.time);
+
+            if (counter * (float) 1/parameters["fps"] < event.time){
+//                for (auto event : frameEvents){
+//                    update_RF(R, F, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_points, parameters["weight_RF"], frameEvents);
 //                }
-
-            if (counter * 0.1 < event.time){
                 counter++;
-                // Decay the intensity image to a base value
-                expDecay = -expDecay * (0.1f/weights["decay_param"]);
-                MI = MI - imageBase;
-                MI = MI * Matrix2Tensor(Tensor2Matrix(expDecay).array().exp());
-                MI = MI + imageBase;
-
-//                // Decay the gradient of the image to 0
-//                delta_I.chip(0,2) = delta_I.chip(0,2) * Matrix2Tensor(Tensor2Matrix(expDecay).array().exp());
-//                delta_I.chip(1,2) = delta_I.chip(1,2) * Matrix2Tensor(Tensor2Matrix(expDecay).array().exp());
-
-                expDecay.setConstant(1.0);
-
-                for (int i = 0; i<height; i++){
-                    for (int j = 0; j<width; j++){
-                        if (MI(i,j) < 0.0){
-                            MI(i,j) = 0.0;
-                        }
-                        if (MI(i,j) > 255.0){
-                            MI(i,j) = 255.0;
-                        }
-                    }
-                }
-
-
                 writeToFile(V_Vis, folder_path / "V.txt");
                 writeToFile(MI, folder_path / "MI.txt");
                 writeToFile(I, folder_path / "I.txt");
@@ -2077,12 +2076,12 @@ int main() {
                 image_name = "VvsFG" + std::to_string(counter) + ".png";
                 image_path = folder_path / image_name;
                 plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
+                V_Vis.setZero();
+//                F.setRandom();
+//                F = F*F2 - F1;
+                G.setZero();
             }
         }
         Instrumentor::Get().EndSession();
     }
-
 }
-
-
-
