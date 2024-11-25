@@ -14,10 +14,10 @@ include_directories(
 
 # Find OpenCV package
 find_package(OpenCV REQUIRED)
-find_package(dv-processing REQUIRED)
+#find_package(dv-processing REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
-include_directories(${dv-processing_INCLUDE_DIRS})
+#include_directories(${dv-processing_INCLUDE_DIRS})
 # Find installed dv-processing.
 #find_package(dv-processing)
 
@@ -38,7 +38,7 @@ add_executable(Executable ${SOURCES})
 # Link libraries (include dv-processing and required dependencies)
 target_link_libraries(Executable
         ${OpenCV_LIBS}
-        dv::processing
+#        dv::processing
         #        dv-processing
 #        OpenSSL::SSL
 #        OpenSSL::Crypto
@@ -56,3 +56,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(Executable PRIVATE -O3)
 endif()
+if (PROFILING)
+    add_definitions(-DPROFILING=1)
+endif (PROFILING)
+
+if (IMAGES)
+    add_definitions(-DIMAGES=1)
+endif (IMAGES)
