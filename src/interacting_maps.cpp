@@ -24,14 +24,15 @@
 #define DEBUG_LOG(message) // No-op in release mode
 #endif
 
-#define PROFILING 1
-#if PROFILING
+#ifdef PROFILING
 #define PROFILE_SCOPE(name) InstrumentationTimer timer##__LINE__(name)
 #define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCTION__)
 // #define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCSIG__) (Includes call attributes, whole signature of function)
+#define PROFILE_MAIN(name)
 #else
 #define PROFILE_SCOPE(name)
 #define PROFILE_FUNCTION()
+#define PROFILE_MAIN(name) InstrumentationTimer timer##__LINE__(name)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -634,6 +635,14 @@ void writeToFile(const MatrixXfRowMajor& t, const std::string fileName){
     if (file.is_open())
     {
         file << t;
+    }
+}
+
+void writeToFile(const std::string s, const std::string fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << s;
     }
 }
 
@@ -1908,6 +1917,9 @@ int main() {
     //##################################################################################################################
     // Parameters
 
+    auto start = std::chrono::high_resolution_clock::now();
+
+
     std::setprecision(8);
 
     if (EXECUTE_TEST){
@@ -1916,7 +1928,7 @@ int main() {
     else{
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "Event 023 - iterate FR 10 times";
+        std::string results_name = "RUNTIME BARE";
         std::string folder_name = results_name + " " + std::ctime(&time);
         std::string resource_name = "shapes_rotation";
         std::string calib_path = "../res/" + resource_name + "/calib.txt";
@@ -1964,7 +1976,7 @@ int main() {
         parameters["fps"] = 30;
         parameters["updateIterationsFR"] = 10; // more iterations -> F caputures general movement of scene/camera better but significantly more computation time
         // iterations are done after event calculations for a frame are done
-        std::vector<int> permutation {0,2,3}; // Which update steps to take
+        std::vector<int> permutation {0,2}; // Which update steps to take, see weights for numbering
         auto rng = std::default_random_engine {};
 
         //##################################################################################################################
@@ -2117,9 +2129,11 @@ int main() {
 //                    writeToFile(G, folder_path / "G.txt");
 //                    std::cout << "Time: " << event.time << std::endl;
 //                    std::cout << "R: " << R << std::endl;
+#ifdef IMAGES
                     std::string image_name = "VIGF_" + std::to_string(counter) + ".png";
                     fs::path image_path = folder_path / image_name;
                     create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+#endif
 //                    image_name = "VvsFG" + std::to_string(counter) + ".png";
 //                    image_path = folder_path / image_name;
 //                    plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
@@ -2132,6 +2146,11 @@ int main() {
 
             }
         }
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float> elapsed = end - start;
+        std::stringstream ss;
+        ss << "Time elapsed: " << elapsed.count() << " seconds" << std::endl;
+        writeToFile(ss.str(), folder_path / "time.txt");
         Instrumentor::Get().EndSession();
     }
 }
