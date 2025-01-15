@@ -1,6 +1,5 @@
 #include <interacting_maps.h>
 #include <iostream>
-#include <fstream>
 #include <filesystem>
 #include <string>
 #include <sstream>
@@ -11,18 +10,10 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
-#define PI 3.14159265
-#define EXECUTE_TEST 0
-#define SMALL_MATRIX_METHOD 1
 
-// Define DEBUG_LOG macro that logs with function name in debug mode
-#ifdef DEBUG
-#define DEBUG_LOG(message) \
-        std::cout << "DEBUG (" << __func__ << "): " << message << std::endl << \
-        "###########################################" << std::endl;
-#else
-#define DEBUG_LOG(message) // No-op in release mode
-#endif
+
+#define EXECUTE_TEST 0
+
 
 #ifdef PROFILING
 #define PROFILE_SCOPE(name) InstrumentationTimer timer##__LINE__(name)
@@ -39,6 +30,12 @@
 //  STRING OPERATIONS  /////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * Enables use of Event in outstream
+ * @param os outstream to add Event to
+ * @param e Event to add
+ * @return new outstream
+ */
 std::ostream& operator << (std::ostream &os, const Event &e) {
     return (os << "Time: " << e.time << " Coords: " << e.coordinates[0] << " " << e.coordinates[1] << " Polarity: " << e.polarity);
 }
@@ -49,6 +46,12 @@ std::string Event::toString() const {
     return ss.str();
 }
 
+/**
+ * Splits a stringstream at a provided delimiter. Delimiter is removed
+ * @param sstream stringstream to be split
+ * @param delimiter The delimiter, can be any char
+ * @return Vector of split string
+ */
 std::vector<std::string> split_string(std::stringstream sstream, char delimiter){
     std::string segment;
     std::vector<std::string> seglist;
@@ -59,690 +62,94 @@ std::vector<std::string> split_string(std::stringstream sstream, char delimiter)
     return seglist;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  GRADIENT CALCULATIONS  /////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Vector2f computeGradient(const MatrixXfRowMajor &data, int y, int x) {
-    PROFILE_FUNCTION();
-    int rows = data.rows();
-    int cols = data.cols();
-    assert(y < rows);
-    assert(x < cols);
-    Vector2f gradients;
-    // Compute gradient along columns (down-up, y-direction)
-    if (y == 0) {
-        gradients(0) = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
-    } else if (y == rows - 1) {
-        gradients(0) = (data(y - 2, x) - data(y - 1, x)) / 2.0; // Central difference with replicate border
-    } else {
-        gradients(0) = (data(y - 1, x) - data(y + 1, x)) / 2.0;
-    }
-    // Compute gradient along rows (left-right, x-direction)
-    if (x == 0) {
-        gradients(1) = (data(y, x + 1) - data(y, x)) / 2.0; // Central difference with replicate border
-    } else if (x == cols - 1) {
-        gradients(1) = (data(y, x - 1) - data(y, x - 2)) / 2.0; // Central difference with replicate border
-    } else {
-        gradients(1) = (data(y, x + 1) - data(y, x - 1)) / 2.0;
-    }
-    return gradients;
-}
-
-void computeGradient(const Tensor2f& data, Tensor3f& gradients, int y, int x) {
+/**
+ * Calculates the gradient of 2-Tensor via central differences at a location (x,y) in x and y direction.
+ * Reuses first/last value at border (effectively using forward or backward difference)
+ * @param data Input of shape NxM
+ * @param gradients 3-Tensor holding gradients
+ * @param y up and down position of gradient of interest
+ * @param x left and right position of gradient of interest
+ */
+void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     PROFILE_FUNCTION();
     // Compute gradient for update_IG
     const auto& ddimensions = data.dimensions();
-    int rows = ddimensions[0];
-    int cols = ddimensions[1];
+    int rows = static_cast<int>(ddimensions[0]);
+    int cols = static_cast<int>(ddimensions[1]);
     const auto& gdimensions = gradients.dimensions();
     assert(ddimensions[0] == gdimensions[0]);
     assert(ddimensions[1] == gdimensions[1]);
     assert(y < rows);
-//    if (x >= cols){
-//        std::cout << x << "too big" << std::endl;
-//    }
     assert(x < cols);
 
     // Compute gradient along columns (down-up, y-direction)
     if (y == 0) {
-        gradients(y, x, 0) = (data(y, x) - data(y + 1, x)) / 2.0; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y, x) - data(y + 1, x)) / 2.0f; // Central difference with replicate border
     } else if (y == rows - 1) {
-        gradients(y, x, 0) = (data(y - 2, x) - data(y - 1, x)) / 2.0; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y - 2, x) - data(y - 1, x)) / 2.0f; // Central difference with replicate border
     } else {
-        gradients(y, x, 0) = (data(y - 1, x) - data(y + 1, x)) / 2.0;
+        gradients(y, x, 0) = (data(y - 1, x) - data(y + 1, x)) / 2.0f;
     }
     // Compute gradient along rows (left-right, x-direction)
     if (x == 0) {
-        gradients(y, x, 1) = (data(y, x + 1) - data(y, x)) / 2.0; // Central difference with replicate border
+        gradients(y, x, 1) = (data(y, x + 1) - data(y, x)) / 2.0f; // Central difference with replicate border
     } else if (x == cols - 1) {
-        gradients(y, x, 1) = (data(y, x - 1) - data(y, x - 2)) / 2.0; // Central difference with replicate border
+        gradients(y, x, 1) = (data(y, x - 1) - data(y, x - 2)) / 2.0f; // Central difference with replicate border
     } else {
-        gradients(y, x, 1) = (data(y, x + 1) - data(y, x - 1)) / 2.0;
+        gradients(y, x, 1) = (data(y, x + 1) - data(y, x - 1)) / 2.0f;
     }
 }
 
-void computeGradient(const Tensor3f& data, Tensor3f& gradients, int y, int x) {
+/**
+ * Calculates the gradient of 3-Tensor via central differences at a location (x,y) in x and y direction.
+ * Reuses first/last value at border (effectively using forward or backward difference). Input should have a depth
+ * of 2. Gradient in up and down direction is determined for depth 0; Gradient in left and right direction
+ * is determined for depth 1.
+ * @param data 3-Tensor containing the data of shape NxMxD
+ * @param gradients 3-Tensor holding results
+ * @param y up and down position of gradient of interest
+ * @param x left and right position of gradient of interest
+ */
+void computeGradient(const Tensor3f &data, Tensor3f &gradients, int y, int x) {
     // Compute gradient for update_IG
     const auto& dimensions = data.dimensions();
-    int rows = dimensions[0];
-    int cols = dimensions[1];
+    int rows = static_cast<int>(dimensions[0]);
+    int cols = static_cast<int>(dimensions[1]);
     assert(y < rows);
     assert(x < cols);
+    assert(static_cast<int>(dimensions[2]) == 2);
     // Compute gradient along columns (down-up, y-direction)
     if (y == 0) {
-        gradients(y, x, 0) = (data(y, x, 0) - data(y + 1, x, 0)) / 2.0; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y, x, 0) - data(y + 1, x, 0)) / 2.0f; // Central difference with replicate border
     } else if (y == rows - 1) {
-        gradients(y, x, 0) = (data(y - 2, x, 0) - data(y - 1, x, 0)) / 2.0; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y - 2, x, 0) - data(y - 1, x, 0)) / 2.0f; // Central difference with replicate border
     } else {
-        gradients(y, x, 0) = (data(y - 1, x, 0) - data(y + 1, x, 0)) / 2.0;
+        gradients(y, x, 0) = (data(y - 1, x, 0) - data(y + 1, x, 0)) / 2.0f;
     }
     // Compute gradient along rows (left-right, x-direction)
     if (x == 0) {
-        gradients(y, x, 1) = (data(y, x + 1, 1) - data(y, x, 1)) / 2.0; // Central difference with replicate border
+        gradients(y, x, 1) = (data(y, x + 1, 1) - data(y, x, 1)) / 2.0f; // Central difference with replicate border
     } else if (x == cols - 1) {
-        gradients(y, x, 1) = (data(y, x - 1, 1) - data(y, x - 2, 1)) / 2.0; // Central difference with replicate border
+        gradients(y, x, 1) = (data(y, x - 1, 1) - data(y, x - 2, 1)) / 2.0f; // Central difference with replicate border
     } else {
-        gradients(y, x, 1) = (data(y, x + 1, 1) - data(y, x - 1, 1)) / 2.0;
+        gradients(y, x, 1) = (data(y, x + 1, 1) - data(y, x - 1, 1)) / 2.0f;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  CONVERSION FUNCTIONS  //////////////////////////////////////////////////////////////////////////////////////////////
+//  INTERACTING MAPS HELPER FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-VectorXf Tensor2Vector(const Tensor1f& input) {
-    // RowMajor Version
-    array<Index, 1> dims = input.dimensions();
-    const float* data_ptr = input.data();
-    Map<const VectorXf> result(data_ptr, dims[0]);
-    return result;
-}
-
-Tensor1f Vector2Tensor(const VectorXf& input) {
-    const int cols = input.cols();
-    const float* data_ptr = input.data();
-    TensorMap<const Tensor1f> result(data_ptr, cols);
-    return result;
-}
-
-MatrixXfRowMajor Tensor2Matrix(const Tensor2f& input){
-    array<Index, 2> dims = input.dimensions();
-    const float* data_ptr = &input(0); // Points to beginning of array;
-    Map<const MatrixXfRowMajor> result(data_ptr, dims[0], dims[1]);
-    return result;
-}
-
-Tensor2f Matrix2Tensor(const MatrixXfRowMajor& input) {
-    // Get Pointer to data
-    float const *data_ptr = &input(0);
-    // Map data to Tensor
-    TensorMap<const Tensor2f> result(data_ptr, input.rows(), input.cols());
-    // Swap the layout and preserve the order of the dimensions
-    return result;
-}
-
-cv::Mat eigenToCvMat(const MatrixXfRowMajor& eigen_matrix) {
-    // Map Eigen matrix data to cv::Mat without copying
-    return cv::Mat(eigen_matrix.rows(), eigen_matrix.cols(), CV_32F, (void*)eigen_matrix.data());
-}
-
-cv::Mat eigenToCvMatCopy(const MatrixXfRowMajor& eigen_matrix) {
-    // Create a cv::Mat and copy Eigen matrix data into it
-    cv::Mat mat(eigen_matrix.rows(), eigen_matrix.cols(), CV_32F);
-    for (int i = 0; i < eigen_matrix.rows(); ++i) {
-        for (int j = 0; j < eigen_matrix.cols(); ++j) {
-            mat.at<float>(i, j) = eigen_matrix(i, j);
-        }
-    }
-    return mat;
-}
-
-MatrixXfRowMajor cvMatToEigen(const cv::Mat& mat) {
-    // Ensure the cv::Mat has the correct type
-    CV_Assert(mat.type() == CV_32F);
-    array<Index, 2> dims;
-    dims[0] = mat.rows;
-    dims[1] = mat.cols;
-    const float* data_ptr = mat.ptr<float>();
-    Map<const MatrixXfRowMajor> result(data_ptr, dims[0], dims[1]);
-    return result;
-}
-
-MatrixXfRowMajor cvMatToEigenCopy(const cv::Mat& mat) {
-    // Ensure the cv::Mat has the correct type
-    CV_Assert(mat.type() == CV_32F);
-    MatrixXfRowMajor eigen_matrix(mat.rows, mat.cols);
-    for (int i = 0; i < mat.rows; ++i) {
-        for (int j = 0; j < mat.cols; ++j) {
-            eigen_matrix(i, j) = mat.at<float>(i, j);
-        }
-    }
-    return eigen_matrix;
-}
-
-cv::Mat convertTofloat(cv::Mat& mat) {
-    // Ensure the source matrix is of type CV_8U
-    CV_Assert(mat.type() == CV_8U);
-
-    // Convert the source matrix to CV_32F
-    mat.convertTo(mat, CV_32F, 1.0 / 255.0); // Scaling from [0, 255] to [0, 1]
-
-    return mat;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  OpenCV FUNCTIONS  //////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-MatrixXfRowMajor undistort_frame(const MatrixXfRowMajor& frame, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
-    cv::Mat image = eigenToCvMat(frame);
-    return cvMatToEigen(undistort_image(image, camera_matrix, distortion_parameters));
-}
-
-cv::Mat undistort_image(const cv::Mat& image, const cv::Mat& camera_matrix, const cv::Mat& distortion_parameters) {
-    // cv::Mat new_camera_matrix;
-    // cv::Rect roi;
-    // new_camera_matrix = cv::getOptimalNewCameraMatrix(camera_matrix, distortion_parameters, cv::Size(width, height), 1, cv::Size(width, height), &roi);
-    cv::Mat undistorted_image;
-    cv::undistort(image, undistorted_image, camera_matrix, distortion_parameters, camera_matrix);
-    return undistorted_image;
-}
-
-std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat>& images, const MatrixXfRowMajor& camera_matrix, const MatrixXfRowMajor& distortion_coefficients) {
-    std::vector<cv::Mat> undistorted_images;
-
-    // Convert Eigen matrices to cv::Mat
-    cv::Mat camera_matrix_cv = eigenToCvMat(camera_matrix);
-    cv::Mat distortion_coefficients_cv = eigenToCvMat(distortion_coefficients);
-
-    for (const auto& image : images) {
-        undistorted_images.push_back(undistort_image(image, camera_matrix_cv, distortion_coefficients_cv));
-    }
-    return undistorted_images;
-}
-
-// Function to convert MatrixXfRowMajor to grayscale image
-cv::Mat frame2grayscale(const MatrixXfRowMajor& frame) {
-    // Convert MatrixXfRowMajor to cv::Mat
-    cv::Mat frame_cv = eigenToCvMat(frame);
-    cv::Mat output;
-
-    // Find min and max polarity
-    double min_polarity, max_polarity;
-    cv::minMaxLoc(frame_cv, &min_polarity, &max_polarity);
-
-    // Normalize the frame
-    frame_cv.convertTo(frame_cv, CV_32FC3, 1.0 / (max_polarity - min_polarity), -min_polarity / (max_polarity - min_polarity));
-
-    // Scale to 0-255 and convert to CV_8U
-    frame_cv.convertTo(output, CV_8UC1, 255.0);
-
-    return output;
-}
-
-cv::Mat V2image(const MatrixXfRowMajor& V, const float cutoff=0.1) {
-    // Determine the shape of the image
-    long rows = V.rows();
-    long cols = V.cols();
-    
-    // Create an empty image with 3 channels (BGR)
-    cv::Mat image = cv::Mat::zeros(rows, cols, CV_8UC3);
-    
-    // Process on_events (V > 0)
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            if (V(i, j) > cutoff) {
-                image.at<cv::Vec3b>(i, j)[1] = 255; // Set green channel
-            }
-            if (V(i, j) < -cutoff) {
-                image.at<cv::Vec3b>(i, j)[2] = 255; // Set red channel
-            }
-        }
-    }
-    
-    return image;
-}
-
-cv::Mat vector_field2image(const Tensor3f& vector_field) {
-    const int rows = vector_field.dimension(0);
-    const int cols = vector_field.dimension(1);
-
-    // Calculate angles and saturations
-    MatrixXfRowMajor angles(rows, cols);
-    MatrixXfRowMajor saturations(rows, cols);
-
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            float y = vector_field(i, j, 0);
-            float x = vector_field(i, j, 1);
-            float angle = std::atan2(y, x);
-            if (angle < 0){
-                angle += 2*PI;
-            }
-            angles(i,j) = angle;
-            saturations(i, j) = std::sqrt(x * x + y * y);
-        }
-    }
-
-    // Normalize angles to [0, 179]
-    cv::Mat hue(rows, cols, CV_8UC1);
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            hue.at<uint8_t>(i, j) = static_cast<uint8_t>((angles(i, j))/(2 * M_PI) * 179);
-        }
-    }
-
-    // Normalize saturations to [0, 255]
-    float max_saturation = saturations.maxCoeff();
-    cv::Mat saturation(rows, cols, CV_8UC1);
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::min(saturations(i, j) / max_saturation * 255.0, 255.0));
-        }
-    }
-
-    // Value channel (full brightness)
-    cv::Mat value(rows, cols, CV_8UC1, cv::Scalar(255));
-
-    // Merge HSV channels
-    std::vector<cv::Mat> hsv_channels = {hue, saturation, value};
-    cv::Mat hsv_image;
-    cv::merge(hsv_channels, hsv_image);
-
-    // Convert HSV image to BGR format
-    cv::Mat bgr_image;
-    cv::cvtColor(hsv_image, bgr_image, cv::COLOR_HSV2BGR);
-
-    return bgr_image;
-}
-
-// Function to create outward vector field using Eigen
-Tensor3f create_outward_vector_field(int grid_size) {
-    // Create a 2D grid of points using linspace equivalent
-    VectorXf x = VectorXf::LinSpaced(grid_size, -1.0, 1.0);
-    VectorXf y = VectorXf::LinSpaced(grid_size, 1.0, -1.0);
-
-    // Initialize matrices for meshgrid-like behavior (xv, yv)
-    MatrixXfRowMajor xv(grid_size, grid_size);
-    MatrixXfRowMajor yv(grid_size, grid_size);
-
-    // Create meshgrid by repeating x and y values across rows and columns
-    for (int i = 0; i < grid_size; ++i) {
-        xv.row(i) = x.transpose();
-        yv.col(i) = y;
-    }
-
-    // Create a 3D Tensor to store the 2D vector field (x, y components at each point)
-    Tensor3f vectors(grid_size, grid_size, 2);
-
-    // Calculate distances from origin and store the normalized vectors
-    for (int i = 0; i < grid_size; ++i) {
-        for (int j = 0; j < grid_size; ++j) {
-            float x_val = xv(i, j);
-            float y_val = yv(i, j);
-            float distance = std::sqrt(x_val * x_val + y_val * y_val);
-
-            // Prevent division by zero at the origin
-            if (distance == 0) distance = 1.0;
-
-            // Normalize the vector and assign it
-            vectors(i, j, 1) = x_val / distance;
-            vectors(i, j, 0) = y_val / distance;
-        }
-    }
-
-    return vectors;
-}
-
-// Function to create the circular band mask
-cv::Mat create_circular_band_mask(const cv::Size& image_size, float inner_radius, float outer_radius) {
-    cv::Mat mask(image_size, CV_8UC1, cv::Scalar(0));
-
-    int center_x = image_size.width / 2;
-    int center_y = image_size.height / 2;
-
-    for (int i = 0; i < image_size.height; ++i) {
-        for (int j = 0; j < image_size.width; ++j) {
-            float distance = std::sqrt((i - center_y) * (i - center_y) + (j - center_x) * (j - center_x));
-            if (distance >= inner_radius && distance <= outer_radius) {
-                mask.at<uchar>(i, j) = 255;  // Inside the band
-            }
-        }
-    }
-
-    return mask;
-}
-
-// Function to create the color wheel with a circular band
-cv::Mat create_colorwheel(int grid_size) {
-    Tensor3f vector_field = create_outward_vector_field(grid_size);
-
-    cv::Mat image;
-    image = vector_field2image(vector_field);
-
-    // Define inner and outer radius
-    float inner_radius = grid_size / 4.0f;
-    float outer_radius = grid_size / 2.0f;
-
-    // Create the circular band mask
-    cv::Mat mask = create_circular_band_mask(image.size(), inner_radius, outer_radius);
-
-    // Apply mask to the image
-    cv::Mat colourwheel = image.clone();
-    colourwheel.setTo(cv::Scalar(255, 255, 255), ~mask);  // Outside the mask: set to white
-    return colourwheel;
-}
-
-// Function to create the VIGF image
-cv::Mat create_VIGF(const MatrixXfRowMajor& V, const MatrixXfRowMajor& I, const Tensor3f& G, const Tensor3f& F, const std::string& path = "VIGF", const bool save = false, const float cutoff=0.1) {
-    cv::Mat V_img = V2image(V, cutoff);
-    cv::Mat I_img = frame2grayscale(I);
-    cv::Mat G_img = vector_field2image(G);
-    cv::Mat F_img = vector_field2image(F);
-
-    long rows = V.rows();
-    long cols = V.cols();
-    long I_rows = I.rows();
-    long I_cols = I.cols();
-
-    // Calculate the size of the color wheel
-    int colourwheel_size = cols / 2;
-
-    // Calculate the size of the final output image (double size + padding and color wheel)
-    int y_size = rows * 2 + 20;
-    int x_size = cols * 2 + 30 + colourwheel_size;
-
-    cv::Mat image(y_size, x_size, CV_8UC3, cv::Scalar(0, 0, 0));
-    std::cout << image.size() << std::endl;
-
-    // Place V image
-    V_img.copyTo(image(cv::Rect(5, 5, cols, rows)));
-
-    // Place I image (convert to BGR first)
-    cvtColor(I_img, I_img, cv::COLOR_GRAY2BGR);
-    I_img.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, 5, I_cols, I_rows)));
-
-    // Place G image
-    G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
-
-    // Place F image
-    F_img.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, rows + 10, cols, rows)));
-
-    // Create and place the color wheel
-    cv::Mat colourwheel = create_colorwheel(colourwheel_size);
-    colourwheel.copyTo(image(cv::Rect(cols + 10, 2 * rows + 10 - colourwheel_size, colourwheel_size, colourwheel_size)));
-
-    // Save the image if required
-    if (save && !path.empty()) {
-        cv::imwrite(path, image);
-    }
-
-    return image;
-}
-
-// Function to create a colorbar
-cv::Mat createColorbar(double globalMin, double globalMax, int height, int width, int colormapType = cv::COLORMAP_VIRIDIS) {
-    // Create a vertical gradient (values from globalMin to globalMax)
-    cv::Mat colorbar(height, width, CV_32F);
-
-    // Fill the colorbar with values from globalMin to globalMax
-    for (int i = 0; i < height; ++i) {
-        float value = globalMin + i * (globalMax - globalMin) / height;
-        colorbar.row(i).setTo(value);
-    }
-
-    // Normalize the colorbar to the range [0, 255]
-    cv::Mat colorbarNormalized;
-    colorbar.convertTo(colorbarNormalized, CV_8U, 255.0 / (globalMax - globalMin), -255.0 * globalMin / (globalMax - globalMin));
-
-    // Apply the same colormap to the colorbar
-    cv::Mat colorbarColored;
-    cv::applyColorMap(colorbarNormalized, colorbarColored, colormapType);
-
-    // Add labels to the colorbar (min, max, and optionally intermediate ticks)
-    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
-    double fontScale = 0.4;
-    int thickness = 1;
-    int baseline = 0;
-
-    // Put the min value at the bottom
-    std::string minLabel = std::to_string(globalMin);
-    cv::Size minTextSize = cv::getTextSize(minLabel, fontFace, fontScale, thickness, &baseline);
-    cv::putText(colorbarColored, minLabel, cv::Point(5, height - 5), fontFace, fontScale, cv::Scalar(255, 255, 255), thickness);
-
-    // Put the max value at the top
-    std::string maxLabel = std::to_string(globalMax);
-    cv::Size maxTextSize = cv::getTextSize(maxLabel, fontFace, fontScale, thickness, &baseline);
-    cv::putText(colorbarColored, maxLabel, cv::Point(5, maxTextSize.height), fontFace, fontScale, cv::Scalar(255, 255, 255), thickness);
-
-    // Optionally, you can add intermediate ticks and labels here as needed
-    return colorbarColored;
-}
-
-cv::Mat plot_VvsFG(const MatrixXfRowMajor& V, const Tensor3f& F, const Tensor3f& G, const std::string& path = "VvsFG", bool save = false){
-    long rows = V.rows();
-    long cols = V.cols();
-    cv::Mat image(rows + 50, cols * 3 + 50, CV_8UC3, cv::Scalar(0, 0, 0));
-
-    // Step 1: Prepare Matrices
-    // Convert V to cvMat
-    cv::Mat V_img;
-    V_img = eigenToCvMat(V);
-
-    // Calculate the dot product of F and G, convert to cvMat
-    MatrixXfRowMajor FdotG(rows, cols);
-    cv::Mat FdotG_img;
-    FdotG = Tensor2Matrix(-(F*G).sum(array<int,1>({2})));
-    FdotG_img = eigenToCvMat(FdotG); // Multiply FG elementwise then sum over 3rd dim > dot product
-
-    // Calculate the difference between V and the dot product
-    MatrixXfRowMajor diff(rows, cols);
-    cv::Mat diff_img;
-    diff = V - FdotG;
-    diff_img = eigenToCvMat(diff);
-
-    // Step 2: Find the global min and max values across all three matrices
-    double minVal1, maxVal1, minVal2, maxVal2, minVal3, maxVal3;
-    cv::minMaxLoc(V_img, &minVal1, &maxVal1);
-    cv::minMaxLoc(FdotG_img, &minVal2, &maxVal2);
-    cv::minMaxLoc(diff_img, &minVal3, &maxVal3);
-
-    double globalMin = std::min({minVal1, minVal2, minVal3});
-    double globalMax = std::max({maxVal1, maxVal2, maxVal3});
-
-    // Step 3: Normalize all matrices to the global range [0, 255]
-    cv::Mat normalizedMatrix1, normalizedMatrix2, normalizedMatrix3;
-    // Normalize each matrix to the range [0, 255] using the global min and max
-    V_img.convertTo(normalizedMatrix1, CV_8U, 255.0 / (globalMax - globalMin), -255.0 * globalMin / (globalMax - globalMin));
-    FdotG_img.convertTo(normalizedMatrix2, CV_8U, 255.0 / (globalMax - globalMin), -255.0 * globalMin / (globalMax - globalMin));
-    diff_img.convertTo(normalizedMatrix3, CV_8U, 255.0 / (globalMax - globalMin), -255.0 * globalMin / (globalMax - globalMin));
-
-    // Step 4: Apply the same colormap to each normalized matrix
-    cv::Mat coloredMatrix1, coloredMatrix2, coloredMatrix3;
-    cv::applyColorMap(normalizedMatrix1, coloredMatrix1, cv::COLORMAP_VIRIDIS);
-    cv::applyColorMap(normalizedMatrix2, coloredMatrix2, cv::COLORMAP_VIRIDIS);
-    cv::applyColorMap(normalizedMatrix3, coloredMatrix3, cv::COLORMAP_VIRIDIS);
-
-    // Step 5: Concatenate the three matrices horizontally or vertically for display
-    cv::Mat combinedMatrix;
-    cv::hconcat(std::vector<cv::Mat>{coloredMatrix1, coloredMatrix2, coloredMatrix3}, combinedMatrix);
-
-    // Step 6: Create a colorbar (we'll use height of the matrix and width of 50 pixels for the colorbar)
-    int colorbarWidth = 50;
-    cv::Mat colorbar = createColorbar(globalMin, globalMax, combinedMatrix.rows, colorbarWidth);
-
-    // Step 7: Concatenate the colorbar with the combined image
-    cv::Mat coloredImage;
-    cv::hconcat(combinedMatrix, colorbar, coloredImage);
-
-    // Step 8: Add a black region at the top of the image for the title
-    int titleHeight = 50;  // Height of the title area
-    cv::Mat titleImage = cv::Mat::zeros(titleHeight, coloredImage.cols, CV_8UC3);
-
-    // Step 9: Add the title text to the top region
-    std::string title = "V | - F dot G | Difference";
-    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
-    double fontScale = 0.5;
-    int thickness = 2;
-    cv::Scalar color(255, 255, 255); // White text
-    int baseline = 0;
-
-    // Get the text size to center the title
-    cv::Size textSize = cv::getTextSize(title, fontFace, fontScale, thickness, &baseline);
-    cv::Point textOrg((titleImage.cols - textSize.width) / 2, (titleHeight + textSize.height) / 2);
-
-    // Put the title on the titleImage
-    cv::putText(titleImage, title, textOrg, fontFace, fontScale, color, thickness);
-
-    // Step 10: Concatenate the title image with the matrix image
-    cv::Mat finalImage;
-    cv::vconcat(titleImage, coloredImage, finalImage);
-
-    // Step 11: Display the final image with the title
-    if (save && !path.empty()) {
-        imwrite(path, finalImage);
-    }
-    else{
-        cv::imshow("V vs F dot G", finalImage);
-        cv::waitKey(0); // Wait for a key press before closing the window
-    }
-    return finalImage;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  FILE FUNCTIONS  ////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void writeToFile(const Tensor3f& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
-}
-
-void writeToFile(const Tensor2f& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
-}
-
-void writeToFile(const MatrixXfRowMajor& t, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << t;
-    }
-}
-
-void writeToFile(const std::string s, const std::string fileName){
-    std::ofstream file(fileName);
-    if (file.is_open())
-    {
-        file << s;
-    }
-}
-
-fs::path create_folder_and_update_gitignore(const std::string& folder_name) {
-    // Get the absolute path of the current working directory
-    fs::path current_directory = fs::current_path();
-    
-    // Create the output folder if it does not exist
-    fs::path output_folder_path = current_directory / "output";
-    // Create the directory if it does not exist
-    if (!fs::exists(output_folder_path)) {
-        fs::create_directory(output_folder_path);
-    }
-
-    // Same for the actual folder
-    fs::path folder_path = output_folder_path / folder_name;
-    if (!fs::exists(folder_path)) {
-        fs::create_directory(folder_path);
-    }
-    
-    // Path to the .gitignore file
-    fs::path gitignore_path = current_directory/ ".gitignore";
-    
-    // Check if the folder is already in .gitignore
-    bool folder_in_gitignore = false;
-    if (fs::exists(gitignore_path)) {
-        std::ifstream gitignore_file(gitignore_path);
-        std::string line;
-        while (std::getline(gitignore_file, line)) {
-            if (line == folder_name || line == "/" + folder_name) {
-                folder_in_gitignore = true;
-                break;
-            }
-        }
-    }
-    
-    // Add the folder to .gitignore if it's not already there
-    if (!folder_in_gitignore) {
-        std::ofstream gitignore_file(gitignore_path, std::ios_base::app);
-        gitignore_file << "\n" << folder_name << "\n";
-    }
-    
-    // Return the absolute path of the new folder
-    return folder_path;
-}
-
-void read_single_line_txt(const std::string& file_path, std::vector<float>& calibration_data){
-    fs::path current_directory = fs::current_path();
-    std::string path = current_directory / file_path;
-    if (fs::exists(path)) {
-        std::ifstream calibration_file(path);
-        std::string::size_type size;
-        for (std::string line; std::getline(calibration_file, line, ' ');) {
-            calibration_data.push_back(std::stof(line, &size));
-        }
-    }
-}
-
-Calibration_Data get_calibration_data(const std::vector<float>& raw_data, int frame_height, int frame_width){
-    Calibration_Data data;
-    data.focal_point = std::vector<float>(raw_data.begin(), raw_data.begin()+2);
-    data.camera_matrix = MatrixXf({{data.focal_point[0], 0, raw_data[2]},
-                                              {0, data.focal_point[1], raw_data[3]},
-                                              {0, 0, 1}});
-    data.distortion_coefficients = std::vector<float>(raw_data.begin()+4, raw_data.end());
-    data.view_angles = std::vector<float>({2*std::atan(frame_height/(2*data.focal_point[0])),
-                                            2*std::atan(frame_width/(2*data.focal_point[1]))});
-    return data;
-}
-
-void read_events(const std::string& file_path, std::vector<Event>& events, float start_time, float end_time, int max_events = INT32_MAX){
-    fs::path current_directory = fs::current_path();
-    std::string path = current_directory / file_path;
-    if (fs::exists(path)) {
-        std::ifstream event_file(path);
-        int counter = 0;
-        float time;
-        int width, height, polarity;
-        while (event_file >> time >> width >> height >> polarity){
-            if (time < start_time) continue;
-            if (time > end_time) break;
-            if (counter > max_events) break;
-            Event event;
-            event.time = time;
-            std::vector<int> coords = {height, width};
-            event.coordinates = coords;
-            event.polarity = (polarity*2 - 1);
-            events.push_back(event);
-            counter++;
-        }
-        DEBUG_LOG("Final time stamp: " << time)
-        DEBUG_LOG("Number of events: " << events.size())
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// EVENT HANDLING  //////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin_size = 0.05){
+/**
+ * Take a vector of events and sort them into a collection of bins. Sorting happens according to the time dimension of
+ * the events. Size of the bins is given in seconds.
+ * @param events std::vector of Events
+ * @param bin_size float
+ * @return vector of vectors of binned events. First bin contains first timespan, last bin the last timespan.
+ */
+std::vector<std::vector<Event>> bin_events(std::vector<Event> &events, float bin_size = 0.05){
     std::vector<std::vector<Event>> bins;
     if (events.empty()) {
         return bins;  // Return empty if the input vector is empty
@@ -774,7 +181,15 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event>& events, float bin
     return bins;
 }
 
-void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::vector<Tensor2f>& frames, const int camera_height, const int camera_width, float eventContribution){
+/**
+ * Convert a collection of binned events to a collection of frames (i.e. matrices representing an image)
+ * @param bucketed_events collection of events sorted into bins based on time
+ * @param frames returning collection of frames
+ * @param camera_height height of the frame
+ * @param camera_width width of th eframe
+ * @param eventContribution scales the contribution of a single event to the frame: polarity*eventContribution = intensity
+ */
+void create_frames(const std::vector<std::vector<Event>> &bucketed_events, std::vector<Tensor2f> &frames, const int camera_height, const int camera_width, float eventContribution){
     int i = 0;
     Tensor2f frame(camera_height, camera_width);
     Tensor2f cum_frame(camera_height, camera_width);
@@ -790,36 +205,61 @@ void create_frames(const std::vector<std::vector<Event>>& bucketed_events, std::
         frames[i] = frame;
         i++;
 
-        DEBUG_LOG("Eventvector size: " << event_vector.size());
-        DEBUG_LOG("Last Event: " << event_vector.back());
+//        DEBUG_LOG("Eventvector size: " << event_vector.size());
+//        DEBUG_LOG("Last Event: " << event_vector.back());
     }
 
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  INTERACTING MAPS HELPER FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-//TODO ensure Tensors are actually const
-bool isApprox(Tensor3f& t1, Tensor3f& t2, const float precision = 1e-8){
+/**
+ * Compares two float 3-Tensors on approximate equality. Threshold can be set with precision parameter.
+ * @param t1 First float 3-Tensor
+ * @param t2 Second float 3-Tensor
+ * @param precision comparison precision
+ * @return
+ */
+bool isApprox(Tensor3f &t1, Tensor3f &t2, const float precision = 1e-8){
     Map<VectorXf> mt1(t1.data(), t1.size());
     Map<VectorXf> mt2(t2.data(), t2.size());
     return mt1.isApprox(mt2, precision);
 }
 
-bool isApprox(Tensor2f& t1, Tensor2f& t2, const float precision = 1e-8){
+/**
+ * Compares two float 2-Tensors on approximate equality. Threshold can be set with precision parameter.
+ * @param t1 First float 3-Tensor
+ * @param t2 Second float 3-Tensor
+ * @param precision comparison precision
+ * @return
+ */
+bool isApprox(Tensor2f &t1, Tensor2f &t2, const float precision = 1e-8){
     Map<VectorXf> mt1(t1.data(), t1.size());
     Map<VectorXf> mt2(t2.data(), t2.size());
     return mt1.isApprox(mt2, precision);
 }
 
-
-void norm_tensor_along_dim3(const Tensor3f& T, Tensor2f& norm){
+/**
+ * Calculates the euclidean norm on entries of a 3-Tensor. The 3-Tensor is considered as a collection of vectors spread
+ * over a 2D array. Norms are calculated along the vector dimension, which is the last tensor dimension. Results in a
+ * 2-Tensor of norm values
+ * @param T 3-Tensor of shape NxMxD, where D is the length of the vectors, over which the norms are calculated
+ * @param norm 2-Tensor of norm values of shape NxM
+ */
+void norm_tensor_along_dim3(const Tensor3f &T, Tensor2f &norm){
     array<int,1> dims({2});
     norm = T.square().sum(dims).sqrt();
 }
 
-// Function to compute C_star
+/**
+ * Calculates intermediate values of the calibration matrix for the Interacting Maps algorithm.
+ * @param x x-Position of the pixel
+ * @param y y-Position of the pixel
+ * @param N_x width of the image in pixels
+ * @param N_y height of the image in pixels
+ * @param height height of the image in realworld meters
+ * @param width width of the image in realworld meters
+ * @param rs
+ * @return 3-Vector of pixel coordinates mapped onto sphere
+ */
 autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, int N_x, int N_y, float height, float width, float rs) {
     autodiff::Vector3real result;
     result << height * (1 - (2 * y) / (N_y - 1)),
@@ -828,15 +268,35 @@ autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, int N_x, int N_
     return result;
 }
 
-// Function to compute C
+/**
+ * Maps pixels of image onto a 3d sphere with the camera at the center
+ * @param x x-Position of the pixel
+ * @param y y-Position of the pixel
+ * @param N_x width of the image in pixels
+ * @param N_y height of the image in pixels
+ * @param height height of the image in realworld meters
+ * @param width width of the image in realworld meters
+ * @param rs
+ * @return Normed 3-Vector of pixel coordinates mapped onto sphere
+ */
 autodiff::Vector3real C(autodiff::real x, autodiff::real y, int N_x, int N_y, float height, float width, float rs) {
     autodiff::Vector3real c_star = C_star(x, y, N_x, N_y, height, width, rs);
     autodiff::real norm = sqrt(c_star.squaredNorm());
     return c_star / norm;
 }
 
-// Jacobian for x value tested by hand
-void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor3f& CCM, Tensor3f& C_x, Tensor3f& C_y) {
+/**
+ * Calculates the camera calibration matrix which connects 2D image coordinates (of pixels) to 3D world coordinates
+ * @param N_x width of the image in pixels
+ * @param N_y height of the image in pixels
+ * @param view_angle_x horizontal viewing angle captured by the camera
+ * @param view_angle_y vertical viewing angle captured by the camera
+ * @param rs
+ * @param CCM resulting camera calibration matrix
+ * @param C_x derivative of the CMM in x direction
+ * @param C_y derivative of the CMM in x direction
+ */
+void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor3f &CCM, Tensor3f &C_x, Tensor3f &C_y) {
     float height = tan(view_angle_y / 2);
     float width = tan(view_angle_x / 2);
 
@@ -906,13 +366,19 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
     }
 }
 
-// Function to compute the cross product of two 3-tensors
-void crossProduct3x3(const Tensor3f& A, const Tensor3f& B, Tensor3f& C) {
+/**
+ * Calculates the cross product for two 3-Tensors, where each Tensor describes a collection of Vectors distributed over
+ * a 2D array. Vector dimension is the last Tensor dimension (depth).
+ * @param A First input Tensor of shape NxMxD
+ * @param B Second input vector of shape NxMxD
+ * @param C Output Tensor of shape NxMxD
+ */
+void crossProduct3x3(const Tensor3f &A, const Tensor3f &B, Tensor3f &C) {
     const auto& dims = A.dimensions();
-    int height, rows = dims[0];
-    int width, cols = dims[1];
-    for (size_t i = 0; i < rows; ++i){
-        for (size_t j = 0; j < cols; ++j){
+    long rows = dims[0]; // height
+    long cols = dims[1]; // width
+    for (long i = 0; i < rows; ++i){
+        for (long j = 0; j < cols; ++j){
             C(i, j, 0) = A(i, j, 2) * B(i, j, 1) - A(i, j, 1) * B(i, j, 2);  // y
             C(i, j, 1) = A(i, j, 0) * B(i, j, 2) - A(i, j, 2) * B(i, j, 0);  // x
             C(i, j, 2) = A(i, j, 1) * B(i, j, 0) - A(i, j, 0) * B(i, j, 1);  // z
@@ -920,18 +386,31 @@ void crossProduct3x3(const Tensor3f& A, const Tensor3f& B, Tensor3f& C) {
     }
 }
 
-// Function to compute the cross product of two 3-tensors
-void crossProduct3x3(const Tensor3f& A, const Vector3f& B, Vector3f& C, int y, int x) {
+/**
+ * Calculates the cross product for two 3-Tensors, where each Tensor describes a collection of Vectors distributed over
+ * a 2D array. Vector dimension is the last Tensor dimension (depth). Only calculates value of cross product at positions
+ * [y,x,:]
+ * @param A First input Tensor of shape NxMxD
+ * @param B Second input vector of shape NxMxD
+ * @param C Output Tensor of shape NxMxD
+ */
+void crossProduct3x3(const Tensor3f &A, const Vector3f &B, Vector3f &C, int y, int x) {
     C(0) = A(y, x, 2) * B(1) - A(y, x, 1) * B(2);  // y
     C(1) = A(y, x, 0) * B(2) - A(y, x, 2) * B(0);  // x
     C(2) = A(y, x, 1) * B(0) - A(y, x, 0) * B(1);  // z
 }
 
-
-void crossProduct1x3(const Tensor<float,1>& A, const Tensor3f& B, Tensor3f& C){
+/**
+ * Calculates cross product between a 3-Tensor and a vector, where the tensor describes a collection of Vectors
+ * distributed over a 2D array. Vector dimension is the last Tensor dimension (depth).
+ * @param A vector as a 1-Tensor
+ * @param B collection of vectors as a 3-Tensor
+ * @param C Resulting collection of cross product vectors as a 3-Tensor
+ */
+void crossProduct1x3(const Tensor<float,1> &A, const Tensor3f &B, Tensor3f &C){
     const auto& dimensions = B.dimensions();
-    for (size_t i = 0; i < dimensions[0]; ++i){
-        for (size_t j = 0; j < dimensions[1]; ++j){
+    for (long i = 0; i < dimensions[0]; ++i){
+        for (long j = 0; j < dimensions[1]; ++j){
             C(i, j, 0) = A(2) * B(i, j, 1) - A(1) * B(i, j, 2);  // y
             C(i, j, 1) = A(0) * B(i, j, 2) - A(2) * B(i, j, 0);  // x
             C(i, j, 2) = A(1) * B(i, j, 0) - A(0) * B(i, j, 1);  // z
@@ -940,6 +419,14 @@ void crossProduct1x3(const Tensor<float,1>& A, const Tensor3f& B, Tensor3f& C){
 
 }
 
+/**
+ * Calculates the distances between two collection of vectors. For a pair of vectors V,W from each collection
+ * the formula |V+W|/|W| is used. Collection is a 3-Tensor, where the tensor describes a collection of Vectors
+ * distributed over a 2D array. Vector dimension is the last Tensor dimension (depth).
+ * @param vec1 First collection of vectors in form of a 3-Tensor.
+ * @param vec2 Second collection of vectors in form of a 3-Tensor.
+ * @param distance Collection of distances as 2-Tensor
+ */
 void vector_distance(const Tensor3f &vec1, const Tensor3f &vec2, Tensor2f &distance){
     PROFILE_FUNCTION();
     const auto& dimensions = vec1.dimensions();
@@ -947,6 +434,8 @@ void vector_distance(const Tensor3f &vec1, const Tensor3f &vec2, Tensor2f &dista
     Tensor2f norm(dimensions[0], dimensions[1]);
     Tensor2f norm2(dimensions[0], dimensions[1]);
     crossProduct3x3(vec1, vec2, cross_product);
+    norm.setZero();
+    norm2.setZero();
     norm_tensor_along_dim3(cross_product, norm);
     norm_tensor_along_dim3(vec2, norm2);
 //    std::cout << vec1 << " " << vec2 << std::endl;
@@ -956,6 +445,11 @@ void vector_distance(const Tensor3f &vec1, const Tensor3f &vec2, Tensor2f &dista
     distance = norm/norm2;
 }
 
+/**
+ * Simple sign function for floats. Returns 0.0 for 0.0f
+ * @param x Floting point number
+ * @return Sign of the number (-1.0,1.0)
+ */
 float sign_func(float x){
     // Apply via a.unaryExpr(std::ptr_fun(sign_func))
     if (x > 0)
@@ -966,22 +460,14 @@ float sign_func(float x){
         return -1.0;
 }
 
-// Function to time the performance of a given dot product computation function
-template<typename Func>
-void timeDotProductComputation(Func func, const Tensor3f& A, const Tensor3f& B, Tensor2f& D, int iterations) {
-    auto start = std::chrono::high_resolution_clock::now();
-
-    for (int i = 0; i < iterations; ++i) {
-        func(A, B, D);
-    }
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float> elapsed = end - start;
-    std::cout << "Time elapsed: " << elapsed.count() << " seconds" << std::endl;
-}
-
-// Function using nested loops to compute the dot product
-void computeDotProductWithLoops(const Tensor3f& A, const Tensor3f& B, Tensor2f& D) {
+/**
+ * Calculates the dot product for two 3-Tensors, where each Tensor describes a collection of Vectors distributed over
+ * a 2D array. Vector dimension is the last Tensor dimension (depth). Returns a 2-Tensor of products.
+ * @param A First input Tensor of shape NxMxD
+ * @param B Second input vector of shape NxMxD
+ * @param D Output Tensor of shape NxM
+ */
+void computeDotProductWithLoops(const Tensor3f &A, const Tensor3f &B, Tensor2f &D) {
     PROFILE_FUNCTION();
 
     const int height = A.dimension(0);
@@ -1000,24 +486,14 @@ void computeDotProductWithLoops(const Tensor3f& A, const Tensor3f& B, Tensor2f& 
     }
 }
 
-// // Function using .chip() to compute the dot product
-// void computeDotProductWithChip(const Tensor3f& A, const Tensor3f& B, Tensor2f& D) {
-//     const int m = A.dimension(0);
-//     const int n = A.dimension(1);
-//     Tensor<float, 1> a_slice;
-//     Tensor<float, 1> b_slice;
-//     Tensor<float, 0> res;
-//     for (int i = 0; i < m; ++i) {
-//         for (int j = 0; j < n; ++j) {
-//             // Extract the slices and compute the dot product
-//             a_slice = A.chip(i, 0).chip(j, 0);
-//             b_slice = B.chip(i, 0).chip(j, 0);
-//             res = (a_slice * b_slice).sum().sqrt();
-//             D(i, j) = res(); // Compute the dot product
-//         }
-//     }
-// }
-
+/**
+ * Maps a 3 dimensional world vectors to 2 dimensional image vectors. Expects vectors as a 3-Tensor. Vector dimension is
+ * last dimension (depth)
+ * @param In 3-Tensor of vectors distributed over an array. Shape: NxMx3
+ * @param C_x x-Derivative (width) of camera calibration matrix
+ * @param C_y y-Derivative (height) of camera calibration matrix
+ * @param Out Resulting collection of vectors as 3-Tensor of shape NxMx2
+ */
 void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f &Out){
     const auto& dimensions = In.dimensions();
     Tensor3f C1(dimensions);
@@ -1064,13 +540,30 @@ void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f 
 //    std::cout << "Out " << Out << std::endl;
 }
 
-void m23(const Tensor3f& In, const Tensor3f& Cx, const Tensor3f& Cy, Vector3f& Out, int y, int x) {
+/**
+ * Maps 2 dimensional image vectors to 3 dimensional world vectors. Expects vectors as a 3-Tensor. Vector dimension is
+ * last dimension (depth). Only calculates mapping for vector at position [y,x,:]
+ * @param In 3-Tensor of vectors distributed over an array. Shape: NxMx2
+ * @param C_x x-Derivative (width) of camera calibration matrix
+ * @param C_y y-Derivative (height) of camera calibration matrix
+ * @param Out Resulting 3-Vector
+ */
+void m23(const Tensor3f &In, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &Out, int y, int x) {
     Out(0) = In(y, x, 1) * Cx(y, x, 0) + In(y, x, 0) * Cy(y, x, 0);
     Out(1) = In(y, x, 1) * Cx(y, x, 1) + In(y, x, 0) * Cy(y, x, 1);
     Out(2) = In(y, x, 1) * Cx(y, x, 2) + In(y, x, 0) * Cy(y, x, 2);
 }
 
-void setup_R_update(const Tensor3f& CCM, Matrix3f& A, Vector3f& B, std::vector<std::vector<Matrix3f>>& Identity_minus_outerProducts, std::vector<std::vector<Vector3f>>& points){
+/**
+ * Setup for the update function which updates R from F (and C). It pre calculates a matrix A of a linear system which
+ * needs to be solved for each update. Matrix A does not change between updates which is why it gets precaluculated. Also prepares RHS vector B
+ * @param CCM Camera calibration matrix connection world and image coordinates
+ * @param A Lefthand side matrix
+ * @param B Righthand side vector
+ * @param Identity_minus_outerProducts Terms needed for final calculation of RHS at each update of R
+ * @param points
+ */
+void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &points){
     PROFILE_FUNCTION();
     const auto &dimensions = CCM.dimensions();
     int rows = dimensions[0];
@@ -1091,7 +584,15 @@ void setup_R_update(const Tensor3f& CCM, Matrix3f& A, Vector3f& B, std::vector<s
     }
 }
 
-float VFG_check(Tensor2f& V, Tensor3f& F, Tensor3f& G, float precision){
+/**
+ * Checks how close the dot product of F and G are to -V, using the infinity norm.
+ * @param V Temporal gradient (often approximated by agglomerating Events to a frame), 2-Tensor
+ * @param F Optical flow 3-Tensor
+ * @param G Spatoal gradient 3-Tensor
+ * @param precision Currently unused
+ * @return
+ */
+float VFG_check(Tensor2f &V, Tensor3f &F, Tensor3f &G, float precision){
 //    InstrumentationTimer timer("VFG_check");
     const auto& dimensions = F.dimensions();
     MatrixXfRowMajor dot(dimensions[0], dimensions[1]);
@@ -1110,7 +611,20 @@ float VFG_check(Tensor2f& V, Tensor3f& F, Tensor3f& G, float precision){
 //  INTERACTING MAPS UPDATE FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void update_FG(Tensor3f& F, float V, Tensor3f& G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
+/**
+ * Update the optical flow F at a pixel based on the spatial gradient G and the temporal gradient V (for example given by Events
+ * from an Event camera)
+ * @param F Optical Flow, 3-Tensor, shape NxMx2, collection of 2-Vectors
+ * @param V Temporal Gradients, float
+ * @param G Spatial gradients, 3-Tensor, shape NxMx2, collection of 2-Vectors
+ * @param y vertical coordinate of pixel
+ * @param x horizontal coordinate of pixel
+ * @param lr learning rate, currently fixed to 1.0
+ * @param weight_FG weight of the update for the convex combination with the old F value. 0.0 = no update
+ * @param eps round F values with a magnitude below eps to 0.0
+ * @param gamma cap F values with a greater magnitude than gamma to gamma.
+ */
+void update_FG(Tensor3f &F, const float V, const Tensor3f &G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_FG");
     PROFILE_FUNCTION();
     Vector2f update_F;
@@ -1134,15 +648,28 @@ void update_FG(Tensor3f& F, float V, Tensor3f& G, int y, int x, const float lr, 
             F(y, x, 1) = -gamma;
         }
         if (std::abs(F(y, x, 0)) < eps){
-            F(y, x, 0) = 0;
+            F(y, x, 0) = 0.0;
         }
         if (std::abs(F(y, x, 1)) < eps){
-            F(y, x, 1) = 0;
+            F(y, x, 1) = 0.0;
         }
     }
 }
 
-void update_GF(Tensor3f& G, float V, Tensor3f& F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
+/**
+ * Update the spatial gradient G at a pixel based on the optical flow F and the temporal gradient V (for example given by Events
+ * from an Event camera)
+ * @param G Optical Flow, 3-Tensor, shape NxMx2, collection of 2-Vectors
+ * @param V Temporal Gradients, Events, 2-Tensor
+ * @param F Spatial gradients, 3-Tensor, shape NxMx2, collection of 2-Vectors
+ * @param y vertical coordinate of pixel
+ * @param x horizontal coordinate of pixel
+ * @param lr learning rate, currently fixed to 1.0
+ * @param weight_FG weight of the update for the convex combination with the old F value. 0.0 = no update
+ * @param eps round F values below eps to 0.0
+ * @param gamma cap F values with a greater magnitued than gamma to gamma.
+ */
+void update_GF(Tensor3f &G, float V, const Tensor3f &F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
 //    InstrumentationTimer timer("update_GF");
     PROFILE_FUNCTION();
     Vector2f update_G;
@@ -1166,15 +693,26 @@ void update_GF(Tensor3f& G, float V, Tensor3f& F, int y, int x, const float lr, 
             G(y, x, 1) = -gamma;
         }
         if (std::abs(G(y, x, 0)) < eps){
-            G(y, x, 0) = 0;
+            G(y, x, 0) = 0.0;
         }
         if (std::abs(G(y, x, 1)) < eps){
-            G(y, x, 1) = 0;
+            G(y, x, 1) = 0.0;
         }
     }
 }
 
-void update_GI(Tensor3f& G, const Tensor3f& I_gradient, const int y, const int x, const float weight_GI, const float eps=1e-8, const float gamma=255.0){
+/**
+ * Update the spatial gradient G based on the Image intensity I with central difference gradient calculation. Only done
+ * at pixel (y,x) (height, width)
+ * @param G spatial gradient, shape NxMx2
+ * @param I_gradient gradient of I, shape NxMx2
+ * @param y vertical position
+ * @param x horizontal position
+ * @param weight_GI weight for convex combination with old G value, 0 = no update
+ * @param eps G values lower get rounded to 0.0
+ * @param gamma G values with magnitude larger get rounded to gamma (or -gamma)
+ */
+void update_GI(Tensor3f &G, const Tensor3f &I_gradient, int y, int x, float weight_GI, float eps, float gamma){
     PROFILE_FUNCTION();
 //    DEBUG_LOG(G(y, x, 0));
 //    DEBUG_LOG(I_gradient(y, x, 0));
@@ -1204,37 +742,62 @@ void update_GI(Tensor3f& G, const Tensor3f& I_gradient, const int y, const int x
 //    DEBUG_LOG(G(y, x, 1));
 }
 
-void contribute(Tensor2f& I, float V, int y, int x, float minPotential, float maxPotential){
+void contribute(Tensor2f &I, float V, int y, int x, float minPotential, float maxPotential){
     I(y, x) = std::min(std::max(I(y, x) + V, minPotential), maxPotential);
 
 }
 
-void decay(Tensor2f& I, Tensor2f& decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
+void globalDecay(Tensor2f &I, Tensor2f &decayTimeSurface, Tensor2f &nP, Tensor2f &t, Tensor2f &dP) {
+    I = (I - nP) * (-(t - decayTimeSurface) / dP).exp() + nP;
+    decayTimeSurface = t;
+}
+
+void decay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
 //    DEBUG_LOG(I(y, x))
-    I(y, x) = (I(y, x) - neutralPotential) * expf(-(time - decayTimeSurface(y, x)) / decayParam) + neutralPotential;
+    float newIntensity = (I(y, x) - neutralPotential) * expf(-(time - decayTimeSurface(y, x)) / decayParam) + neutralPotential;
+    I(y, x) = newIntensity;
     decayTimeSurface(y, x) = time;
 //    DEBUG_LOG(I(y, x))
 }
 
-void update_IV(Tensor2f& I, const float V, Tensor2f& decayTimeSurface, const int y, const int x, const float time, const float minPotential, const float maxPotential, const float neutralPotential, const float decayParam){
+void update_IV(Tensor2f &I, const float V, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float minPotential, const float maxPotential, const float neutralPotential, const float decayParam){
     PROFILE_FUNCTION();
-//    decay(I, decayTimeSurface, y, x, time, neutralPotential, decayParam);
+    decay(I, decayTimeSurface, y, x, time, neutralPotential, decayParam);
     contribute(I, V, y, x, minPotential, maxPotential);
 }
 
-void updateGIDiffGradient(Tensor3f& G, Tensor3f& I_gradient, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, int y, int x){
+void updateGIDiffGradient(Tensor3f &G, Tensor3f &I_gradient, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, int y, int x){
     PROFILE_FUNCTION();
     GIDiff(y, x, 0) = G(y, x, 0) - I_gradient(y, x, 0);
     GIDiff(y, x, 1) = G(y, x, 1) - I_gradient(y, x, 1);
     computeGradient(GIDiff, GIDiffGradient, y, x);
 }
 
-void update_IG(Tensor2f& I, Tensor3f& GIDiffGradient, int y, int x, const float weight_IG=0.5){
+/**
+ * Updates image intensity I based on spatial gradient G
+ * @param I
+ * @param GIDiffGradient
+ * @param y
+ * @param x
+ * @param weight_IG
+ */
+void update_IG(Tensor2f &I, const Tensor3f &GIDiffGradient, int y, int x, float weight_IG){
     PROFILE_FUNCTION();
     I(y, x) = I(y, x) + weight_IG * (- GIDiffGradient(y, x, 0) - GIDiffGradient(y, x, 1));
 }
 
-void update_FR(Tensor3f& F, const Tensor3f& CCM, const Tensor3f& Cx, const Tensor3f& Cy, const Tensor<float,1>& R, const float weight_FR, float eps=1e-8, float gamma=255.0){
+/**
+ * updates F based on R and C
+ * @param F
+ * @param CCM
+ * @param Cx
+ * @param Cy
+ * @param R
+ * @param weight_FR
+ * @param eps
+ * @param gamma
+ */
+void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor<float,1> &R, const float weight_FR, float eps=1e-8, float gamma=255.0){
     PROFILE_FUNCTION();
     Tensor3f cross(CCM.dimensions());
     const auto& dimensions = F.dimensions();
@@ -1272,7 +835,7 @@ void update_FR(Tensor3f& F, const Tensor3f& CCM, const Tensor3f& Cx, const Tenso
     }
 }
 
-void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const Tensor3f& Cx, const Tensor3f& Cy, const Matrix3f& A, Vector3f& B, const std::vector<std::vector<Matrix3f>>& Identity_minus_outerProducts, std::vector<std::vector<Vector3f>>& old_points, const float weight_RF, std::vector<Event>& frameEvents) {
+void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, const float weight_RF, const std::vector<Event> &frameEvents) {
     //InstrumentationTimer timer1("update_RF");
     PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
@@ -1303,7 +866,23 @@ void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const T
     R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
 }
 
-void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const Tensor3f& Cx, const Tensor3f& Cy, const Matrix3f& A, Vector3f& B, const std::vector<std::vector<Matrix3f>>& Identity_minus_outerProducts, std::vector<std::vector<Vector3f>>& old_points, const float weight_RF, int y, int x) {
+
+/**
+ * Updates rotational velocity vector R based on F and C
+ * @param R
+ * @param F
+ * @param C
+ * @param Cx
+ * @param Cy
+ * @param A
+ * @param B
+ * @param Identity_minus_outerProducts
+ * @param old_points
+ * @param weight_RF
+ * @param y
+ * @param x
+ */
+void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, float weight_RF, int y, int x) {
     //InstrumentationTimer timer1("update_RF");
     PROFILE_FUNCTION();
     const auto &dimensions = F.dimensions();
@@ -1336,7 +915,7 @@ void update_RF(Tensor<float,1>& R, const Tensor3f& F, const Tensor3f& C, const T
 //  INTERACTING MAPS MAIN FUNCTION  ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void event_step(const float V, Tensor2f& MI, Tensor2f& decayTimeSurface, Tensor3f& delta_I, Tensor3f& GIDiff, Tensor3f& GIDiffGradient, Tensor3f& F, Tensor3f& G, Tensor<float,1>& R, const Tensor3f& CCM, const Tensor3f& dCdx, const Tensor3f& dCdy, const Matrix3f& A, Vector3f& B, const std::vector<std::vector<Matrix3f>>& Identity_minus_outerProducts, std::vector<std::vector<Vector3f>>& old_points, std::unordered_map<std::string,float>& parameters, std::vector<int>& permutation, int y, int x, float time){
+void event_step(const float V, Tensor2f &MI, Tensor2f &decayTimeSurface, Tensor3f &delta_I, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, Tensor3f &F, Tensor3f &G, Tensor<float,1> &R, const Tensor3f &CCM, const Tensor3f &dCdx, const Tensor3f &dCdy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, std::unordered_map<std::string,float> &parameters, std::vector<int> &permutation, int y, int x, float time){
     PROFILE_FUNCTION();
     array<Index, 2> dimensions = MI.dimensions();
     update_IV(MI, V, decayTimeSurface, y, x, time, parameters["minPotential"], parameters["maxPotential"], parameters["neutralPotential"], parameters["decayParam"]);
@@ -1918,7 +1497,6 @@ int main() {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-
     std::setprecision(8);
 
     if (EXECUTE_TEST){
@@ -1927,15 +1505,22 @@ int main() {
     else{
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "TEST";
-        std::string folder_name = results_name + " " + std::ctime(&time);
-        std::string resource_name = "shapes_rotation";
+        std::string results_name = "boxes_rotation_matrices";
+        bool addTime = false;
+        std::string folder_name;
+        if (addTime) {
+            folder_name = results_name + " " + std::ctime(&time);
+        }
+        else{
+            folder_name = results_name;
+        }
+        std::string resource_name = "boxes_rotation";
         std::string calib_path = "../res/" + resource_name + "/calib.txt";
-        std::string event_path = "../res/" + resource_name + "/events.txt";
+        std::string event_path = "../res/" + resource_name + "/events_split/split_6.txt";
         std::string settings_path = "../res/" + resource_name + "/settings.txt";
 
-        float start_time_events = 10.0; // in s
-        float end_time_events = 20.0; // in s
+        float start_time_events = 50; // in s
+        float end_time_events = 60; // in s
         float time_bin_size_in_s = 0.05; // in s
         int iterations = 1500;
         
@@ -1959,20 +1544,20 @@ int main() {
         parameters["weight_FG"] = 1.0;
         parameters["weight_FR"] = 0.8;
         parameters["weight_GF"] = 1.0;
-        parameters["weight_GI"] = 1.0;
+        parameters["weight_GI"] = 0.2;
         parameters["weight_IG"] = 1.0;
         parameters["weight_IV"] = 1.0;
         parameters["weight_RF"] = 0.8;
         parameters["lr"] = 1.0;
         parameters["time_step"] = time_bin_size_in_s;
-        parameters["eventContribution"] = 25.5;
+        parameters["eventContribution"] = 10; // mainly important for the visibility of the intensity image
         parameters["eps"] = 0.00001;
         parameters["gamma"] = 255;
-        parameters["decayParam"] = 1e6; // exp: 1e6; linear: 0.000001
+        parameters["decayParam"] = 1; // exp: 1e6; linear: 0.000001
         parameters["minPotential"] = 0.0;
         parameters["maxPotential"] = 255;
-        parameters["neutralPotential"] = 128;
-        parameters["fps"] = 30;
+        parameters["neutralPotential"] = 255;
+        parameters["fps"] = 60;
         parameters["updateIterationsFR"] = 10; // more iterations -> F caputures general movement of scene/camera better but significantly more computation time
         // iterations are done after event calculations for a frame are done
         std::vector<int> permutation {0,2,3}; // Which update steps to take; 1 is not needed
@@ -2003,7 +1588,7 @@ int main() {
         Tensor2f I(height, width);
         I.setConstant(128.0);
         Tensor2f decayTimeSurface(height, width);
-        decayTimeSurface.setZero();
+        decayTimeSurface.setConstant(start_time_events);
         Tensor3f delta_I(height, width,2);
         delta_I.setZero();
         Tensor3f GIDiff(height, width,2);
@@ -2034,7 +1619,7 @@ int main() {
         //##################################################################################################################
         // Read events file
         std::vector<Event> event_data;
-        read_events(event_path, event_data, start_time_events, end_time_events);
+        read_events(event_path, event_data, start_time_events, end_time_events, INT32_MAX);
         std::cout << "Readout events at " << event_path << std::endl;
 
         //##################################################################################################################
@@ -2075,8 +1660,6 @@ int main() {
             Identity_minus_outerProducts[i].resize(cols);  // Resize each row but do not initialize
             old_points[i].resize(cols);  // Resize each row but do not initialize
         }
-
-
         setup_R_update(CCM, A, B, Identity_minus_outerProducts, old_points);
 
         //##################################################################################################################
@@ -2095,13 +1678,22 @@ int main() {
         fs::path profiler_path = folder_path / profiler_name;
         Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
         std::cout << "Setup Profiler" << std::endl;
+        int name_start_counter = 3000;
         int counter = 0;
+        int y;
+        int x;
         std::vector<Event> frameEvents;
+
+        // Tensors for Image decay
+        Tensor2f nP(I.dimensions());    // neutralPotential
+        Tensor2f t(I.dimensions());     // time
+        Tensor2f dP(I.dimensions());    // decayParameter
+
         for (Event event : event_data){
             std::shuffle(std::begin(permutation), std::end(permutation), rng);
 
-            int y = event.coordinates[0];
-            int x = event.coordinates[1];
+            y = event.coordinates[0];
+            x = event.coordinates[1];
             V = (float) event.polarity * parameters["eventContribution"];
             V_Vis(y, x) = (float) event.polarity * parameters["eventContribution"];
 
@@ -2113,25 +1705,35 @@ int main() {
             }
             if (start_time_events + counter * (float) 1/parameters["fps"] < event.time){
 
+                std::cout << "Frame " << counter << "/" << int((end_time_events-start_time_events)*parameters["fps"]) << std::endl;
                 for (int i = 0; i < parameters["updateIterationsFR"]; ++i){
                     update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
                 }
 
+                nP.setConstant(parameters["neutralPotential"]);
+                t.setConstant(event.time);
+                dP.setConstant(parameters["decayParam"]);
+                globalDecay(MI, decayTimeSurface, nP, t, dP);
+
                 {
                     PROFILE_SCOPE("BETWEEN FRAMES");
                     counter++;
-//                    writeToFile(V_Vis, folder_path / "V.txt");
-//                    writeToFile(MI, folder_path / "MI.txt");
-//                    writeToFile(I, folder_path / "I.txt");
-//                    writeToFile(delta_I, folder_path / "I_gradient.txt");
-//                    writeToFile(F, folder_path / "F.txt");
-//                    writeToFile(G, folder_path / "G.txt");
+                    writeToFile(CCM, folder_path / ("C" + std::to_string(counter + name_start_counter) + ".txt"));
+                    writeToFile(V_Vis, folder_path / ("V" + std::to_string(counter + name_start_counter) + ".txt"));
+                    writeToFile(MI, folder_path / ("MI" + std::to_string(counter + name_start_counter)  + ".txt"));
+                    writeToFile(I, folder_path / ("I" + std::to_string(counter + name_start_counter)  + ".txt"));
+                    writeToFile(delta_I, folder_path / ("I_gradient" + std::to_string(counter + name_start_counter)  + ".txt"));
+                    writeToFile(F, folder_path / ("F" + std::to_string(counter + name_start_counter)  + ".txt"));
+                    writeToFile(G, folder_path / ("G" + std::to_string(counter + name_start_counter)  + ".txt"));
 //                    std::cout << "Time: " << event.time << std::endl;
 //                    std::cout << "R: " << R << std::endl;
 #ifdef IMAGES
-                    std::string image_name = "VIGF_" + std::to_string(counter) + ".png";
+                    std::string image_name = "VIGF_" + std::to_string(int(counter + name_start_counter)) + ".png";
                     fs::path image_path = folder_path / image_name;
                     create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+                    image_name = "VvsFG" + std::to_string(int(counter + name_start_counter)) + ".png";
+                    image_path = folder_path / image_name;
+                    plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
 #endif
 //                    image_name = "VvsFG" + std::to_string(counter) + ".png";
 //                    image_path = folder_path / image_name;
