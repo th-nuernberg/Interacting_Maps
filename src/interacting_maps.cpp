@@ -1505,7 +1505,7 @@ int main() {
     else{
         auto clock_time = std::chrono::system_clock::now();
         std::time_t time = std::chrono::system_clock::to_time_t(clock_time);
-        std::string results_name = "boxes_rotation_matrices";
+        std::string results_name = "shapes_rotation_matrices";
         bool addTime = false;
         std::string folder_name;
         if (addTime) {
@@ -1514,14 +1514,15 @@ int main() {
         else{
             folder_name = results_name;
         }
-        std::string resource_name = "boxes_rotation";
+        std::string resource_name = "shapes_rotation";
         std::string calib_path = "../res/" + resource_name + "/calib.txt";
-        std::string event_path = "../res/" + resource_name + "/events_split/split_6.txt";
+        std::string event_path = "../res/" + resource_name + "/events.txt";
         std::string settings_path = "../res/" + resource_name + "/settings.txt";
 
-        float start_time_events = 50; // in s
-        float end_time_events = 60; // in s
-        float time_bin_size_in_s = 0.05; // in s
+        int name_start_counter = 0;
+        float start_time_events = 0; // in s
+        float end_time_events = 0.1; // in s
+        float time_bin_size_in_s = 0.005; // in s
         int iterations = 1500;
         
         float memoryWeight = 0.99;
@@ -1557,7 +1558,7 @@ int main() {
         parameters["minPotential"] = 0.0;
         parameters["maxPotential"] = 255;
         parameters["neutralPotential"] = 255;
-        parameters["fps"] = 60;
+        parameters["fps"] = 200;
         parameters["updateIterationsFR"] = 10; // more iterations -> F caputures general movement of scene/camera better but significantly more computation time
         // iterations are done after event calculations for a frame are done
         std::vector<int> permutation {0,2,3}; // Which update steps to take; 1 is not needed
@@ -1678,7 +1679,7 @@ int main() {
         fs::path profiler_path = folder_path / profiler_name;
         Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
         std::cout << "Setup Profiler" << std::endl;
-        int name_start_counter = 3000;
+
         int counter = 0;
         int y;
         int x;
@@ -1718,13 +1719,23 @@ int main() {
                 {
                     PROFILE_SCOPE("BETWEEN FRAMES");
                     counter++;
-                    writeToFile(CCM, folder_path / ("C" + std::to_string(counter + name_start_counter) + ".txt"));
-                    writeToFile(V_Vis, folder_path / ("V" + std::to_string(counter + name_start_counter) + ".txt"));
-                    writeToFile(MI, folder_path / ("MI" + std::to_string(counter + name_start_counter)  + ".txt"));
-                    writeToFile(I, folder_path / ("I" + std::to_string(counter + name_start_counter)  + ".txt"));
-                    writeToFile(delta_I, folder_path / ("I_gradient" + std::to_string(counter + name_start_counter)  + ".txt"));
-                    writeToFile(F, folder_path / ("F" + std::to_string(counter + name_start_counter)  + ".txt"));
-                    writeToFile(G, folder_path / ("G" + std::to_string(counter + name_start_counter)  + ".txt"));
+//                    writeToFile(R, folder_path / ("R" + std::to_string(counter + name_start_counter) + ".txt"));
+//                    writeToFile(CCM, folder_path / ("C" + std::to_string(counter + name_start_counter) + ".txt"));
+//                    writeToFile(V_Vis, folder_path / ("V" + std::to_string(counter + name_start_counter) + ".txt"));
+//                    writeToFile(MI, folder_path / ("MI" + std::to_string(counter + name_start_counter)  + ".txt"));
+//                    writeToFile(I, folder_path / ("I" + std::to_string(counter + name_start_counter)  + ".txt"));
+//                    writeToFile(delta_I, folder_path / ("I_gradient" + std::to_string(counter + name_start_counter)  + ".txt"));
+//                    writeToFile(F, folder_path / ("F" + std::to_string(counter + name_start_counter)  + ".txt"));
+//                    writeToFile(G, folder_path / ("G" + std::to_string(counter + name_start_counter)  + ".txt"));
+
+//                    saveImage(R, folder_path / ("R" + std::to_string(counter + name_start_counter) + ".txt"));
+                    saveImage(CCM, folder_path / ("C" + std::to_string(counter + name_start_counter) + ".png"));
+                    saveImage(Tensor2Matrix(V_Vis), folder_path / ("V" + std::to_string(counter + name_start_counter) + ".png"), false);
+                    saveImage(Tensor2Matrix(MI), folder_path / ("MI" + std::to_string(counter + name_start_counter)  + ".png"), true);
+                    saveImage(Tensor2Matrix(I), folder_path / ("I" + std::to_string(counter + name_start_counter)  + ".png"), true);
+                    saveImage(delta_I, folder_path / ("I_gradient" + std::to_string(counter + name_start_counter)  + ".png"));
+                    saveImage(F, folder_path / ("F" + std::to_string(counter + name_start_counter)  + ".png"));
+                    saveImage(G, folder_path / ("G" + std::to_string(counter + name_start_counter)  + ".png"));
 //                    std::cout << "Time: " << event.time << std::endl;
 //                    std::cout << "R: " << R << std::endl;
 #ifdef IMAGES

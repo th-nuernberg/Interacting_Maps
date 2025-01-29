@@ -310,6 +310,25 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
     return image;
 }
 
+void saveImage(const MatrixXfRowMajor &Image, const std::string &path = "Image.png", const bool Imode = true) {
+    cv::Mat grayImage;
+    if (Imode){
+        grayImage = frame2grayscale(Image);
+        cvtColor(grayImage, grayImage, cv::COLOR_GRAY2BGR);
+    }
+    else{
+        grayImage = V2image(Image, 0.1);
+    }
+
+    cv::imwrite(path, grayImage);
+}
+
+void saveImage(const Tensor3f &Image, const std::string &path = "Image.png") {
+    cv::Mat grayImage = vector_field2image(Image);
+    cv::imwrite(path, grayImage);
+}
+
+
 /**
  * Creates a colorbar of given height and width representing given max and min values with a specific colormap
  * @param globalMin minimum value of the colorbar
@@ -356,6 +375,8 @@ cv::Mat createColorbar(double globalMin, double globalMax, int height, int width
     // Optionally, you can add intermediate ticks and labels here as needed
     return colorbarColored;
 }
+
+
 
 /**
  * Plots the Event information (as stand in for the temporal gradient) against the dot product of
