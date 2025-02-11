@@ -15,6 +15,9 @@ include_directories(
 
 # Find OpenCV package
 find_package(OpenCV REQUIRED)
+FIND_PACKAGE(Boost COMPONENTS program_options REQUIRED)
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
+#TARGET_LINK_LIBRARIES(target ${Boost_LIBRARIES})
 #find_package(dv-processing REQUIRED)
 
 include_directories()
@@ -49,6 +52,7 @@ add_executable(Executable ${SOURCES} ${PROJECT_HEADERS})
 # Link libraries (include dv-processing and required dependencies)
 target_link_libraries(Executable
         ${OpenCV_LIBS}
+        ${Boost_LIBRARIES}
 #        dv::processing
         #        dv-processing
 #        OpenSSL::SSL
