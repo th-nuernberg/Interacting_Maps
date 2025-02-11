@@ -4,6 +4,7 @@
 #include "imaging.h"
 #include "datatypes.h"
 #include "conversions.h"
+
 #define PI 3.14159265
 
 /**
@@ -122,9 +123,9 @@ cv::Mat vector_field2image(const Tensor3f &vector_field) {
             float y = vector_field(i, j, 0);
             float x = vector_field(i, j, 1);
             float angle = std::atan2(y, x);
-            if (angle < 0){
-                angle += 2*PI;
-            }
+//            if (angle < 0){
+//                angle += 2*PI;
+//            }
             angles(i,j) = angle;
             saturations(i, j) = std::sqrt(x * x + y * y);
         }
@@ -134,16 +135,17 @@ cv::Mat vector_field2image(const Tensor3f &vector_field) {
     cv::Mat hue(rows, cols, CV_8UC1);
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
-            hue.at<uint8_t>(i, j) = static_cast<uint8_t>((angles(i, j))/(2 * M_PI) * 179);
+            hue.at<uint8_t>(i, j) = static_cast<uint8_t>((angles(i, j) + M_PI)/(2 * M_PI) * 179);
         }
     }
 
     // Normalize saturations to [0, 255]
+//    float max_saturation = 10;
     float max_saturation = saturations.maxCoeff();
     cv::Mat saturation(rows, cols, CV_8UC1);
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
-            saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::min(saturations(i, j) / max_saturation * 255.0, 255.0));
+            saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::max(std::min(255.0 * saturations(i, j) / max_saturation, 255.0), 100.0));
         }
     }
 
@@ -270,6 +272,28 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
     cv::Mat G_img = vector_field2image(G);
     cv::Mat F_img = vector_field2image(F);
 
+    cv::Mat mask;
+    cv::transform(V_img, mask, cv::Matx13f(1,1,1));
+    mask = mask/255;
+
+    //    std::cout<<mask.size() << F_img.size() <<std::endl;
+//        std::cout<<mask.channels() << std::endl;
+//    //    std::cout<< F_img.channels() <<std::endl;
+//        std::cout<<mask.type() << std::endl;
+    //    std::cout << F_img.type() <<std::endl;
+
+
+    cv::cvtColor(mask, mask, cv::COLOR_GRAY2BGR);
+
+//    std::cout<<mask.size() << F_img.size() <<std::endl;
+//    std::cout<<mask.channels() << std::endl;
+//    std::cout<< F_img.channels() <<std::endl;
+//    std::cout<<mask.type() << std::endl;
+//    std::cout << F_img.type() <<std::endl;
+
+    cv::Mat masked_F;
+    cv::multiply(mask, F_img, masked_F);
+
     long rows = V.rows();
     long cols = V.cols();
     long I_rows = I.rows();
@@ -296,7 +320,7 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
     G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
 
     // Place F image
-    F_img.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, rows + 10, cols, rows)));
+    masked_F.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, rows + 10, cols, rows)));
 
     // Create and place the color wheel
     cv::Mat colourwheel = create_colorwheel(colourwheel_size);
