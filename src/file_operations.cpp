@@ -152,7 +152,7 @@ void read_single_line_txt(const std::string &file_path, std::vector<float> &cali
         std::ifstream calibration_file(path);
         std::string::size_type size;
         for (std::string line; std::getline(calibration_file, line, ' ');) {
-            calibration_data.push_back(std::stof(line, &size));
+            calibration_data.push_back(std::stoi(line, &size));
         }
     }
 }
