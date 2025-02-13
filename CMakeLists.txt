@@ -36,6 +36,7 @@ set(PROJECT_HEADERS
         ${PROJECT_SOURCE_DIR}/include/imaging.h
         ${PROJECT_SOURCE_DIR}/include/file_operations.h
         ${PROJECT_SOURCE_DIR}/include/conversions.h
+        include/video.h
 )
 
 # Add source files
@@ -44,6 +45,7 @@ set(SOURCES
         ${PROJECT_SOURCE_DIR}/src/imaging.cpp
         ${PROJECT_SOURCE_DIR}/src/file_operations.cpp
         ${PROJECT_SOURCE_DIR}/src/conversions.cpp
+        src/video.cpp
 )
 
 # Add executable

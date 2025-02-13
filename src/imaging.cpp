@@ -127,9 +127,12 @@ cv::Mat vector_field2image(const Tensor3f &vector_field) {
 //                angle += 2*PI;
 //            }
             angles(i,j) = angle;
-            saturations(i, j) = std::sqrt(x * x + y * y);
+            saturations(i, j) = std::sqrt(x*x + y*y);
         }
     }
+    //std::cout << vector_field(0,0,0) << " " << vector_field(0,0,1) << std::endl;
+    //std::cout << angles(0,0) << std::endl;
+    //std::cout << saturations(0,0) << std::endl;
 
     // Normalize angles to [0, 179]
     cv::Mat hue(rows, cols, CV_8UC1);
@@ -139,18 +142,37 @@ cv::Mat vector_field2image(const Tensor3f &vector_field) {
         }
     }
 
-    // Normalize saturations to [0, 255]
-//    float max_saturation = 10;
-    float max_saturation = saturations.maxCoeff();
-    cv::Mat saturation(rows, cols, CV_8UC1);
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::max(std::min(255.0 * saturations(i, j) / max_saturation, 255.0), 100.0));
-        }
-    }
+    //std::cout << static_cast<uint16_t>(hue.at<uint8_t>(0,0)) << std::endl;
 
     // Value channel (full brightness)
     cv::Mat value(rows, cols, CV_8UC1, cv::Scalar(255));
+
+
+    // Normalize saturations to [0, 255]
+//    float max_saturation = 10;
+    float max_saturation = saturations.maxCoeff();
+    float min_saturation = saturations.minCoeff();
+    //std::cout << max_saturation << std::endl;
+    cv::Mat saturation(rows, cols, CV_8UC1);
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            if (saturations(i,j) == 0){
+                value.at<uint8_t>(i, j) = 0;
+            }
+            else{
+                saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::max(std::min(255.0 * (saturations(i, j)) / (max_saturation), 255.0),100.0));
+            }
+            //saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(std::min(255.0 * (saturations(i, j) - min_saturation) / (max_saturation - min_saturation), 255.0));
+        }
+    }
+    //std::cout << static_cast<uint16_t>(saturation.at<uint8_t>(0,0)) << std::endl;
+    //double minVal;
+    //double maxVal;
+    //cv::Point minLoc;
+    //cv::Point maxLoc;
+    //minMaxLoc( saturation, &minVal, &maxVal, &minLoc, &maxLoc );
+    //std::cout << "min val: " << minVal << std::endl;
+    //std::cout << "max val: " << maxVal << std::endl;
 
     // Merge HSV channels
     std::vector<cv::Mat> hsv_channels = {hue, saturation, value};
