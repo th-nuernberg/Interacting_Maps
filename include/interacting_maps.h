@@ -14,6 +14,7 @@
 #include "datatypes.h"
 #include "imaging.h"
 #include "file_operations.h"
+#include "video.h"
 
 
 namespace fs = std::filesystem;
@@ -35,8 +36,6 @@ using namespace Eigen;
 
 std::ostream &operator << (std::ostream &os, Event &e);
 
-std::vector<std::string> split_string(std::stringstream sstream, char delimiter);
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  GRADIENT CALCULATIONS  /////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -52,7 +51,7 @@ void computeGradient(const Tensor3f &data, Tensor3f &gradients, int y, int x);
 
 std::vector<std::vector<Event>> bin_events(std::vector<Event> &events, float bin_size);
 
-void create_frames(std::vector<std::vector<Event>> &bucketed_events, std::vector<Tensor2f> &frames, int camera_height, int camera_width);
+//void create_frames(std::vector<std::vector<Event>> &bucketed_events, std::vector<Tensor2f> &frames, int camera_height, int camera_width);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  INTERACTING MAPS HELPER FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
@@ -86,8 +85,8 @@ void vector_distance(const Tensor3f &vec1, const Tensor3f &vec2, Tensor2f &dista
 float sign_func(float x);
 
 // Function to time the performance of a given dot product computation function
-template<typename Func>
-void timeDotProductComputation(Func func, Tensor3f &A, Tensor3f &B, Tensor2f &D, int iterations);
+//template<typename Func>
+//void timeDotProductComputation(Func func, Tensor3f &A, Tensor3f &B, Tensor2f &D, int iterations);
 
 // Function using nested loops to compute the dot product
 void computeDotProductWithLoops(const Tensor3f &A, const Tensor3f &B, Tensor2f &D);
@@ -96,9 +95,10 @@ void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f 
 
 void m23(const Tensor3f &In, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &Out, int y, int x);
 
-void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::unique_ptr<Matrix3f[]> &Identity_minus_outerProducts, std::unique_ptr<Vector3f[]> &points);
+void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &points);
 
-float VFG_check(const Tensor2f &V, const Tensor3f &F, const Tensor3f &G, float precision);
+
+float VFG_check(const Tensor2f &V, const Tensor3f &F, const Tensor3f &G);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  INTERACTING MAPS UPDATE FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
@@ -110,7 +110,7 @@ void update_GF(Tensor3f &G, float V, const Tensor3f &F, int y, int x, float lr, 
 
 void update_GI(Tensor3f &G, const Tensor3f &I_gradient, int y, int x, float weight_GI, float eps=1e-8, float gamma=255.0);
 
-void update_IV(Tensor2f &I, float  V, Tensor2f &decayTimeSurface, int y, int x, float time, float minPotential, float maxPotential, float neutralPotential, float decayParam);
+void update_IV(Tensor2f &I, float  V, int y, int x, float minPotential, float maxPotential);
 
 void updateGIDiffGradient(Tensor3f &G, Tensor3f &I_gradient, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, int y, int x);
 
@@ -118,7 +118,7 @@ void update_IG(Tensor2f &I, const Tensor3f &GIDiffGradient, int y, int x, float 
 
 void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor<float,1> &R, float weight_FR, float eps, float gamma);
 
-void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::unique_ptr<Matrix3f[]> &Identity_minus_outerProducts, Vector3f &old_point, int y, int x, float weight_RF, const std::vector<Event> &frameEvents);
+// void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::unique_ptr<Matrix3f[]> &Identity_minus_outerProducts, Vector3f &old_point, int y, int x, float weight_RF, const std::vector<Event> &frameEvents);
 
 void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, float weight_RF, int y, int x);
 
@@ -127,4 +127,4 @@ void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const T
 //  INTERACTING MAPS MAIN FUNCTION  ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void event_step(float V, Tensor2f &MI, Tensor2f &I, Tensor3f &delta_I, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, Tensor3f &F, Tensor3f &G, Tensor<float,1> &R, Tensor3f &CCM, Tensor3f &dCdx, Tensor3f &dCdy, Matrix3f &A, Vector3f &B, std::unique_ptr<Matrix3f[]> &Identity_minus_outerProducts, Vector3f &old_point, std::unordered_map<std::string,float> &weights, std::vector<int> &permutation, int y, int x);
+//void event_step(float V, Tensor2f &MI, Tensor2f &I, Tensor3f &delta_I, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, Tensor3f &F, Tensor3f &G, Tensor<float,1> &R, Tensor3f &CCM, Tensor3f &dCdx, Tensor3f &dCdy, Matrix3f &A, Vector3f &B, std::unique_ptr<Matrix3f[]> &Identity_minus_outerProducts, Vector3f &old_point, std::unordered_map<std::string,float> &weights, std::vector<int> &permutation, int y, int x);

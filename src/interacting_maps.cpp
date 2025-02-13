@@ -13,8 +13,6 @@
 
 namespace po = boost::program_options;
 
-#define EXECUTE_TEST 0
-
 #ifdef PROFILING
 #define PROFILE_SCOPE(name) InstrumentationTimer timer##__LINE__(name)
 #define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCTION__)
@@ -31,36 +29,36 @@ namespace po = boost::program_options;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Enables use of Event in outstream
- * @param os outstream to add Event to
+ * Enables use of Event in out stream
+ * @param os out stream to add Event to
  * @param e Event to add
- * @return new outstream
+ * @return new out stream
  */
 std::ostream& operator << (std::ostream &os, const Event &e) {
     return (os << "Time: " << e.time << " Coords: " << e.coordinates[0] << " " << e.coordinates[1] << " Polarity: " << e.polarity);
 }
 
-std::string Event::toString() const {
-    std::stringstream ss;
-    ss << (*this);
-    return ss.str();
-}
+//std::string Event::toString() const {
+//    std::stringstream ss;
+//    ss << (*this);
+//    return ss.str();
+//}
 
-/**
- * Splits a stringstream at a provided delimiter. Delimiter is removed
- * @param sstream stringstream to be split
- * @param delimiter The delimiter, can be any char
- * @return Vector of split string
- */
-std::vector<std::string> split_string(std::stringstream sstream, char delimiter){
-    std::string segment;
-    std::vector<std::string> seglist;
-    while(std::getline(sstream, segment, delimiter))
-    {
-        seglist.push_back(segment);
-    }
-    return seglist;
-}
+///**
+// * Splits a string stream at a provided delimiter. Delimiter is removed
+// * @param sstream string stream to be split
+// * @param delimiter The delimiter, can be any char
+// * @return Vector of split string
+// */
+//std::vector<std::string> split_string(std::stringstream sstream, char delimiter){
+//    std::string segment;
+//    std::vector<std::string> seglist;
+//    while(std::getline(sstream, segment, delimiter))
+//    {
+//        seglist.push_back(segment);
+//    }
+//    return seglist;
+//}
 
 //  GRADIENT CALCULATIONS  /////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -78,7 +76,6 @@ void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     const auto& ddimensions = data.dimensions();
     int rows = static_cast<int>(ddimensions[0]);
     int cols = static_cast<int>(ddimensions[1]);
-    const auto& gdimensions = gradients.dimensions();
     assert(ddimensions[0] == gdimensions[0]);
     assert(ddimensions[1] == gdimensions[1]);
     assert(y < rows);
@@ -160,7 +157,7 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event> &events, float bin
 
     std::vector<Event> currentBin;
 
-    for (Event event : events) {
+    for (const Event &event : events) {
         if (event.time >= currentBinStart && event.time < currentBinStart + bin_size) {
             currentBin.push_back(event);
         } else {
@@ -186,20 +183,19 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event> &events, float bin
  * @param bucketed_events collection of events sorted into bins based on time
  * @param frames returning collection of frames
  * @param camera_height height of the frame
- * @param camera_width width of th eframe
+ * @param camera_width width of the frame
  * @param eventContribution scales the contribution of a single event to the frame: polarity*eventContribution = intensity
  */
 void create_frames(const std::vector<std::vector<Event>> &bucketed_events, std::vector<Tensor2f> &frames, const int camera_height, const int camera_width, float eventContribution){
     int i = 0;
     Tensor2f frame(camera_height, camera_width);
     Tensor2f cum_frame(camera_height, camera_width);
-    for (std::vector<Event> event_vector : bucketed_events){
+    for (const std::vector<Event> &event_vector : bucketed_events){
         frame.setZero();
         cum_frame.setZero();
         for (Event event : event_vector){
-//            std::cout << event << std::endl;
-            frame(event.coordinates.at(0), event.coordinates.at(1)) = event.polarity * eventContribution;
-//            cum_frame(event.coordinates.at(0), event.coordinates.at(1)) += (float)event.polarity;
+
+            frame(event.coordinates.at(0), event.coordinates.at(1)) = (float) event.polarity * eventContribution;
         }
         frames[i] = frame;
         i++;
@@ -269,8 +265,8 @@ autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, int N_x, int N_
  * @param y y-Position of the pixel
  * @param N_x width of the image in pixels
  * @param N_y height of the image in pixels
- * @param height height of the image in realworld meters
- * @param width width of the image in realworld meters
+ * @param height height of the image in real world meters
+ * @param width width of the image in real world meters
  * @param rs
  * @return Normed 3-Vector of pixel coordinates mapped onto sphere
  */
@@ -312,9 +308,7 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             CCM(i,j,0) = static_cast<float>(c_val(0)); // y
             CCM(i,j,1) = static_cast<float>(c_val(1)); // x
             CCM(i,j,2) = static_cast<float>(c_val(2)); // z
-            // Compute the Jacobians
-            // Vector3real dCdx;
-            // Vector3real dCdy;
+            // Compute the jacobians
             autodiff::VectorXreal F;
 
             // NEEDS TO STAY D O U B L E
@@ -322,14 +316,14 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             VectorXd dCdy = autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F);
 
             // C_x = dCdx
-            C_x(i,j,0) = dCdx(0); // y
-            C_x(i,j,1) = dCdx(1); // x
-            C_x(i,j,2) = dCdx(2); // z
+            C_x(i,j,0) = (float) dCdx(0); // y
+            C_x(i,j,1) = (float) dCdx(1); // x
+            C_x(i,j,2) = (float) dCdx(2); // z
 
             // C_y = -dCdy
-            C_y(i,j,0) = -dCdy(0); // y
-            C_y(i,j,1) = -dCdy(1); // x
-            C_y(i,j,2) = -dCdy(2); // z
+            C_y(i,j,0) = (float) -dCdy(0); // y
+            C_y(i,j,1) = (float) -dCdy(1); // x
+            C_y(i,j,2) = (float) -dCdy(2); // z
         }
     }
 }
@@ -411,7 +405,7 @@ void vector_distance(const Tensor3f &vec1, const Tensor3f &vec2, Tensor2f &dista
 
 /**
  * Simple sign function for floats. Returns 0.0 for 0.0f
- * @param x Floting point number
+ * @param x floating point number
  * @return Sign of the number (-1.0,1.0)
  */
 float sign_func(float x){
@@ -432,9 +426,9 @@ float sign_func(float x){
  */
 void computeDotProductWithLoops(const Tensor3f &A, const Tensor3f &B, Tensor2f &D) {
     PROFILE_FUNCTION();
-    const int height = A.dimension(0);
-    const int width = A.dimension(1);
-    const int depth  = A.dimension(2);
+    const int height = (int) A.dimension(0);
+    const int width = (int) A.dimension(1);
+    const int depth = (int) A.dimension(2);
 
     // #pragma omp parallel for collapse(2)
     for (int i = 0; i < height; ++i) {
@@ -508,17 +502,17 @@ void m23(const Tensor3f &In, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &O
 void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &points){
     PROFILE_FUNCTION();
     const auto &dimensions = CCM.dimensions();
-    int rows = dimensions[0];
-    int cols = dimensions[1];
+    int rows = (int) dimensions[0];
+    int cols = (int) dimensions[1];
     Matrix3f Identity = Matrix3f::Identity();
     Vector3f d;
     B.setZero();
 
     for (size_t i = 0; i < rows; ++i){
         for (size_t j = 0; j < cols; ++j){
-            d(0) = CCM(i, j, 0);
-            d(1) = CCM(i, j, 1);
-            d(2) = CCM(i, j, 2);
+            d(0) = CCM((int) i, (int) j, 0);
+            d(1) = CCM((int) i, (int) j, 1);
+            d(2) = CCM((int) i, (int) j, 2);
             Identity_minus_outerProducts[i][j] = Identity - d * d.transpose();
             A += Identity_minus_outerProducts[i][j];
             points[i][j].setZero();
@@ -530,11 +524,11 @@ void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::vector<s
  * Checks how close the dot product of F and G are to -V, using the infinity norm.
  * @param V Temporal gradient (often approximated by agglomerating Events to a frame), 2-Tensor
  * @param F Optical flow 3-Tensor
- * @param G Spatoal gradient 3-Tensor
+ * @param G Spatial gradient 3-Tensor
  * @param precision Currently unused
  * @return
  */
-float VFG_check(Tensor2f &V, Tensor3f &F, Tensor3f &G, float precision){
+float VFG_check(const Tensor2f &V, const Tensor3f &F, const Tensor3f &G){
     const auto& dimensions = F.dimensions();
     MatrixXfRowMajor dot(dimensions[0], dimensions[1]);
     MatrixXfRowMajor diff(dimensions[0], dimensions[1]);
@@ -607,7 +601,7 @@ void update_FG(Tensor3f &F, const float V, const Tensor3f &G, int y, int x, cons
  * @param lr learning rate, currently fixed to 1.0
  * @param weight_FG weight of the update for the convex combination with the old F value. 0.0 = no update
  * @param eps round F values below eps to 0.0
- * @param gamma cap F values with a greater magnitued than gamma to gamma.
+ * @param gamma cap F values with a greater magnitude than gamma to gamma.
  */
 void update_GF(Tensor3f &G, float V, const Tensor3f &F, int y, int x, const float lr, const float weight_GF, float eps=1e-8, float gamma=255.0){
     PROFILE_FUNCTION();
@@ -684,13 +678,18 @@ void globalDecay(Tensor2f &I, Tensor2f &decayTimeSurface, Tensor2f &nP, Tensor2f
     decayTimeSurface = t;
 }
 
-void decay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
-    float newIntensity = (I(y, x) - neutralPotential) * expf(-(time - decayTimeSurface(y, x)) / decayParam) + neutralPotential;
-    I(y, x) = newIntensity;
-    decayTimeSurface(y, x) = time;
-}
+//void decay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
+//    float newIntensity = (I(y, x) - neutralPotential) * expf(-(time - decayTimeSurface(y, x)) / decayParam) + neutralPotential;
+//    I(y, x) = newIntensity;
+//    decayTimeSurface(y, x) = time;
+//}
 
-void update_IV(Tensor2f &I, const float V, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float minPotential, const float maxPotential, const float neutralPotential, const float decayParam){
+//void update_IV(Tensor2f &I, const float V, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float minPotential, const float maxPotential, const float neutralPotential, const float decayParam){
+//    PROFILE_FUNCTION();
+//    contribute(I, V, y, x, minPotential, maxPotential);
+//}
+
+void update_IV(Tensor2f &I, const float V, const int y, const int x, const float minPotential, const float maxPotential){
     PROFILE_FUNCTION();
     contribute(I, V, y, x, minPotential, maxPotential);
 }
@@ -732,7 +731,7 @@ void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tenso
     const auto& dimensions = F.dimensions();
     Tensor3f update(F.dimensions());
     {
-        PROFILE_SCOPE("FR CROSSPRODUCT");
+        PROFILE_SCOPE("FR CROSS PRODUCT");
         crossProduct1x3(R, CCM, cross);
     }
     {
@@ -764,35 +763,33 @@ void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tenso
     }
 }
 
-void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, const float weight_RF, const std::vector<Event> &frameEvents) {
-    PROFILE_FUNCTION();
-    const auto &dimensions = F.dimensions();
-    int rows = dimensions[0];
-    int cols = dimensions[1];
-    Vector3f transformed_F(3);
-    Vector3f point(3);
-    Vector3f solution(3);
-    {
-        PROFILE_SCOPE("RF Pre");
-        for (auto event : frameEvents){
-            // Transform F from 2D image space to 3D world space with C
-            m23(F, Cx, Cy, transformed_F, event.coordinates[0], event.coordinates[1]);
-            // calculate crossproduct between world space F and calibration matrix.
-            // this gives us the point on which the line stands
-            crossProduct3x3(C, transformed_F, point, event.coordinates[0], event.coordinates[1]);
-            // right hand side B consists of a sum of a points
-            // subtract the contribution of the old_point at y,x and add the contribution of the new point
-            B = B - Identity_minus_outerProducts[event.coordinates[0]][event.coordinates[1]]*old_points[event.coordinates[0]][event.coordinates[1]] + Identity_minus_outerProducts[event.coordinates[0]][event.coordinates[1]]*point;
-            // new point is now old
-            old_points[event.coordinates[0]][event.coordinates[1]] = point;
-        }
-    }
-    // solve for the new rotation vector
-    solution = A.partialPivLu().solve(B);
-    R(0) = (1 - weight_RF) * R(0) + weight_RF * solution(0);
-    R(1) = (1 - weight_RF) * R(1) + weight_RF * solution(1);
-    R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
-}
+//void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, const float weight_RF, const std::vector<Event> &frameEvents) {
+//    PROFILE_FUNCTION();
+//    const auto &dimensions = F.dimensions();
+//    Vector3f transformed_F(3);
+//    Vector3f point(3);
+//    Vector3f solution(3);
+//    {
+//        PROFILE_SCOPE("RF Pre");
+//        for (auto event : frameEvents){
+//            // Transform F from 2D image space to 3D world space with C
+//            m23(F, Cx, Cy, transformed_F, event.coordinates[0], event.coordinates[1]);
+//            // calculate cross product between world space F and calibration matrix.
+//            // this gives us the point on which the line stands
+//            crossProduct3x3(C, transformed_F, point, event.coordinates[0], event.coordinates[1]);
+//            // right hand side B consists of a sum of a points
+//            // subtract the contribution of the old_point at y,x and add the contribution of the new point
+//            B = B - Identity_minus_outerProducts[event.coordinates[0]][event.coordinates[1]]*old_points[event.coordinates[0]][event.coordinates[1]] + Identity_minus_outerProducts[event.coordinates[0]][event.coordinates[1]]*point;
+//            // new point is now old
+//            old_points[event.coordinates[0]][event.coordinates[1]] = point;
+//        }
+//    }
+//    // solve for the new rotation vector
+//    solution = A.partialPivLu().solve(B);
+//    R(0) = (1 - weight_RF) * R(0) + weight_RF * solution(0);
+//    R(1) = (1 - weight_RF) * R(1) + weight_RF * solution(1);
+//    R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
+//}
 
 
 /**
@@ -812,9 +809,6 @@ void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const T
  */
 void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, float weight_RF, int y, int x) {
     PROFILE_FUNCTION();
-    const auto &dimensions = F.dimensions();
-    int rows = dimensions[0];
-    int cols = dimensions[1];
     Vector3f transformed_F(3);
     Vector3f point(3);
     Vector3f solution(3);
@@ -822,7 +816,7 @@ void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const T
         PROFILE_SCOPE("RF Pre");
         // Transform F from 2D image space to 3D world space with C
         m23(F, Cx, Cy, transformed_F, y, x);
-        // calculate crossproduct between world space F and calibration matrix.
+        // calculate cross product between world space F and calibration matrix.
         // this gives us the point on which the line stands
         crossProduct3x3(C, transformed_F, point, y, x);
         // right hand side B consists of a sum of a points
@@ -842,10 +836,10 @@ void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const T
 //  INTERACTING MAPS MAIN FUNCTION  ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void event_step(const float V, Tensor2f &MI, Tensor2f &decayTimeSurface, Tensor3f &delta_I, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, Tensor3f &F, Tensor3f &G, Tensor<float,1> &R, const Tensor3f &CCM, const Tensor3f &dCdx, const Tensor3f &dCdy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, std::unordered_map<std::string,float> &parameters, std::vector<int> &permutation, int y, int x, float time){
+void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, Tensor3f &F, Tensor3f &G, Tensor<float,1> &R, const Tensor3f &CCM, const Tensor3f &dCdx, const Tensor3f &dCdy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, std::unordered_map<std::string,float> &parameters, std::vector<int> &permutation, int y, int x){
     PROFILE_FUNCTION();
     array<Index, 2> dimensions = MI.dimensions();
-    update_IV(MI, V, decayTimeSurface, y, x, time, parameters["minPotential"], parameters["maxPotential"], parameters["neutralPotential"], parameters["decayParam"]);
+    update_IV(MI, V, y, x, parameters["minPotential"], parameters["maxPotential"]);
     // Image (MI) got changed through update by V. we need to update all surrounding gradient values. Because of the change at this pixel
     {
         PROFILE_SCOPE("GRADIENTS");
@@ -891,9 +885,9 @@ void event_step(const float V, Tensor2f &MI, Tensor2f &decayTimeSurface, Tensor3
             case 3:
                 update_RF(R, F, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_points, parameters["weight_RF"], y, x);
                 break;
-         }
-     }
- }
+        }
+    }
+}
 
 int main(int argc, char* argv[]) {
 
@@ -902,10 +896,11 @@ int main(int argc, char* argv[]) {
     desc.add_options()
             ("help,h", "Produce help message")
             ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
-            ("endTime,f", po::value<float>()->default_value(1), "Where to end with event consideration")
-            ("timeStep,f", po::value<float>()->default_value(0.05), "Size of the event frames")
+            ("endTime,f", po::value<float>()->default_value(10), "Where to end with event consideration")
+            ("timeStep,f", po::value<float>()->default_value(0.001), "Size of the event frames")
             ("resourceDirectory,s", po::value<std::string>()->default_value("poster_rotation"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("poster_rotation"), "Where to store the results, located in output directory");
+            ("resultsDirectory,s", po::value<std::string>()->default_value("poster_rotation"), "Where to store the results, located in output directory")
+            ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?");
 
     // Parse command-line arguments
     po::variables_map vm;
@@ -922,6 +917,7 @@ int main(int argc, char* argv[]) {
     float startTime = vm["startTime"].as<float>();
     float endTime = vm["endTime"].as<float>();
     float timeStep = vm["timeStep"].as<float>();
+    bool addTime = vm["addTime"].as<bool>();
     std::string resourceDirectory = vm["resourceDirectory"].as<std::string>();
     std::string resultsDirectory = vm["resultsDirectory"].as<std::string>();
 
@@ -935,7 +931,7 @@ int main(int argc, char* argv[]) {
 
     //##################################################################################################################
     // Create results_folder
-    bool addTime = false;
+
     std::string folder_name;
     if (addTime) {
         auto clock_time = std::chrono::system_clock::now();
@@ -982,13 +978,10 @@ int main(int argc, char* argv[]) {
     parameters["neutralPotential"] = 128;                                   // base value where image decays back to
     parameters["fps"] = 1.0f/parameters["time_step"];                       // how often shown images are update
     parameters["FR_updates_per_second"] = 1.0f/parameters["time_step"];     // how often the FR update is performed; It is not done after every event
-    parameters["updateIterationsFR"] = 10;                                  // more iterations -> F caputures general movement of scene/camera better but significantly more computation time
-    /* Arugments we want to be callable from the command line */
+    parameters["updateIterationsFR"] = 10;                                  // more iterations -> F captures general movement of scene/camera better but significantly more computation time
 
     // Plotting
     float cutoff = 0.1;
-
-    std::cout << "Here \n";
 
     // Read resolution from file
     std::vector<float> settings;
@@ -999,11 +992,12 @@ int main(int argc, char* argv[]) {
     int rows = int(settings[0])+1; // in pixels
     int width = int(settings[1])+1; // in pixels
     int cols = int(settings[1])+1; // in pixels
-    int N = height*width;
 
     // iterations are done after event calculations for a frame are done
     std::vector<int> permutation {0,2,3}; // Which update steps to take; 1 is not needed
-    auto rng = std::default_random_engine {};
+    std::random_device myRandomDevice;
+    unsigned seed = myRandomDevice();
+    std::default_random_engine rng(seed);
 
     //##################################################################################################################
     // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
@@ -1044,7 +1038,7 @@ int main(int argc, char* argv[]) {
     Tensor3f GIDiffGradient(height, width,2);
     GIDiffGradient.setRandom();
 
-    // Initialize rotational velocity
+    // Initialize rotational velocity to a random vector with values between -1 and 1
     Tensor<float,1> R(3);
     Tensor<float,1> R2(3);
     Tensor<float,1> R3(3);
@@ -1138,7 +1132,7 @@ int main(int argc, char* argv[]) {
 
 
 
-    for (Event event : event_data){
+    for (Event event : event_data) {
         // Shuffle the order of operations for the interacting maps operations
         std::shuffle(std::begin(permutation), std::end(permutation), rng);
 
@@ -1153,13 +1147,16 @@ int main(int argc, char* argv[]) {
         frameEvents.push_back(event);
 
         // Perform an update step for the current event for I G R and F
-        for (int i = 0; i < 2; ++i){
-            event_step(V, MI, decayTimeSurface, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_points, parameters, permutation, y, x, event.time);
+        for (int i = 0; i < 2; ++i) {
+            event_step(V, MI, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
+                       Identity_minus_outerProducts, old_points, parameters, permutation, y, x);
         }
 
-        if (parameters["start_time"] + (float) FR_update_counter * (float) 1/parameters["FR_updates_per_second"] < event.time) {
+        if (parameters["start_time"] + (float) FR_update_counter * (float) 1 / parameters["FR_updates_per_second"] <
+            event.time) {
+            FR_update_counter++;
             t.setConstant(event.time);
-            for (int i = 0; i < parameters["updateIterationsFR"]; ++i) {
+            for (int i = 0; i < (int) parameters["updateIterationsFR"]; ++i) {
                 update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
             }
             globalDecay(MI, decayTimeSurface, nP, t, dP);
@@ -1167,11 +1164,11 @@ int main(int argc, char* argv[]) {
 
         // Starting from the start time we count up if the current time (event.time)
         // Reaches the time of the next "frame" we want to save to disk
-        if (parameters["start_time"] + (float) vis_counter * (float) 1/parameters["fps"] < event.time){
+        if (parameters["start_time"] + (float) vis_counter * (float) 1 / parameters["fps"] < event.time) {
             vis_counter++;
-#ifdef IMAGES
-            std::cout << "Frame " << counter << "/" << int((end_time_events-start_time_events)*parameters["fps"]) << std::endl;
-#endif
+            std::cout << "Frame " << vis_counter << "/"
+                      << int((parameters["end_time"] - parameters["start_time"]) * parameters["fps"]) << std::endl;
+
             {
                 PROFILE_SCOPE("BETWEEN FRAMES");
                 //writeToFile(CCM, folder_path / ("C" + std::to_string(counter) + ".txt"));
@@ -1181,33 +1178,43 @@ int main(int argc, char* argv[]) {
                 //writeToFile(delta_I, folder_path / ("I_gradient" + std::to_string(counter)  + ".txt"));
                 //writeToFile(F, folder_path / ("F" + std::to_string(counter)  + ".txt"));
                 //writeToFile(G, folder_path / ("G" + std::to_string(counter)  + ".txt"));
-                cv::Mat VIGF;
-                VIGF = create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, "", true, cutoff);
-                cv::imshow("VIGF", VIGF);
-                // Press 'q' to exit
-                if (cv::waitKey(1) == 'q') {
-                    break;
-                }
-#ifdef IMAGES
-                std::string image_name = "VIGF_" + std::to_string(int(counter)) + ".png";
-                fs::path image_path = folder_path / image_name;
-                create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
-                //image_name = "VvsFG" + std::to_string(int(counter)) + ".png";
-                //image_path = folder_path / image_name;
-                //plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
-                cv::imshow("VIGF", VIGF);
-#endif
-                V_Vis.setZero();
+
             }
+#ifdef IMAGES
+            float loss = VFG_check(V_Vis, F, G);
+            std::cout << "VFG Check: " << loss << std::endl;
+            std::string image_name = "VIGF_" + std::to_string(int(vis_counter)) + ".png";
+            fs::path image_path = folder_path / image_name;
+            //create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+            //image_name = "VvsFG" + std::to_string(int(counter)) + ".png";
+            //image_path = folder_path / image_name;
+            //plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
+            cv::Mat VIGF;
+            VIGF = create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+            // cv::imshow("VIGF", VIGF);
+            // // Press 'q' to exit
+            // if (cv::waitKey(1) == 'q') {
+            //     break;
+            // }
+            V_Vis.setZero();
+#endif
         }
-        if (parameters["start_time"] + FR_update_counter * (float) 1/parameters["FR_updates_per_second"] < event.time) {
-            FR_update_counter++;
-            F.setRandom();
-            F = F*F2 - F1;
-            F = F * F3;
-            G.setZero();
-        }
+
+        //if (parameters["start_time"] + FR_update_counter * (float) 1 / parameters["FR_updates_per_second"] <event.time) {
+        //    FR_update_counter++;
+        //    F.setRandom();
+        //    F = F * F2 - F1;
+        //    F = F * F3;
+        //    G.setZero();
+        //}
     }
+
+std::string outputFile = "output.mp4";
+
+#ifdef IMAGES
+    VideoCreator::createMP4Video(folder_path, folder_path / outputFile, int(parameters["fps"]));
+#endif
+
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<float> elapsed = end - start;
     std::chrono::duration<float> elapsed_realtime = end - start_realtime;
