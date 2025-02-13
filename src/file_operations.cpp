@@ -31,6 +31,14 @@ void writeToFile(const Tensor3f &t, int y, int x, const std::string &fileName){
     }
 }
 
+void writeToFile(const Tensor<float,1> &t, const std::string &fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << t;
+    }
+}
+
 /**
  * Saves a 2Tensor as string to a file on disk
  * @param t 2Tensor to be saved

@@ -17,6 +17,8 @@ void writeToFile(const Tensor3f &t, const std::string &fileName);
 
 void writeToFile(const Tensor3f &t, int y, int x, const std::string &fileName);
 
+void writeToFile(const Tensor<float,1> &t, const std::string &fileName);
+
 void writeToFile(const Tensor2f &t, const std::string &fileName);
 
 void writeToFile(const Tensor2f &t, int y, int x, const std::string &fileName);
