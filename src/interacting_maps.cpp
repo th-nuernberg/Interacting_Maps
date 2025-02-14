@@ -312,8 +312,10 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             autodiff::VectorXreal F;
 
             // NEEDS TO STAY D O U B L E
-            VectorXd dCdx = autodiff::jacobian(C, wrt(x), at(x,y,N_x, N_y, height, width, rs), F);
-            VectorXd dCdy = autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F);
+            VectorXd dCdx;
+            autodiff::jacobian(C, wrt(x), at(x,y,N_x, N_y, height, width, rs), F, dCdx);
+            VectorXd dCdy;
+            autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F, dCdy);
 
             // C_x = dCdx
             C_x(i,j,0) = (float) dCdx(0); // y
@@ -895,12 +897,13 @@ int main(int argc, char* argv[]) {
     po::options_description desc("Allowed options");
     desc.add_options()
             ("help,h", "Produce help message")
-            ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
-            ("endTime,f", po::value<float>()->default_value(10), "Where to end with event consideration")
-            ("timeStep,f", po::value<float>()->default_value(0.001), "Size of the event frames")
+            ("startTime,f", po::value<float>()->default_value(20), "Where to start with event consideration")
+            ("endTime,f", po::value<float>()->default_value(30), "Where to end with event consideration")
+            ("timeStep,f", po::value<float>()->default_value(0.005), "Size of the event frames")
             ("resourceDirectory,s", po::value<std::string>()->default_value("poster_rotation"), "Which dataset to use, searches in res directory")
             ("resultsDirectory,s", po::value<std::string>()->default_value("poster_rotation"), "Where to store the results, located in output directory")
-            ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?");
+            ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
+            ("startIndex,i", po::value<int>()->default_value(4002), "With what index to start for the images");
 
     // Parse command-line arguments
     po::variables_map vm;
@@ -918,6 +921,7 @@ int main(int argc, char* argv[]) {
     float endTime = vm["endTime"].as<float>();
     float timeStep = vm["timeStep"].as<float>();
     bool addTime = vm["addTime"].as<bool>();
+    int startIndex = vm["startIndex"].as<int>();
     std::string resourceDirectory = vm["resourceDirectory"].as<std::string>();
     std::string resultsDirectory = vm["resultsDirectory"].as<std::string>();
 
@@ -1047,7 +1051,6 @@ int main(int argc, char* argv[]) {
     R3.setConstant(1);
     R = R*R2 - R3; // between -1 and 1
 
-
     //##################################################################################################################
     // Read calibration file
     std::vector<float> raw_calibration_data;
@@ -1130,8 +1133,6 @@ int main(int argc, char* argv[]) {
     nP.setConstant(parameters["neutralPotential"]);
     dP.setConstant(parameters["decayParam"]);
 
-
-
     for (Event event : event_data) {
         // Shuffle the order of operations for the interacting maps operations
         std::shuffle(std::begin(permutation), std::end(permutation), rng);
@@ -1140,6 +1141,8 @@ int main(int argc, char* argv[]) {
         y = event.coordinates[0];
         x = event.coordinates[1];
         V = (float) event.polarity;
+
+        decayTimeSurface(y,x) = event.time;
 
         // For Showing the events as an image increase the intensity
         V_Vis(y, x) = (float) event.polarity * parameters["eventContribution"];
@@ -1154,7 +1157,6 @@ int main(int argc, char* argv[]) {
 
         if (parameters["start_time"] + (float) FR_update_counter * (float) 1 / parameters["FR_updates_per_second"] <
             event.time) {
-            FR_update_counter++;
             t.setConstant(event.time);
             for (int i = 0; i < (int) parameters["updateIterationsFR"]; ++i) {
                 update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
@@ -1166,7 +1168,7 @@ int main(int argc, char* argv[]) {
         // Reaches the time of the next "frame" we want to save to disk
         if (parameters["start_time"] + (float) vis_counter * (float) 1 / parameters["fps"] < event.time) {
             vis_counter++;
-            std::cout << "Frame " << vis_counter << "/"
+            std::cout << "Frame " << startIndex+vis_counter << "/"
                       << int((parameters["end_time"] - parameters["start_time"]) * parameters["fps"]) << std::endl;
 
             {
@@ -1181,40 +1183,34 @@ int main(int argc, char* argv[]) {
 
             }
 #ifdef IMAGES
-            float loss = VFG_check(V_Vis, F, G);
-            std::cout << "VFG Check: " << loss << std::endl;
-            std::string image_name = "VIGF_" + std::to_string(int(vis_counter)) + ".png";
+            //float loss = VFG_check(V_Vis, F, G);
+            //std::cout << "VFG Check: " << loss << std::endl;
+            std::string image_name = "VIGF_" + std::to_string(int(startIndex + vis_counter)) + ".png";
             fs::path image_path = folder_path / image_name;
             //create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
             //image_name = "VvsFG" + std::to_string(int(counter)) + ".png";
             //image_path = folder_path / image_name;
             //plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
             cv::Mat VIGF;
-            VIGF = create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+            create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
             // cv::imshow("VIGF", VIGF);
             // // Press 'q' to exit
             // if (cv::waitKey(1) == 'q') {
             //     break;
             // }
             V_Vis.setZero();
+            F.setRandom();
+            F = F * F2 - F1;
+            F = F * F3;
+            G.setZero();
 #endif
         }
 
-        //if (parameters["start_time"] + FR_update_counter * (float) 1 / parameters["FR_updates_per_second"] <event.time) {
-        //    FR_update_counter++;
-        //    F.setRandom();
-        //    F = F * F2 - F1;
-        //    F = F * F3;
-        //    G.setZero();
-        //}
+        if (parameters["start_time"] + (float) FR_update_counter * (float) 1 / parameters["FR_updates_per_second"] <event.time) {
+            FR_update_counter++;
+
+        }
     }
-
-std::string outputFile = "output.mp4";
-
-#ifdef IMAGES
-    VideoCreator::createMP4Video(folder_path, folder_path / outputFile, int(parameters["fps"]));
-#endif
-
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<float> elapsed = end - start;
     std::chrono::duration<float> elapsed_realtime = end - start_realtime;
@@ -1225,5 +1221,13 @@ std::string outputFile = "output.mp4";
     writeToFile(ss.str(), folder_path / "time_complete.txt");
     writeToFile(ssrt.str(), folder_path / "time_realtime.txt");
     std::cout << "Algorithm took: " << elapsed_realtime.count() << "seconds/ Real elapsed time: " << parameters["end_time"] - parameters["start_time"] << std::endl;
+
+
+    std::string outputFile = "output.mp4";
+
+#ifdef IMAGES
+    VideoCreator::createMP4Video(folder_path, folder_path / outputFile, int(parameters["fps"]));
+#endif
+
     Instrumentor::Get().EndSession();
 }

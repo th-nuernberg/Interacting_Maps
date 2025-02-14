@@ -39,7 +39,7 @@ namespace VideoCreator {
         }
 
         // Define the codec and create a VideoWriter object
-        int fourcc = cv::VideoWriter::fourcc('H', '2', '6', '4'); // MP4 encoding
+        int fourcc = cv::VideoWriter::fourcc('X', 'V', 'I', 'D'); // MP4 encoding
         cv::Size frameSize(frame.cols, frame.rows);
         cv::VideoWriter videoWriter(outputFile, fourcc, fps, frameSize, true);
 
