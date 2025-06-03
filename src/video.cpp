@@ -39,7 +39,7 @@ namespace VideoCreator {
         }
 
         // Define the codec and create a VideoWriter object
-        int fourcc = cv::VideoWriter::fourcc('X', 'V', 'I', 'D'); // MP4 encoding
+        int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v'); // MP4 encoding
         cv::Size frameSize(frame.cols, frame.rows);
         cv::VideoWriter videoWriter(outputFile, fourcc, fps, frameSize, true);
 
@@ -47,8 +47,9 @@ namespace VideoCreator {
             std::cerr << "Could not open the video file for writing." << std::endl;
             return;
         }
-
+        std::cout << "Reading image files:" << std::endl;
         for (const auto &file: imageFiles) {
+            std::cout << file << " ,";
             frame = cv::imread(file);
             if (frame.empty()) {
                 std::cerr << "Skipping invalid image: " << file << std::endl;
