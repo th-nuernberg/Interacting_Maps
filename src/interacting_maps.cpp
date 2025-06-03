@@ -73,11 +73,9 @@ std::ostream& operator << (std::ostream &os, const Event &e) {
 void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     PROFILE_FUNCTION();
     // Compute gradient for update_IG
-    const auto& ddimensions = data.dimensions();
-    int rows = static_cast<int>(ddimensions[0]);
-    int cols = static_cast<int>(ddimensions[1]);
-    assert(ddimensions[0] == gdimensions[0]);
-    assert(ddimensions[1] == gdimensions[1]);
+    const auto& gdimensions = data.dimensions();
+    int rows = static_cast<int>(gdimensions[0]);
+    int cols = static_cast<int>(gdimensions[1]);
     assert(y < rows);
     assert(x < cols);
 
@@ -879,7 +877,8 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
                 update_FG(F, V, G, y, x, parameters["lr"], parameters["weight_FG"], parameters["eps"], parameters["gamma"]);
                 break;
             case 1:
-                update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
+                // Gets called separately because we do not want to do a update of F based on R with every event since this update is global
+                // update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
                 break;
             case 2:
                 update_GF(G, V, F, y, x, parameters["lr"], parameters["weight_GF"], parameters["eps"], parameters["gamma"]);
@@ -897,13 +896,13 @@ int main(int argc, char* argv[]) {
     po::options_description desc("Allowed options");
     desc.add_options()
             ("help,h", "Produce help message")
-            ("startTime,f", po::value<float>()->default_value(20), "Where to start with event consideration")
-            ("endTime,f", po::value<float>()->default_value(30), "Where to end with event consideration")
-            ("timeStep,f", po::value<float>()->default_value(0.005), "Size of the event frames")
-            ("resourceDirectory,s", po::value<std::string>()->default_value("poster_rotation"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("poster_rotation"), "Where to store the results, located in output directory")
+            ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
+            ("endTime,f", po::value<float>()->default_value(20), "Where to end with event consideration")
+            ("timeStep,f", po::value<float>()->default_value(0.05), "Size of the event frames")
+            ("resourceDirectory,s", po::value<std::string>()->default_value("boxes_rotation"), "Which dataset to use, searches in res directory")
+            ("resultsDirectory,s", po::value<std::string>()->default_value("boxes_rotation"), "Where to store the results, located in output directory")
             ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
-            ("startIndex,i", po::value<int>()->default_value(4002), "With what index to start for the images");
+            ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images");
 
     // Parse command-line arguments
     po::variables_map vm;
@@ -953,13 +952,11 @@ int main(int argc, char* argv[]) {
     Instrumentor::Get().BeginSession("Interacting Maps", profiler_path);
     std::cout << "Setup Profiler" << std::endl;
 
-    std::string calibrationPath = "../res/" + resourceDirectory + "/calib.txt";
-    std::string eventPath = "../res/" + resourceDirectory + "/events.txt";
-    std::string settingsPath = "../res/" + resourceDirectory + "/settings.txt";
+    std::string calibrationPath = "res/" + resourceDirectory + "/calib.txt";
+    std::string eventPath = "res/" + resourceDirectory + "/events.txt";
+    std::string settingsPath = "res/" + resourceDirectory + "/settings.txt";
 
     std::cout << "Parsed calibrationPath: " << calibrationPath << "\n";
-    std::cout << "Parsed eventPath: " << eventPath << "\n";
-    std::cout << "Parsed settingsPath: " << settingsPath << "\n";
 
     std::unordered_map<std::string,float> parameters;
     parameters["start_time"] = startTime;                                   // in seconds
@@ -990,6 +987,7 @@ int main(int argc, char* argv[]) {
     // Read resolution from file
     std::vector<float> settings;
     read_single_line_txt(settingsPath, settings);
+    std::cout << "Parsed Settings: " << settingsPath << "\n";
 
     // Set sizes according to read settings
     int height = int(settings[0])+1; // in pixels
@@ -1185,7 +1183,14 @@ int main(int argc, char* argv[]) {
 #ifdef IMAGES
             //float loss = VFG_check(V_Vis, F, G);
             //std::cout << "VFG Check: " << loss << std::endl;
-            std::string image_name = "VIGF_" + std::to_string(int(startIndex + vis_counter)) + ".png";
+
+            std::stringstream filename;
+            filename.fill('0');
+            filename.width(5);
+            filename<<std::to_string(int(startIndex + vis_counter));
+
+            std::string image_name = "VIGF_" + filename.str() + ".png";
+
             fs::path image_path = folder_path / image_name;
             //create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
             //image_name = "VvsFG" + std::to_string(int(counter)) + ".png";
@@ -1199,16 +1204,19 @@ int main(int argc, char* argv[]) {
             //     break;
             // }
             V_Vis.setZero();
+
+
             F.setRandom();
             F = F * F2 - F1;
             F = F * F3;
+
             G.setZero();
+
 #endif
         }
 
         if (parameters["start_time"] + (float) FR_update_counter * (float) 1 / parameters["FR_updates_per_second"] <event.time) {
             FR_update_counter++;
-
         }
     }
     auto end = std::chrono::high_resolution_clock::now();

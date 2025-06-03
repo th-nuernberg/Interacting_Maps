@@ -294,18 +294,23 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
     cv::Mat G_img = vector_field2image(G);
     cv::Mat F_img = vector_field2image(F);
 
-    cv::Mat mask;
-    cv::transform(V_img, mask, cv::Matx13f(1,1,1));
-    mask = mask/255;
+    bool masking = false;
 
-    //    std::cout<<mask.size() << F_img.size() <<std::endl;
+    cv::Mat masked_F;
+
+    if (masking){
+        cv::Mat mask;
+        cv::transform(V_img, mask, cv::Matx13f(1,1,1));
+        mask = mask/255;
+
+        //    std::cout<<mask.size() << F_img.size() <<std::endl;
 //        std::cout<<mask.channels() << std::endl;
 //    //    std::cout<< F_img.channels() <<std::endl;
 //        std::cout<<mask.type() << std::endl;
-    //    std::cout << F_img.type() <<std::endl;
+        //    std::cout << F_img.type() <<std::endl;
 
 
-    cv::cvtColor(mask, mask, cv::COLOR_GRAY2BGR);
+        cv::cvtColor(mask, mask, cv::COLOR_GRAY2BGR);
 
 //    std::cout<<mask.size() << F_img.size() <<std::endl;
 //    std::cout<<mask.channels() << std::endl;
@@ -313,8 +318,12 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
 //    std::cout<<mask.type() << std::endl;
 //    std::cout << F_img.type() <<std::endl;
 
-    cv::Mat masked_F;
-    cv::multiply(mask, F_img, masked_F);
+        cv::multiply(mask, F_img, masked_F);
+    }else{
+         masked_F = F_img;
+    }
+
+
 
     long rows = V.rows();
     long cols = V.cols();
