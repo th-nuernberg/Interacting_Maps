@@ -15,12 +15,13 @@ include_directories(
 
 # Find OpenCV package
 find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
 FIND_PACKAGE(Boost COMPONENTS program_options REQUIRED)
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 #TARGET_LINK_LIBRARIES(target ${Boost_LIBRARIES})
 #find_package(dv-processing REQUIRED)
 
-include_directories()
+
 #include_directories(${dv-processing_INCLUDE_DIRS})
 # Find installed dv-processing.
 #find_package(dv-processing)
@@ -46,6 +47,7 @@ set(SOURCES
         ${PROJECT_SOURCE_DIR}/src/file_operations.cpp
         ${PROJECT_SOURCE_DIR}/src/conversions.cpp
         src/video.cpp
+        src/datatypes.cpp
 )
 
 # Add executable
@@ -56,10 +58,6 @@ target_link_libraries(Executable
         ${OpenCV_LIBS}
         ${Boost_LIBRARIES}
 #        dv::processing
-        #        dv-processing
-#        OpenSSL::SSL
-#        OpenSSL::Crypto
-#        Boost::nowide
 )
 
 # Set the output directory for the executable

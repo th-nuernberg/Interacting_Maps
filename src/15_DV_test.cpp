@@ -1,5 +1,4 @@
 #include <dv-processing/core/core.hpp>
-
 #include <dv-processing/core/utils.hpp>
 
 
