@@ -5,10 +5,13 @@
 #include <sstream>
 #include <cassert>
 #include <numeric>
+#include <memory>
 #include "Instrumentor.h"
 #include <cmath>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+//#include <opencv2/opencv2/highgui/highgui.hpp>
+//#include <opencv2/imgproc/imgproc.hpp>
 #include <boost/program_options.hpp>
 
 namespace po = boost::program_options;
@@ -28,23 +31,7 @@ namespace po = boost::program_options;
 //  STRING OPERATIONS  /////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/**
- * Enables use of Event in out stream
- * @param os out stream to add Event to
- * @param e Event to add
- * @return new out stream
- */
-std::ostream& operator << (std::ostream &os, const Event &e) {
-    return (os << "Time: " << e.time << " Coords: " << e.coordinates[0] << " " << e.coordinates[1] << " Polarity: " << e.polarity);
-}
-
-//std::string Event::toString() const {
-//    std::stringstream ss;
-//    ss << (*this);
-//    return ss.str();
-//}
-
-///**
+//**
 // * Splits a string stream at a provided delimiter. Delimiter is removed
 // * @param sstream string stream to be split
 // * @param delimiter The delimiter, can be any char
@@ -184,14 +171,14 @@ std::vector<std::vector<Event>> bin_events(std::vector<Event> &events, float bin
  * @param camera_width width of the frame
  * @param eventContribution scales the contribution of a single event to the frame: polarity*eventContribution = intensity
  */
-void create_frames(const std::vector<std::vector<Event>> &bucketed_events, std::vector<Tensor2f> &frames, const int camera_height, const int camera_width, float eventContribution){
+void create_frames(const std::vector<std::vector<CameraEvent>> &bucketed_events, std::vector<Tensor2f> &frames, const int camera_height, const int camera_width, float eventContribution){
     int i = 0;
     Tensor2f frame(camera_height, camera_width);
     Tensor2f cum_frame(camera_height, camera_width);
-    for (const std::vector<Event> &event_vector : bucketed_events){
+    for (const std::vector<CameraEvent> &event_vector : bucketed_events){
         frame.setZero();
         cum_frame.setZero();
-        for (Event event : event_vector){
+        for (CameraEvent event : event_vector){
 
             frame(event.coordinates.at(0), event.coordinates.at(1)) = (float) event.polarity * eventContribution;
         }
@@ -669,29 +656,46 @@ void update_GI(Tensor3f &G, const Tensor3f &I_gradient, int y, int x, float weig
     }
 }
 
-void contribute(Tensor2f &I, float V, int y, int x, float minPotential, float maxPotential){
-    I(y, x) = std::min(std::max(I(y, x) + V, minPotential), maxPotential);
+void contribute(Tensor2f &I, float V, int y, int x, float minPotential, float maxPotential, const float weight_IV){
+    I(y, x) = std::min(std::max(I(y, x) + weight_IV * V, minPotential), maxPotential);
 }
 
 void globalDecay(Tensor2f &I, Tensor2f &decayTimeSurface, Tensor2f &nP, Tensor2f &t, Tensor2f &dP) {
-    I = (I - nP) * (-(t - decayTimeSurface) / dP).exp() + nP;
+    const Tensor2f lastPotential = I;
+    I = (lastPotential - nP) * (-(t - decayTimeSurface) / dP).exp() + nP;
     decayTimeSurface = t;
 }
 
-//void decay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
-//    float newIntensity = (I(y, x) - neutralPotential) * expf(-(time - decayTimeSurface(y, x)) / decayParam) + neutralPotential;
-//    I(y, x) = newIntensity;
-//    decayTimeSurface(y, x) = time;
-//}
+void linearDecay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
+    const float lastDecayTime = decayTimeSurface(y,x);
+    const float lastPotential = I(y,x);
+    I(y,x)
+        = (lastPotential >= neutralPotential)
+            ? std::max(lastPotential - (time - lastDecayTime) * decayParam, neutralPotential)
+            : std::min(lastPotential + (time - lastDecayTime) * decayParam, neutralPotential);
+    decayTimeSurface(y, x) = time;
+}
+
+void exponentialDecay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
+    const float lastDecayTime = decayTimeSurface(y,x);
+    const float lastPotential = I(y,x);
+    I(y,x)
+        = (lastPotential - neutralPotential) * expf(-(time-lastDecayTime) / decayParam)
+        + neutralPotential;
+    decayTimeSurface(y,x) = time;
+    //float newIntensity = (I(y, x) - neutralPotential) * expf(-(time - decayTimeSurface(y, x)) / decayParam) + neutralPotential;
+    //I(y, x) = newIntensity;
+    //decayTimeSurface(y, x) = time;
+}
 
 //void update_IV(Tensor2f &I, const float V, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float minPotential, const float maxPotential, const float neutralPotential, const float decayParam){
 //    PROFILE_FUNCTION();
 //    contribute(I, V, y, x, minPotential, maxPotential);
 //}
 
-void update_IV(Tensor2f &I, const float V, const int y, const int x, const float minPotential, const float maxPotential){
+void update_IV(Tensor2f &I, const float V, const int y, const int x, const float minPotential, const float maxPotential, const float weight_IV){
     PROFILE_FUNCTION();
-    contribute(I, V, y, x, minPotential, maxPotential);
+    contribute(I, V, y, x, minPotential, maxPotential, weight_IV);
 }
 
 void updateGIDiffGradient(Tensor3f &G, Tensor3f &I_gradient, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, int y, int x){
@@ -832,6 +836,16 @@ void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const T
     R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
 }
 
+void update_RIMU(Tensor<float,1> &R, const std::vector<float> &rotVelIMU, const float weight_RIMU) {
+    R(0) = (1 - weight_RIMU)*R(0) + weight_RIMU*rotVelIMU[0];
+    R(1) = (1 - weight_RIMU)*R(1) + weight_RIMU*rotVelIMU[1];
+    R(2) = (1 - weight_RIMU)*R(2) + weight_RIMU*rotVelIMU[2];
+}
+
+void update_Ifusion(Tensor2f &I, const cv::Mat &realImage, const float weight_Ifusion) {
+    Tensor2f lastPotential = I;
+    I = (1-weight_Ifusion) * lastPotential + 255 * weight_Ifusion * Matrix2Tensor(cvMatToEigen(realImage));
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  INTERACTING MAPS MAIN FUNCTION  ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -839,7 +853,7 @@ void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const T
 void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, Tensor3f &F, Tensor3f &G, Tensor<float,1> &R, const Tensor3f &CCM, const Tensor3f &dCdx, const Tensor3f &dCdy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, std::unordered_map<std::string,float> &parameters, std::vector<int> &permutation, int y, int x){
     PROFILE_FUNCTION();
     array<Index, 2> dimensions = MI.dimensions();
-    update_IV(MI, V, y, x, parameters["minPotential"], parameters["maxPotential"]);
+    update_IV(MI, V, y, x, parameters["minPotential"], parameters["maxPotential"], parameters["weight_IV"]);
     // Image (MI) got changed through update by V. we need to update all surrounding gradient values. Because of the change at this pixel
     {
         PROFILE_SCOPE("GRADIENTS");
@@ -851,25 +865,24 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
             computeGradient(MI, delta_I, y, x-1);
             update_GI(G, delta_I, y, x-1, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
         }
-        if (y<dimensions[0]){
+        if (y<dimensions[0]-1){
             computeGradient(MI, delta_I, y+1, x);
             update_GI(G, delta_I, y+1, x, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
         }
-        if (x<dimensions[1]){
+        if (x<dimensions[1]-1){
             computeGradient(MI, delta_I, y, x+1);
             update_GI(G, delta_I, y, x+1, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
         }
     }
 
-    computeGradient(MI, delta_I, y, x);
+
+    //computeGradient(MI, delta_I, y, x);
     update_GI(G, delta_I, y, x, parameters["weight_GI"], parameters["eps"], parameters["gamma"]);
     updateGIDiffGradient(G, delta_I, GIDiff, GIDiffGradient, y, x);
-
     update_IG(MI, GIDiffGradient, y, x, parameters["weight_IG"]);
-    computeGradient(MI, delta_I, y, x);
+    //computeGradient(MI, delta_I, y, x);
 
     for (const auto& element : permutation){
-        PROFILE_SCOPE("PERMUTATION");
         switch( element ){
             default:
                 std::cout << "Unknown number in permutation" << std::endl;
@@ -877,7 +890,7 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
                 update_FG(F, V, G, y, x, parameters["lr"], parameters["weight_FG"], parameters["eps"], parameters["gamma"]);
                 break;
             case 1:
-                // Gets called separately because we do not want to do a update of F based on R with every event since this update is global
+                // Gets called separately because we do not want to do an update of F based on R with every event since this update is global
                 // update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
                 break;
             case 2:
@@ -897,10 +910,10 @@ int main(int argc, char* argv[]) {
     desc.add_options()
             ("help,h", "Produce help message")
             ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
-            ("endTime,f", po::value<float>()->default_value(20), "Where to end with event consideration")
-            ("timeStep,f", po::value<float>()->default_value(0.05), "Size of the event frames")
+            ("endTime,f", po::value<float>()->default_value(25), "Where to end with event consideration")
+            ("timeStep,f", po::value<float>()->default_value(0.0460299576597383), "Size of the event frames")
             ("resourceDirectory,s", po::value<std::string>()->default_value("boxes_rotation"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("boxes_rotation"), "Where to store the results, located in output directory")
+            ("resultsDirectory,s", po::value<std::string>()->default_value("boxes_rotation_fused_R"), "Where to store the results, located in output directory")
             ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images");
 
@@ -918,6 +931,23 @@ int main(int argc, char* argv[]) {
     // Retrieve values (using defaults if not provided)
     float startTime = vm["startTime"].as<float>();
     float endTime = vm["endTime"].as<float>();
+    // Split time interval into sub intervals to allow loading of larger files.
+    int nIntervals = 1;
+    float maxIntervalLength = 2.5;
+    std::vector intervals = {startTime, endTime};
+    if (endTime - startTime > maxIntervalLength) {
+        float currentTime = startTime;
+        nIntervals = 0;
+        intervals = {startTime};
+        while (currentTime + maxIntervalLength < endTime) {
+            currentTime += maxIntervalLength;
+            intervals.push_back(currentTime);
+            nIntervals++;
+        }
+        intervals.push_back(endTime);
+        nIntervals++;
+    }
+
     float timeStep = vm["timeStep"].as<float>();
     bool addTime = vm["addTime"].as<bool>();
     int startIndex = vm["startIndex"].as<int>();
@@ -954,13 +984,15 @@ int main(int argc, char* argv[]) {
 
     std::string calibrationPath = "res/" + resourceDirectory + "/calib.txt";
     std::string eventPath = "res/" + resourceDirectory + "/events.txt";
+    std::string imuPath = "res/" + resourceDirectory + "/imu.txt";
+    std::string imagesPath = "res/" + resourceDirectory + "/images.txt";
     std::string settingsPath = "res/" + resourceDirectory + "/settings.txt";
 
     std::cout << "Parsed calibrationPath: " << calibrationPath << "\n";
 
     std::unordered_map<std::string,float> parameters;
-    parameters["start_time"] = startTime;                                   // in seconds
-    parameters["end_time"] = endTime;                                       // in seconds
+    parameters["startTime"] = startTime;                                   // in seconds
+    parameters["endTime"] = endTime;                                       // in seconds
     parameters["time_step"] = timeStep;                                     // in seconds
     parameters["weight_FG"] = 0.2;                                          // [0-1]
     parameters["weight_FR"] = 0.8;                                          // [0-1]
@@ -968,18 +1000,20 @@ int main(int argc, char* argv[]) {
     parameters["weight_GI"] = 0.2;                                          // [0-1]
     parameters["weight_IG"] = 0.0;                                          // [0-1]
     parameters["weight_IV"] = 1.0;                                          // [0-1]
-    parameters["weight_RF"] = 0.8;                                          // [0-1]
+    parameters["weight_RF"] = 0.1;                                          // [0-1]
+    parameters["weight_RIMU"] = 1.0;                                     // [0-1]
+    parameters["weight_Ifusion"] = 1.0;                                     // [0-1]
     parameters["lr"] = 1.0;                                                 // [0-1]
-    parameters["eventContribution"] = 25;                                   // mainly important for the visibility of the intensity image
+    parameters["eventContribution"] = 10.0f;                                   // mainly important for the visibility of the intensity image
     parameters["eps"] = 0.00001;                                            // lowest value allowed for F, G,...
     parameters["gamma"] = 255;                                              // highest value allowed for F, G,...
-    parameters["decayParam"] = 1e-2;                                        // exp: 1e6; linear: 0.000001
+    parameters["decayParam"] = 1e-1;                                        // 1e-1 for exponential decay
     parameters["minPotential"] = 0.0;                                       // minimum Value for Image
-    parameters["maxPotential"] = 255;                                       // maximal Value for Image
+    parameters["maxPotential"] = 255.0;                                       // maximal Value for Image
     parameters["neutralPotential"] = 128;                                   // base value where image decays back to
     parameters["fps"] = 1.0f/parameters["time_step"];                       // how often shown images are update
     parameters["FR_updates_per_second"] = 1.0f/parameters["time_step"];     // how often the FR update is performed; It is not done after every event
-    parameters["updateIterationsFR"] = 10;                                  // more iterations -> F captures general movement of scene/camera better but significantly more computation time
+    parameters["updateIterationsFR"] = 2;                                  // more iterations -> F captures general movement of scene/camera better but significantly more computation time
 
     // Plotting
     float cutoff = 0.1;
@@ -990,13 +1024,13 @@ int main(int argc, char* argv[]) {
     std::cout << "Parsed Settings: " << settingsPath << "\n";
 
     // Set sizes according to read settings
-    int height = int(settings[0])+1; // in pixels
-    int rows = int(settings[0])+1; // in pixels
-    int width = int(settings[1])+1; // in pixels
-    int cols = int(settings[1])+1; // in pixels
+    int height = int(settings[0]); // in pixels
+    int rows = int(settings[0]); // in pixels
+    int width = int(settings[1]); // in pixels
+    int cols = int(settings[1]); // in pixels
 
     // iterations are done after event calculations for a frame are done
-    std::vector<int> permutation {0,2,3}; // Which update steps to take; 1 is not needed
+    std::vector permutation {0,2,3}; // Which update steps to take; 1 is not needed
     std::random_device myRandomDevice;
     unsigned seed = myRandomDevice();
     std::default_random_engine rng(seed);
@@ -1006,15 +1040,16 @@ int main(int argc, char* argv[]) {
     Tensor2f V_Vis(height, width);
     V_Vis.setZero();
     float V;
+    cv::Mat VIGF;
 
     // Initialize optical flow
     Tensor3f F(height, width, 2);
     Tensor3f F1(height, width, 2);
     Tensor3f F2(height, width, 2);
     Tensor3f F3(height, width, 2);
-    F1.setConstant(0.0);
+    F1.setConstant(1.0);
     F2.setConstant(2.0);
-    F3.setConstant(0.01);
+    F3.setConstant(1.0);
     F.setRandom();
     F = F*F2 - F1;
     F = F * F3;
@@ -1032,7 +1067,7 @@ int main(int argc, char* argv[]) {
     // For the image we want to decay the image intensity. We save for each pixel how old the
     // information is.
     Tensor2f decayTimeSurface(height, width);
-    decayTimeSurface.setConstant(parameters["start_time"]);
+    decayTimeSurface.setConstant(parameters["startTime"]);
 
     // For the "I from G" update rule we need helper values.
     Tensor3f GIDiff(height, width,2);
@@ -1045,9 +1080,9 @@ int main(int argc, char* argv[]) {
     Tensor<float,1> R2(3);
     Tensor<float,1> R3(3);
     R.setRandom(); // between 0 and 1
-    R2.setConstant(2);
-    R3.setConstant(1);
-    R = R*R2 - R3; // between -1 and 1
+    R2.setConstant(20);
+    R3.setConstant(10);
+    R = R*R2 - R3; // between -10 and 10
 
     //##################################################################################################################
     // Read calibration file
@@ -1056,24 +1091,19 @@ int main(int argc, char* argv[]) {
     Calibration_Data calibration_data = get_calibration_data(raw_calibration_data, height, width);
     std::cout << "Readout calibration file at " << calibrationPath << std::endl;
 
-    //##################################################################################################################
-    // Read events file
-    std::vector<Event> event_data;
-    read_events(eventPath, event_data, parameters["start_time"], parameters["end_time"], INT32_MAX);
-    std::cout << "Readout events at " << eventPath << std::endl;
 
     //##################################################################################################################
     // Bin events
-    std::vector<std::vector<Event>> binned_events;
-    binned_events = bin_events(event_data, parameters["time_step"]);
-    std::cout << "Binned events" << std::endl;
+    //std::vector<std::vector<Event>> binned_events;
+    //binned_events = bin_events(event_data, parameters["time_step"]);
+    //std::cout << "Binned events" << std::endl;
 
     //##################################################################################################################
     // Create frames
-    size_t frame_count = binned_events.size();
-    std::vector<Tensor2f> frames(frame_count);
-    create_frames(binned_events, frames, height, width, parameters["eventContribution"]);
-    std::cout << "Created frames " << frame_count << " out of " << event_data.size() << " events" << std::endl;
+    //size_t frame_count = binned_events.size();
+    //std::vector<Tensor2f> frames(frame_count);
+    //create_frames(binned_events, frames, height, width, parameters["eventContribution"]);
+    //std::cout << "Created frames " << frame_count << " out of " << event_data.size() << " events" << std::endl;
 
     //##################################################################################################################
     // Camera calibration matrix (C/CCM) and dCdx/dCdy
@@ -1116,7 +1146,10 @@ int main(int argc, char* argv[]) {
     // For keeping track of the current Event
     int y;
     int x;
-    std::vector<Event> frameEvents;
+    std::vector<float> ang_velocity = {0,0,0};
+    std::vector<float> acceleration = {0,0,0};
+    bool cEventFlag = true;
+    //std::vector<Event> frameEvents;
 
     // Tensors for Image decay
     Tensor2f nP(I.dimensions());    // neutralPotential
@@ -1125,100 +1158,141 @@ int main(int argc, char* argv[]) {
 
     auto start_realtime = std::chrono::high_resolution_clock::now();
 
-    int vis_counter = 0;
+    int vis_counter = -1;
     int FR_update_counter = 0;
+
+    fs::path R_path = folder_path / ("R.txt");
+
+    if (fs::exists(R_path)) {
+        try {
+            fs::remove(R_path);
+        } catch (const fs::filesystem_error& e) {
+            std::cerr << "Error deleting file: " << e.what() << '\n';
+        }
+    }
 
     nP.setConstant(parameters["neutralPotential"]);
     dP.setConstant(parameters["decayParam"]);
 
-    for (Event event : event_data) {
-        // Shuffle the order of operations for the interacting maps operations
-        std::shuffle(std::begin(permutation), std::end(permutation), rng);
+    for (int currentInterval = 0; currentInterval<nIntervals; ++currentInterval) {
+        //##################################################################################################################
+        // Read events file
+        std::vector<std::shared_ptr<Event>> cameraEventData;
+        read_events(eventPath, cameraEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
+        std::cout << "Readout events at " << eventPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
 
-        // Get the current event
-        y = event.coordinates[0];
-        x = event.coordinates[1];
-        V = (float) event.polarity;
+        std::vector<std::shared_ptr<Event>> imuEventData;
+        read_imu(imuPath, imuEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
+        std::cout << "Readout IMU data at " << imuPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
 
-        decayTimeSurface(y,x) = event.time;
+        std::vector<std::shared_ptr<Event>> imageEventData;
+        readImage(imagesPath, imageEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
+        std::cout << "Readout Image data at " << imuPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
 
-        // For Showing the events as an image increase the intensity
-        V_Vis(y, x) = (float) event.polarity * parameters["eventContribution"];
+        std::vector<std::shared_ptr<Event>> event_data;
+        //mergeTimeCollections(cameraEventData, imageEventData, event_data);
+        mergeTimeCollections(cameraEventData, imuEventData, event_data);
 
-        frameEvents.push_back(event);
 
-        // Perform an update step for the current event for I G R and F
-        for (int i = 0; i < 2; ++i) {
-            event_step(V, MI, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
-                       Identity_minus_outerProducts, old_points, parameters, permutation, y, x);
-        }
+        for (const auto& event : event_data) {
+            // Shuffle the order of operations for the interacting maps operations
+            std::shuffle(std::begin(permutation), std::end(permutation), rng);
 
-        if (parameters["start_time"] + (float) FR_update_counter * (float) 1 / parameters["FR_updates_per_second"] <
-            event.time) {
-            t.setConstant(event.time);
-            for (int i = 0; i < (int) parameters["updateIterationsFR"]; ++i) {
-                update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
+            if (auto* cEvent = dynamic_cast<CameraEvent*>(event.get())) {
+                PROFILE_SCOPE("CAMERA_EVENT");
+                y = cEvent->coordinates[0];
+                x = cEvent->coordinates[1];
+                V = static_cast<float>(cEvent->polarity) * parameters["eventContribution"];
+                //decayTimeSurface(y,x) = event->time;
+
+                // For Showing the events as an image increase the intensity
+                V_Vis(y, x) = V;
+
+                // Perform an update step for the current event for I G R and F
+                exponentialDecay(MI, decayTimeSurface, y, x, event->time, parameters["neutralPotential"], parameters["decayParam"]);
+                for (int i = 0; i < 1; ++i) {
+                    event_step(V, MI, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
+                               Identity_minus_outerProducts, old_points, parameters, permutation, y, x);
+                }
+
+                if (parameters["startTime"] + static_cast<float>(FR_update_counter) * static_cast<float>(1 / parameters["FR_updates_per_second"]) < event->time) {
+                    t.setConstant(event->time);
+                    for (int i = 0; i < static_cast<int>(parameters["updateIterationsFR"]); ++i) {
+                        update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
+                    }
+
+                }
+
+            } else if (auto* imuEvent = dynamic_cast<IMUEvent*>(event.get()))  {
+                update_RIMU(R, imuEvent->ang_velocities, parameters["weight_RIMU"]);
             }
-            globalDecay(MI, decayTimeSurface, nP, t, dP);
-        }
 
-        // Starting from the start time we count up if the current time (event.time)
-        // Reaches the time of the next "frame" we want to save to disk
-        if (parameters["start_time"] + (float) vis_counter * (float) 1 / parameters["fps"] < event.time) {
-            vis_counter++;
-            std::cout << "Frame " << startIndex+vis_counter << "/"
-                      << int((parameters["end_time"] - parameters["start_time"]) * parameters["fps"]) << std::endl;
-
-            {
-                PROFILE_SCOPE("BETWEEN FRAMES");
-                //writeToFile(CCM, folder_path / ("C" + std::to_string(counter) + ".txt"));
-                //writeToFile(V_Vis, folder_path / ("V" + std::to_string(counter) + ".txt"));
-                //writeToFile(MI, folder_path / ("MI" + std::to_string(counter)  + ".txt"));
-                //writeToFile(I, folder_path / ("I" + std::to_string(counter)  + ".txt"));
-                //writeToFile(delta_I, folder_path / ("I_gradient" + std::to_string(counter)  + ".txt"));
-                //writeToFile(F, folder_path / ("F" + std::to_string(counter)  + ".txt"));
-                //writeToFile(G, folder_path / ("G" + std::to_string(counter)  + ".txt"));
-
+            else if (auto* imageEvent = dynamic_cast<ImageEvent*>(event.get()))  {
+                std::cout << "Fused image at time " << imageEvent->time << std::endl;
+                update_Ifusion(MI, imageEvent->image, parameters["weight_Ifusion"]);
+                decayTimeSurface.setConstant(imageEvent->time);
             }
-#ifdef IMAGES
-            //float loss = VFG_check(V_Vis, F, G);
-            //std::cout << "VFG Check: " << loss << std::endl;
-
-            std::stringstream filename;
-            filename.fill('0');
-            filename.width(5);
-            filename<<std::to_string(int(startIndex + vis_counter));
-
-            std::string image_name = "VIGF_" + filename.str() + ".png";
-
-            fs::path image_path = folder_path / image_name;
-            //create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
-            //image_name = "VvsFG" + std::to_string(int(counter)) + ".png";
-            //image_path = folder_path / image_name;
-            //plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
-            cv::Mat VIGF;
-            create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
-            // cv::imshow("VIGF", VIGF);
-            // // Press 'q' to exit
-            // if (cv::waitKey(1) == 'q') {
-            //     break;
-            // }
-            V_Vis.setZero();
 
 
-            F.setRandom();
-            F = F * F2 - F1;
-            F = F * F3;
+            // Starting from the start time we count up. If the current time (event->time)
+            // reaches the time of the next "frame" we want to save to disk
+            if (parameters["startTime"] + static_cast<float>(vis_counter) * (1 / parameters["fps"]) < event->time) {
+                vis_counter++;
+                std::cout << "Frame " << startIndex+vis_counter << "/"
+                          << static_cast<int>((parameters["endTime"] - parameters["startTime"]) * parameters["fps"]) << std::endl;
+                {
+                    PROFILE_SCOPE("BETWEEN FRAMES");
+                    //writeToFile(CCM, folder_path / ("C" + std::to_string(counter) + ".txt"));
+                    //writeToFile(V_Vis, folder_path / ("V" + std::to_string(counter) + ".txt"));
+                    //writeToFile(MI, folder_path / ("MI" + std::to_string(counter)  + ".txt"));
+                    //writeToFile(I, folder_path / ("I" + std::to_string(counter)  + ".txt"));
+                    //writeToFile(delta_I, folder_path / ("I_gradient" + std::to_string(counter)  + ".txt"));
+                    //writeToFile(F, folder_path / ("F" + std::to_string(counter)  + ".txt"));
+                    //writeToFile(G, folder_path / ("G" + std::to_string(counter)  + ".txt"));
+                    writeToFile(event->time, R, R_path, true);
+                }
 
-            G.setZero();
+    #ifdef IMAGES
+                    //float loss = VFG_check(V_Vis, F, G);
+                    //std::cout << "VFG Check: " << loss << std::endl;
 
-#endif
-        }
+                    std::stringstream filename;
+                    filename.fill('0');
+                    filename.width(8);
+                    filename<<std::to_string(static_cast<int>((startIndex + vis_counter)));
 
-        if (parameters["start_time"] + (float) FR_update_counter * (float) 1 / parameters["FR_updates_per_second"] <event.time) {
-            FR_update_counter++;
+                    std::string image_name = "VIGF_" + filename.str() + ".png";
+
+                    fs::path image_path = folder_path / image_name;
+                    //create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+                    //image_name = "VvsFG" + std::to_string(int(counter)) + ".png";
+                    //image_path = folder_path / image_name;
+                    //plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
+
+                    create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+                    saveImage(Tensor2Matrix(MI), folder_path / ("frame_" + filename.str() + ".png"), true);
+                    // cv::imshow("VIGF", VIGF);
+                    // // Press 'q' to exit
+                    // if (cv::waitKey(1) == 'q') {
+                    //     break;
+                    // }
+                    V_Vis.setZero();
+                    F.setRandom();
+                    F = F * F2 - F1;
+                    F = F * F3;
+                    G.setZero();
+
+    #endif
+                //globalDecay(MI, decayTimeSurface, nP, t, dP);
+            }
+
+            if (parameters["startTime"] + static_cast<float>(FR_update_counter) * (1 / parameters["FR_updates_per_second"]) <event->time) {
+                FR_update_counter++;
+            }
         }
     }
+
+
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<float> elapsed = end - start;
     std::chrono::duration<float> elapsed_realtime = end - start_realtime;
@@ -1228,13 +1302,13 @@ int main(int argc, char* argv[]) {
     ssrt << "Time elapsed: " << elapsed_realtime.count() << " seconds" << std::endl;
     writeToFile(ss.str(), folder_path / "time_complete.txt");
     writeToFile(ssrt.str(), folder_path / "time_realtime.txt");
-    std::cout << "Algorithm took: " << elapsed_realtime.count() << "seconds/ Real elapsed time: " << parameters["end_time"] - parameters["start_time"] << std::endl;
+    std::cout << "Algorithm took: " << elapsed_realtime.count() << "seconds/ Real elapsed time: " << parameters["endTime"] - parameters["startTime"] << std::endl;
 
 
     std::string outputFile = "output.mp4";
 
 #ifdef IMAGES
-    VideoCreator::createMP4Video(folder_path, folder_path / outputFile, int(parameters["fps"]));
+    VideoCreator::createMP4Video(folder_path, folder_path / outputFile, static_cast<int>((parameters["fps"])));
 #endif
 
     Instrumentor::Get().EndSession();
