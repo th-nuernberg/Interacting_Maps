@@ -10,6 +10,7 @@
 #include <string>
 #include <Eigen/Dense>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <opencv2/opencv.hpp>
 
 using namespace Eigen;
 
@@ -30,11 +31,36 @@ namespace{
  * Holds a single event defined by time t the event occurred at, location (x,y) where the event happend on the receptor
  * and a polarity p (-1,1) of the event.
  */
-struct Event{
+struct Event {
     float time;
+
+    // Constructor
+    explicit Event(float t);
+
+    // Destructor
+    virtual ~Event() = default; // Ensure the base class has a virtual destructor;
+};
+
+struct CameraEvent: Event{
     std::vector<int> coordinates;
     int polarity;
-    std::string toString() const;
+    // Constructor
+    CameraEvent(float t, std::vector<int> &c, int p);
+
+};
+struct IMUEvent: Event{
+    std::vector<float> accelerations;
+    std::vector<float> ang_velocities;
+    // Constructor
+    IMUEvent(float t, const std::vector<float> &a, const std::vector<float> &v);
+};
+
+struct ImageEvent: Event{
+    cv::Mat image;
+
+    //Constructor
+    ImageEvent(float t, cv::Mat &image);
+
 };
 
 /*
