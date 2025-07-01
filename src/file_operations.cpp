@@ -2,6 +2,7 @@
 // Created by daniel on 11/25/24.
 //
 #include "file_operations.h"
+#include <memory>
 
 /**
  * Saves a 3Tensor as string to a file on disk
@@ -37,6 +38,24 @@ void writeToFile(const Tensor<float,1> &t, const std::string &fileName){
     {
         file << t;
     }
+}
+
+void writeToFile(const float time, const Tensor<float,1> &t, const std::string &fileName, bool append = true) {
+    if (append) {
+        std::ofstream file(fileName, std::ios::app);
+        if (file.is_open())
+        {
+            file << time << " " << t[0] << " " << t[1] << " " << t[2] << std::endl;
+        }
+    }
+    else {
+        std::ofstream file(fileName);
+        if (file.is_open())
+        {
+            file << time << " " << t[0] << " " << t[1] << " " << t[2] << std::endl;
+        }
+    }
+
 }
 
 /**
@@ -193,7 +212,7 @@ Calibration_Data get_calibration_data(const std::vector<float> &raw_data, int fr
  * @param event_factor allows scaling the event intensity with an factor
  * @param max_events upper limit on the amount of events to save if end_time is not reached before
  */
-void read_events(const std::string &file_path, std::vector<Event> &events, float start_time, float end_time, int max_events = INT32_MAX){
+void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events = INT32_MAX){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
@@ -205,15 +224,98 @@ void read_events(const std::string &file_path, std::vector<Event> &events, float
             if (time < start_time) continue;
             if (time > end_time) break;
             if (counter > max_events) break;
-            Event event;
-            event.time = time;
-            std::vector<int> coords = {height, width};
-            event.coordinates = coords;
-            event.polarity = (polarity*2 - 1);
-            events.push_back(event);
+            std::vector coords = {height, width};
+            events.emplace_back(std::shared_ptr<Event>(new CameraEvent(time, coords, polarity*2-1)));
             counter++;
         }
     }
 }
 
+/**
+ * Reads out events from disk and converts it to a std::vector of Events. Expects a file with on event
+ * per line in chronological order.
+ * @param file_path Path to the event file
+ * @param events Empty vector in which the events get written
+ * @param start_time time stamp from which on out to consider frames
+ * @param end_time time stamp after which events get ignored
+ * @param event_factor allows scaling the event intensity with an factor
+ * @param max_events upper limit on the amount of events to save if end_time is not reached before
+ */
+void read_imu(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events = INT32_MAX){
+    fs::path current_directory = fs::current_path();
+    std::string path = current_directory / file_path;
+    if (fs::exists(path)) {
+        std::ifstream event_file(path);
+        int counter = 0;
+        float time,a1,a2,a3,g1,g2,g3;
+        std::vector<float> accel;
+        std::vector<float> angVel;
+        while (event_file >> time >> a1 >> a2 >> a3 >> g1 >> g2 >> g3){
+            if (time < start_time) continue;
+            if (time > end_time) break;
+            if (counter > max_events) break;
+            accel = {a2, a1, a3};
+            angVel = {g2, g1, g3};
+            events.emplace_back(std::shared_ptr<Event>(new IMUEvent(time, accel, angVel)));
+            counter++;
+        }
+    }
+}
+
+void readImage(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events = INT32_MAX){
+    fs::path current_directory = fs::current_path();
+    std::string path = current_directory / file_path;
+    if (fs::exists(path)) {
+        std::ifstream event_file(path);
+        int counter = 0;
+        float time;
+        std::string imagePath;
+        while (event_file >> time >> imagePath) {
+            if (time < start_time) continue;
+            if (time > end_time) break;
+            if (counter > max_events) break;
+            cv::Mat image;
+            image = cv::imread(current_directory / "res" / "boxes_rotation" / imagePath, cv::IMREAD_GRAYSCALE);
+            std::cout << "Loaded image: " << imagePath << " at time " << time << std::endl;
+            // Convert to float32
+            cv::Mat img32f;
+            image.convertTo(img32f, CV_32F, 1/255.0);
+            // Check if the image was loaded successfully
+            if (image.empty()) {
+                std::cerr << "Error: Could not load image at " << imagePath << std::endl;
+            } else {
+                events.emplace_back(std::shared_ptr<Event>(new ImageEvent(time, img32f)));
+                counter++;
+            }
+        }
+    }
+}
+
+void mergeTimeCollections(std::vector<std::shared_ptr<Event>>& collection1, std::vector<std::shared_ptr<Event>>& collection2, std::vector<std::shared_ptr<Event>> &mergedCollection) {
+    size_t pointer1 = 0;
+    size_t pointer2 = 0;
+
+    // Traverse both collections and merge them
+    while (pointer1 < collection1.size() && pointer2 < collection2.size()) {
+        if (collection1[pointer1]->time < collection2[pointer2]->time) {
+            mergedCollection.push_back(collection1[pointer1]);
+            pointer1++;
+        } else {
+            mergedCollection.push_back(collection2[pointer2]);
+            pointer2++;
+        }
+    }
+
+    // Append the remaining elements of collection1, if any
+    while (pointer1 < collection1.size()) {
+        mergedCollection.push_back(collection1[pointer1]);
+        pointer1++;
+    }
+
+    // Append the remaining elements of collection2, if any
+    while (pointer2 < collection2.size()) {
+        mergedCollection.push_back(collection2[pointer2]);
+        pointer2++;
+    }
+}
 
