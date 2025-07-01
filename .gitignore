@@ -8,3 +8,13 @@ shapes_rotation_results
 shapes_rotation
 
 boxes_rotation
+
+boxes_rotation_decay1e-2
+
+boxes_rotation_decay_none
+
+boxes_rotation_decay_updated
+
+boxes_rotation_fused_R
+
+boxes_rotation_fused_I
