@@ -49,7 +49,7 @@ namespace VideoCreator {
         }
         std::cout << "Reading image files:" << std::endl;
         for (const auto &file: imageFiles) {
-            std::cout << file << " ,";
+            //std::cout << file << " ,";
             frame = cv::imread(file);
             if (frame.empty()) {
                 std::cerr << "Skipping invalid image: " << file << std::endl;
