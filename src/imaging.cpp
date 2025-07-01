@@ -66,6 +66,8 @@ cv::Mat frame2grayscale(const MatrixXfRowMajor &frame) {
     // Find min and max polarity
     double min_polarity, max_polarity;
     cv::minMaxLoc(frame_cv, &min_polarity, &max_polarity);
+    min_polarity = 0;
+    max_polarity = 255;
 
     // Normalize the frame
     frame_cv.convertTo(frame_cv, CV_32FC3, 1.0 / (max_polarity - min_polarity), -min_polarity / (max_polarity - min_polarity));
@@ -77,7 +79,7 @@ cv::Mat frame2grayscale(const MatrixXfRowMajor &frame) {
 }
 
 /**
- * Converts the an Event frame to an image. positive polarity results in green coloring, negative in red.
+ * Converts an Event frame to an image. positive polarity results in green coloring, negative in red.
  * @param V agglomerated Events in a Eigen matrix
  * @param cutoff Events with intensity less than cutoff are not visualised
  * @return opencv matrix of the colorcoded event frame
@@ -294,11 +296,9 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
     cv::Mat G_img = vector_field2image(G);
     cv::Mat F_img = vector_field2image(F);
 
-    bool masking = false;
-
     cv::Mat masked_F;
 
-    if (masking){
+    if (false){
         cv::Mat mask;
         cv::transform(V_img, mask, cv::Matx13f(1,1,1));
         mask = mask/255;
