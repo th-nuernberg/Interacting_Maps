@@ -40,6 +40,14 @@ void writeToFile(const Tensor<float,1> &t, const std::string &fileName){
     }
 }
 
+void writeToFile(const float time, const float loss, const std::string &fileName){
+    std::ofstream file(fileName);
+    if (file.is_open())
+    {
+        file << time << loss << std::endl;
+    }
+}
+
 void writeToFile(const float time, const Tensor<float,1> &t, const std::string &fileName, bool append = true) {
     if (append) {
         std::ofstream file(fileName, std::ios::app);
@@ -55,7 +63,6 @@ void writeToFile(const float time, const Tensor<float,1> &t, const std::string &
             file << time << " " << t[0] << " " << t[1] << " " << t[2] << std::endl;
         }
     }
-
 }
 
 /**

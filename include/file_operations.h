@@ -12,12 +12,13 @@
 
 namespace fs = std::filesystem;
 
-
 void writeToFile(const Tensor3f &t, const std::string &fileName);
 
 void writeToFile(const Tensor3f &t, int y, int x, const std::string &fileName);
 
 void writeToFile(const Tensor<float,1> &t, const std::string &fileName);
+
+void writeToFile(const float time, const float loss, const std::string &fileName);
 
 void writeToFile(const float time, const Tensor<float,1> &t, const std::string &fileName, bool append) ;
 
