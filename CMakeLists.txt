@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 project(InteractingMaps)
 
 # Set the C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Include directories
@@ -39,7 +39,21 @@ set(PROJECT_HEADERS
         ${PROJECT_SOURCE_DIR}/include/conversions.h
         ${PROJECT_SOURCE_DIR}/include/video.h
         ${PROJECT_SOURCE_DIR}/include/update.h
-        include/events.h
+        ${PROJECT_SOURCE_DIR}/include/events.h
+        include/testSIMD.h
+)
+
+set(PROJECT_HEADERS_SIMD
+        ${PROJECT_SOURCE_DIR}/include/Instrumentor.h
+        ${PROJECT_SOURCE_DIR}/include/dv.h
+        ${PROJECT_SOURCE_DIR}/include/datatypes.h
+        ${PROJECT_SOURCE_DIR}/include/imaging.h
+        ${PROJECT_SOURCE_DIR}/include/file_operations.h
+        ${PROJECT_SOURCE_DIR}/include/conversions.h
+        ${PROJECT_SOURCE_DIR}/include/video.h
+        ${PROJECT_SOURCE_DIR}/include/update.h
+        ${PROJECT_SOURCE_DIR}/include/events.h
+        include/testSIMD.h
 )
 
 # Add source files
@@ -51,29 +65,59 @@ set(SOURCES
         ${PROJECT_SOURCE_DIR}/src/video.cpp
         ${PROJECT_SOURCE_DIR}/src/datatypes.cpp
         ${PROJECT_SOURCE_DIR}/src/update.cpp
-        src/events.cpp
+        ${PROJECT_SOURCE_DIR}/src/events.cpp
+        src/testSIMD.cpp
+)
+
+# Add source files
+set(SOURCES_SIMD
+        ${PROJECT_SOURCE_DIR}/src/imaging.cpp
+        ${PROJECT_SOURCE_DIR}/src/file_operations.cpp
+        ${PROJECT_SOURCE_DIR}/src/conversions.cpp
+        ${PROJECT_SOURCE_DIR}/src/video.cpp
+        ${PROJECT_SOURCE_DIR}/src/datatypes.cpp
+        ${PROJECT_SOURCE_DIR}/src/update.cpp
+        ${PROJECT_SOURCE_DIR}/src/events.cpp
+        src/testSIMD.cpp
 )
 
 # Add executable
-add_executable(Executable ${SOURCES} ${PROJECT_HEADERS})
+add_executable(InteractingMaps ${SOURCES} ${PROJECT_HEADERS})
+
+# Add executable
+add_executable(TestSIMD ${SOURCES_SIMD} ${PROJECT_HEADERS_SIMD})
 
 # Link libraries (include dv-processing and required dependencies)
-target_link_libraries(Executable
+target_link_libraries(InteractingMaps
         ${OpenCV_LIBS}
         ${Boost_LIBRARIES}
 #        dv::processing
 )
 
+# Link libraries (include dv-processing and required dependencies)
+target_link_libraries(TestSIMD
+        ${OpenCV_LIBS}
+        ${Boost_LIBRARIES}
+        #        dv::processing
+)
+
 # Set the output directory for the executable
-set_target_properties(Executable PROPERTIES
+set_target_properties(InteractingMaps PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/output
+)
+
+# Set the output directory for the executable
+set_target_properties(TestSIMD PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/output
 )
 
 # Add compiler options based on build type
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(Executable PRIVATE -g)
+    target_compile_options(InteractingMaps PRIVATE -g)
+    target_compile_options(TestSIMD PRIVATE -g)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(Executable PRIVATE -O3)
+    target_compile_options(InteractingMaps PRIVATE -O3)
+    target_compile_options(TestSIMD PRIVATE -O3)
 endif()
 if (PROFILING)
     add_definitions(-DPROFILING=1)
