@@ -98,7 +98,7 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
  * @param B Second input vector of shape NxMxD
  * @param C Output Tensor of shape NxMxD
  */
-void crossProduct3x3(const Tensor3f &A, const Tensor3f &B, Tensor3f &C);
+void crossProduct3x3(Tensor3f &A, Tensor3f &B, Tensor3f &C);
 
 /**
  * Calculates the cross product for two 3-Tensors, where each Tensor describes a collection of Vectors distributed over
@@ -117,7 +117,7 @@ void crossProduct3x3(const Tensor3f &A, const Vector3f &B, Vector3f &C, int y, i
  * @param B collection of vectors as a 3-Tensor
  * @param C Resulting collection of cross product vectors as a 3-Tensor
  */
-void crossProduct1x3(const Tensor<float,1> &A, const Tensor3f &B, Tensor3f &C);
+void crossProduct1x3(const Tensor1f &A, const Tensor3f &B, Tensor3f &C);
 
 /**
  * Calculates the distances between two collection of vectors. For a pair of vectors V,W from each collection
@@ -353,9 +353,8 @@ void update_Ifusion(Tensor2f &I, const cv::Mat &realImage, const float weight_If
  * @param eps
  * @param gamma
  */
-void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor<float,1> &R, float weight_FR, float eps, float gamma);
-
-// void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::unique_ptr<Matrix3f[]> &Identity_minus_outerProducts, Vector3f &old_point, int y, int x, float weight_RF, const std::vector<Event> &frameEvents);
+void update_FR(Tensor3f &F, const Tensor3f &CCM, Tensor3f &Cx, Tensor3f &Cy, const Tensor1f &R, float weight_FR, float eps, float gamma);
+// void update_RF(Tensor1f &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::unique_ptr<Matrix3f[]> &Identity_minus_outerProducts, Vector3f &old_point, int y, int x, float weight_RF, const std::vector<Event> &frameEvents);
 
 /**
  * Updates rotational velocity vector R based on F and C

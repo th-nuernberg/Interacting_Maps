@@ -90,8 +90,8 @@ void randomInit(Tensor3f &T, const float lower, const float upper) {
 
 void randomInit(Tensor1f &T, const float lower, const float upper) {
     const auto &dimensions = T.dimensions();
-    Tensor3f T1(dimensions[0]);
-    Tensor3f T2(dimensions[0]);
+    Tensor1f T1(dimensions[0]);
+    Tensor1f T2(dimensions[0]);
     T.setRandom();
     T1.setConstant(lower);
     T2.setConstant(upper - lower);
