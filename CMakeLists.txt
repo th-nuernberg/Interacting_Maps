@@ -1,84 +1,76 @@
-cmake_minimum_required(VERSION 3.15)
-project(InteractingMaps)
+cmake_minimum_required(VERSION 3.21)
+project(InteractingMaps LANGUAGES CXX)
 
-# Set the C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Include directories
+# toolchain-gcc13.cmake
+
+include(cmake/CPM.cmake)
+
+# Dependencies
+CPMAddPackage(
+        NAME Boost
+        VERSION 1.86.0
+        URL https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.tar.xz
+        URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
+        OPTIONS
+        "BOOST_ENABLE_CMAKE ON"
+        "BOOST_SKIP_INSTALL_RULES ON"
+        "BUILD_SHARED_LIBS OFF"
+        "BOOST_INCLUDE_LIBRARIES container\\\;asio\\\;filesystem\\\;regex\\\;log\\\;program_options"
+)
+
+CPMAddPackage(
+        NAME Eigen
+        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+        GIT_TAG 3.4
+        OPTIONS "EIGEN_BUILD_DOC OFF"
+        "EIGEN_BUILD_PKGCONFIG OFF"
+)
+
+CPMAddPackage(
+        NAME Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG v3.9.1
+)
+
+CPMAddPackage(
+        NAME pybind11
+        GIT_REPOSITORY https://github.com/pybind/pybind11.git
+        GIT_TAG v3.0.0
+)
+
+CPMAddPackage(
+        NAME autodiff
+        GIT_REPOSITORY https://github.com/autodiff/autodiff.git
+        GIT_TAG v1.1.2
+)
+
+#CPMAddPackage(
+#        NAME libusb-1.0
+#        GIT_REPOSITORY https://github.com/libusb/libusb.git
+#        GIT_TAG v1.0.29
+#)
+#
+#CPMAddPackage(
+#        NAME dv-processing
+#        GIT_REPOSITORY https://gitlab.com/inivation/dv/dv-processing.git
+#        GIT_TAG 2.0.2
+#)
+
+find_package(OpenCV REQUIRED)
+find_package(Boost REQUIRED COMPONENTS program_options)
+
 include_directories(
-        ${PROJECT_SOURCE_DIR}/external/eigen
-        ${PROJECT_SOURCE_DIR}/external/autodiff
+#        ${PROJECT_SOURCE_DIR}/external/eigen
+#        ${PROJECT_SOURCE_DIR}/external/autodiff
         ${PROJECT_SOURCE_DIR}/include
         ${OpenCV_INCLUDE_DIRS}
+        ${Boost_INCLUDE_DIRS}
 )
 
-# Find OpenCV package
-find_package(OpenCV REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS})
-FIND_PACKAGE(Boost COMPONENTS program_options REQUIRED)
-INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
-#TARGET_LINK_LIBRARIES(target ${Boost_LIBRARIES})
-#find_package(dv-processing REQUIRED)
-
-
-#include_directories(${dv-processing_INCLUDE_DIRS})
-# Find installed dv-processing.
-#find_package(dv-processing)
-
-# Add the src directory
+# Build src/
 add_subdirectory(src)
 
-set(PROJECT_HEADERS
-        ${PROJECT_SOURCE_DIR}/include/Instrumentor.h
-        ${PROJECT_SOURCE_DIR}/include/dv.h
-        ${PROJECT_SOURCE_DIR}/include/datatypes.h
-        ${PROJECT_SOURCE_DIR}/include/interacting_maps.h
-        ${PROJECT_SOURCE_DIR}/include/imaging.h
-        ${PROJECT_SOURCE_DIR}/include/file_operations.h
-        ${PROJECT_SOURCE_DIR}/include/conversions.h
-        ${PROJECT_SOURCE_DIR}/include/video.h
-        ${PROJECT_SOURCE_DIR}/include/update.h
-        include/events.h
-)
 
-# Add source files
-set(SOURCES
-        ${PROJECT_SOURCE_DIR}/src/interacting_maps.cpp
-        ${PROJECT_SOURCE_DIR}/src/imaging.cpp
-        ${PROJECT_SOURCE_DIR}/src/file_operations.cpp
-        ${PROJECT_SOURCE_DIR}/src/conversions.cpp
-        ${PROJECT_SOURCE_DIR}/src/video.cpp
-        ${PROJECT_SOURCE_DIR}/src/datatypes.cpp
-        ${PROJECT_SOURCE_DIR}/src/update.cpp
-        src/events.cpp
-)
-
-# Add executable
-add_executable(Executable ${SOURCES} ${PROJECT_HEADERS})
-
-# Link libraries (include dv-processing and required dependencies)
-target_link_libraries(Executable
-        ${OpenCV_LIBS}
-        ${Boost_LIBRARIES}
-#        dv::processing
-)
-
-# Set the output directory for the executable
-set_target_properties(Executable PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/output
-)
-
-# Add compiler options based on build type
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(Executable PRIVATE -g)
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(Executable PRIVATE -O3)
-endif()
-if (PROFILING)
-    add_definitions(-DPROFILING=1)
-endif (PROFILING)
-
-if (IMAGES)
-    add_definitions(-DIMAGES=1)
-endif (IMAGES)

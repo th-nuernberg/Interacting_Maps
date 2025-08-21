@@ -88,10 +88,21 @@ void randomInit(Tensor3f &T, const float lower, const float upper) {
     T = T*T2 + T1;
 }
 
+void softReset(Tensor3f &T, const float lower, const float upper) {
+    const auto &dimensions = T.dimensions();
+    Tensor3f T1(dimensions[0], dimensions[1], dimensions[2]);
+    Tensor3f T2(dimensions[0], dimensions[1], dimensions[2]);
+    Tensor3f T3(dimensions[0], dimensions[1], dimensions[2]);
+    T1.setRandom();
+    T2.setConstant(lower);
+    T3.setConstant(upper - lower);
+    T = T + T1*T3 + T2;
+}
+
 void randomInit(Tensor1f &T, const float lower, const float upper) {
     const auto &dimensions = T.dimensions();
-    Tensor3f T1(dimensions[0]);
-    Tensor3f T2(dimensions[0]);
+    Tensor1f T1(dimensions[0]);
+    Tensor1f T2(dimensions[0]);
     T.setRandom();
     T1.setConstant(lower);
     T2.setConstant(upper - lower);
@@ -106,13 +117,15 @@ int main(int argc, char* argv[]) {
             ("help,h", "Produce help message")
             ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
             ("endTime,f", po::value<float>()->default_value(10), "Where to end with event consideration")
-            ("timeStep,f", po::value<float>()->default_value(0.0460299576597383), "Size of the event frames")
-            ("resourceDirectory,s", po::value<std::string>()->default_value("boxes_rotation"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("boxes_rotation"), "Where to store the results, located in output directory")
+            ("timeStep,f", po::value<float>()->default_value(0.00460299576597383), "Size of the event frames")
+            ("resourceDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
+            ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
             ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
             ("fuseI,b", po::value<bool>()->default_value(false), "Fuse with images?");
+
+    int event_steps = 1;
 
     // Parse command-line arguments
     po::variables_map vm;
@@ -209,7 +222,7 @@ int main(int argc, char* argv[]) {
     parameters["weight_GI"] = 0.2;                                          // [0-1]
     parameters["weight_IG"] = 0.2;                                          // [0-1]
     parameters["weight_IV"] = 1.0;                                          // [0-1]
-    parameters["weight_RF"] = 0.2;                                          // [0-1]
+    parameters["weight_RF"] = 0.8;                                          // [0-1]
     parameters["weight_RIMU"] = 0.0;                                     // [0-1]
     parameters["weight_Ifusion"] = 0.0;                                     // [0-1]
     parameters["lr"] = 1.0;                                                 // [0-1]
@@ -222,7 +235,7 @@ int main(int argc, char* argv[]) {
     parameters["neutralPotential"] = 128;                                   // base value where image decays back to
     parameters["fps"] = 1.0f/parameters["time_step"];                       // how often shown images are update
     parameters["FR_updates_per_second"] = 1.0f/parameters["time_step"];     // how often the FR update is performed; It is not done after every event
-    parameters["updateIterationsFR"] = 2;                                  // more iterations -> F captures general movement of scene/camera better but significantly more computation time
+    parameters["updateIterationsFR"] = 4;                                  // more iterations -> F captures general movement of scene/camera better but significantly more computation time
 
     // Read resolution from file
     std::vector<float> settings;
@@ -247,8 +260,6 @@ int main(int argc, char* argv[]) {
     V_Vis.setZero();
     float V;
     cv::Mat VIGF;
-
-
 
     // Initialize optical flow
     Tensor3f F(height, width, 2);
@@ -275,7 +286,7 @@ int main(int argc, char* argv[]) {
     Tensor3f GIDiffGradient(height, width,2);
     randomInit(GIDiffGradient, -1, 1);
 
-    // Initialize rotational velocity to a random vector with values between -1 and 1
+    // Initialize rotational velocity to a random vector with values between -10 and 10
     Tensor1f R(3);
     randomInit(R, -10, 10);
 
@@ -400,7 +411,7 @@ int main(int argc, char* argv[]) {
 
                 // Perform an update step for the current event for I G R and F
                 exponentialDecay(MI, decayTimeSurface, y, x, event->time, parameters["neutralPotential"], parameters["decayParam"]);
-                for (int i = 0; i < 1; ++i) {
+                for (int i = 0; i < event_steps; ++i) {
                     event_step(V, MI, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
                                Identity_minus_outerProducts, old_points, parameters, permutation, y, x);
                 }
@@ -459,7 +470,7 @@ int main(int argc, char* argv[]) {
                     //image_path = folder_path / image_name;
                     //plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
 
-                    create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+                    create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, 0.1);
                     saveImage(Tensor2Matrix(MI), folder_path / ("frame_" + filename.str() + ".png"), true);
                     // cv::imshow("VIGF", VIGF);
                     // // Press 'q' to exit
@@ -467,13 +478,11 @@ int main(int argc, char* argv[]) {
                     //     break;
                     // }
                     V_Vis.setZero();
-                    F.setRandom();
-                    F = F * F2 - F1;
-                    F = F * F3;
+                    softReset(F, -1, 1);
                     G.setZero();
 
     #endif
-                //globalDecay(MI, decayTimeSurface, nP, t, dP);
+                globalDecay(MI, decayTimeSurface, nP, t, dP);
             }
 
             if (parameters["startTime"] + static_cast<float>(FR_update_counter) * (1 / parameters["FR_updates_per_second"]) <event->time) {

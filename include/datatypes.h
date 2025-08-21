@@ -32,36 +32,53 @@ namespace{
  * and a polarity p (-1,1) of the event.
  */
 struct Event {
-    float time;
+    float time{0.0f}; // initialize to 0
+
+    // Default constructor
+    Event() = default;
 
     // Constructor
-    explicit Event(float t);
+    explicit Event(float t) : time(t) {}
 
     // Destructor
-    virtual ~Event() = default; // Ensure the base class has a virtual destructor;
+    virtual ~Event() = default; // Ensure the base class has a virtual destructor
 };
 
-struct CameraEvent: Event{
+struct CameraEvent : Event {
     std::vector<int> coordinates;
-    int polarity;
-    // Constructor
-    CameraEvent(float t, std::vector<int> &c, int p);
+    int polarity{0};
 
+    // Default constructor
+    CameraEvent() = default;
+
+    // Constructor
+    CameraEvent(float t, std::vector<int>& c, int p)
+            : Event(t), coordinates(c), polarity(p) {}
 };
-struct IMUEvent: Event{
+
+struct IMUEvent : Event {
     std::vector<float> accelerations;
     std::vector<float> ang_velocities;
+
+    // Default constructor
+    IMUEvent() = default;
+
     // Constructor
-    IMUEvent(float t, const std::vector<float> &a, const std::vector<float> &v);
+    IMUEvent(float t, const std::vector<float>& a, const std::vector<float>& v)
+            : Event(t), accelerations(a), ang_velocities(v) {}
 };
 
-struct ImageEvent: Event{
+struct ImageEvent : Event {
     cv::Mat image;
 
-    //Constructor
-    ImageEvent(float t, cv::Mat &image);
+    // Default constructor
+    ImageEvent() = default;
 
+    // Constructor
+    ImageEvent(float t, cv::Mat& img)
+            : Event(t), image(img) {}
 };
+
 
 /*
  * Images of a camera can be distorted by said camera. If certain parameters about the camera are known, the images can
