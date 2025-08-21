@@ -1,5 +1,5 @@
-# List all source files
-set(SOURCES
+# Common library (all reusable sources)
+add_library(interacting_maps_lib
         interacting_maps.cpp
         imaging.cpp
         file_operations.cpp
@@ -11,34 +11,60 @@ set(SOURCES
         cost.cpp
 )
 
-# List headers (optional, for IDE support)
-set(HEADERS
-        ../include/Instrumentor.h
-        ../include/dv.h
-        ../include/datatypes.h
-        ../include/interacting_maps.h
-        ../include/imaging.h
-        ../include/file_operations.h
-        ../include/conversions.h
-        ../include/video.h
-        ../include/update.h
-        ../include/events.h
-        ../include/cost.h
+target_include_directories(interacting_maps_lib
+        PUBLIC ${PROJECT_SOURCE_DIR}/include
+)
+
+target_link_libraries(interacting_maps_lib
+        PUBLIC
+        ${OpenCV_LIBS}
+        ${Boost_LIBRARIES}
+        Eigen3::Eigen
+        autodiff
+)
+
+# target_link_libraries(example  Boost::asio Boost::container  Boost::filesystem Boost::log)
+# === Executables ===
+
+# Example 1: TestSIMD
+add_executable(TestSIMD testSIMD.cpp)
+target_link_libraries(TestSIMD PRIVATE interacting_maps_lib Eigen3::Eigen Boost::program_options)
+set_target_properties(TestSIMD
+        PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
 
 
-# Create the executable
-add_executable(Executable ${SOURCES} ${HEADERS})
-
-# Link libraries
-target_link_libraries(Executable
+# Example 2: Main program
+add_executable(InteractingMaps interacting_maps.cpp)
+target_link_libraries(InteractingMaps
+        PRIVATE
+        interacting_maps_lib
+        Eigen3::Eigen
+        Boost::program_options
         ${OpenCV_LIBS}
-        ${Boost_LIBRARIES}
+        //${Boost_LIBRARIES}
         ${HDF5_LIBRARIES}
         ${HDF5_CXX_LIBRARIES})
 
-
-# Set output directory
-set_target_properties(Executable PROPERTIES
+set_target_properties(InteractingMaps
+        PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
+
+# Add compiler options
+foreach(exe IN ITEMS TestSIMD InteractingMaps)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_options(${exe} PRIVATE -g)
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(${exe} PRIVATE -O3)
+    endif()
+
+    if(PROFILING)
+        target_compile_definitions(${exe} PRIVATE PROFILING=1)
+    endif()
+
+    if(IMAGES)
+        target_compile_definitions(${exe} PRIVATE IMAGES=1)
+    endif()
+endforeach()

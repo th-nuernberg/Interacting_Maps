@@ -93,6 +93,17 @@ void randomInit(Tensor3f &T, const float lower, const float upper) {
     T = T*T2 + T1;
 }
 
+void softReset(Tensor3f &T, const float lower, const float upper) {
+    const auto &dimensions = T.dimensions();
+    Tensor3f T1(dimensions[0], dimensions[1], dimensions[2]);
+    Tensor3f T2(dimensions[0], dimensions[1], dimensions[2]);
+    Tensor3f T3(dimensions[0], dimensions[1], dimensions[2]);
+    T1.setRandom();
+    T2.setConstant(lower);
+    T3.setConstant(upper - lower);
+    T = T + T1*T3 + T2;
+}
+
 void randomInit(Tensor1f &T, const float lower, const float upper) {
     const auto &dimensions = T.dimensions();
     Tensor1f T1(dimensions[0]);
@@ -119,6 +130,8 @@ int main(int argc, char* argv[]) {
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
             ("fuseI,b", po::value<bool>()->default_value(false), "Fuse with images?");
+
+    int event_steps = 1;
 
     // Parse command-line arguments
     po::variables_map vm;
@@ -216,7 +229,7 @@ int main(int argc, char* argv[]) {
     parameters["weight_GI"] = 0.2;                                          // [0-1]
     parameters["weight_IG"] = 0.2;                                          // [0-1]
     parameters["weight_IV"] = 1.0;                                          // [0-1]
-    parameters["weight_RF"] = 0.2;                                          // [0-1]
+    parameters["weight_RF"] = 0.8;                                          // [0-1]
     parameters["weight_RIMU"] = 0.0;                                     // [0-1]
     parameters["weight_Ifusion"] = 0.0;                                     // [0-1]
     parameters["lr"] = 1.0;                                                 // [0-1]
@@ -229,7 +242,7 @@ int main(int argc, char* argv[]) {
     parameters["neutralPotential"] = 128;                                   // base value where image decays back to
     parameters["fps"] = 1.0f/parameters["time_step"];                       // how often shown images are update
     parameters["FR_updates_per_second"] = 1.0f/parameters["time_step"];     // how often the FR update is performed; It is not done after every event
-    parameters["updateIterationsFR"] = 2;                                  // more iterations -> F captures general movement of scene/camera better but significantly more computation time
+    parameters["updateIterationsFR"] = 4;                                  // more iterations -> F captures general movement of scene/camera better but significantly more computation time
 
     // Read resolution from file
     std::vector<float> settings;
@@ -280,7 +293,7 @@ int main(int argc, char* argv[]) {
     Tensor3f GIDiffGradient(height, width,2);
     randomInit(GIDiffGradient, -1, 1);
 
-    // Initialize rotational velocity to a random vector with values between -1 and 1
+    // Initialize rotational velocity to a random vector with values between -10 and 10
     Tensor1f R(3);
     randomInit(R, -10, 10);
 
@@ -407,7 +420,7 @@ int main(int argc, char* argv[]) {
 
                 // Perform an update step for the current event for I G R and F
                 exponentialDecay(MI, decayTimeSurface, y, x, event->time, parameters["neutralPotential"], parameters["decayParam"]);
-                for (int i = 0; i < 2; ++i) {
+                for (int i = 0; i < event_steps; ++i) {
                     event_step(V, MI, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
                                Identity_minus_outerProducts, old_points, parameters, permutation, y, x);
                 }
@@ -448,7 +461,7 @@ int main(int argc, char* argv[]) {
                     writeToFile(event->time, R, R_path, true);
                 }
 
-    //#ifdef IMAGES
+    #ifdef IMAGES
                     float loss = VFG_check(V_Vis, F, G);
                     //std::cout << "VFG Check: " << loss << std::endl;
                     writeToFile(event->time, loss, VLossPath);
@@ -471,7 +484,7 @@ int main(int argc, char* argv[]) {
                     //randomInit(F, -1, 1);
                     //G.setZero();
 
-   // #endif
+    #endif
                 //globalDecay(MI, decayTimeSurface, nP, t, dP);
             }
 
