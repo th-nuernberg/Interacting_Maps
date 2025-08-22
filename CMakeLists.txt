@@ -29,6 +29,13 @@ CPMAddPackage(
         "EIGEN_BUILD_PKGCONFIG OFF"
 )
 
+# CPMAddPackage(
+#         NAME opencv
+#         GIT_REPOSITORY https://github.com/opencv/opencv.git
+#         GIT_TAG 4.5.0
+# )
+
+
 CPMAddPackage(
         NAME Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
@@ -45,6 +52,7 @@ CPMAddPackage(
         NAME autodiff
         GIT_REPOSITORY https://github.com/autodiff/autodiff.git
         GIT_TAG v1.1.2
+        OPTIONS "AUTODIFF_BUILD_PYTHON OFF"
 )
 
 #CPMAddPackage(
@@ -60,14 +68,13 @@ CPMAddPackage(
 #)
 
 find_package(OpenCV REQUIRED)
-find_package(Boost REQUIRED COMPONENTS program_options)
+#find_package(Boost REQUIRED COMPONENTS program_options)
 
 include_directories(
 #        ${PROJECT_SOURCE_DIR}/external/eigen
 #        ${PROJECT_SOURCE_DIR}/external/autodiff
         ${PROJECT_SOURCE_DIR}/include
         ${OpenCV_INCLUDE_DIRS}
-        ${Boost_INCLUDE_DIRS}
 )
 
 # Build src/
