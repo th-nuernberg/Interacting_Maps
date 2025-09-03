@@ -52,6 +52,7 @@ set(SOURCES
         ${PROJECT_SOURCE_DIR}/src/datatypes.cpp
         ${PROJECT_SOURCE_DIR}/src/update.cpp
         src/events.cpp
+        src/test.cpp
 )
 
 # Add executable
