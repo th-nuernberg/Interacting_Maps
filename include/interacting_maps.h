@@ -2,21 +2,10 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-#include <unsupported/Eigen/CXX11/Tensor>
 #include <opencv2/opencv.hpp>
-#include <autodiff/forward/real.hpp>
-#include <autodiff/forward/real/eigen.hpp>
 #include <filesystem>
 
-#include "conversions.h"
 #include "datatypes.h"
-#include "imaging.h"
-#include "file_operations.h"
-#include "video.h"
-#include "events.h"
-#include "update.h"
 
 namespace fs = std::filesystem;
 using namespace Eigen;

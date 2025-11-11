@@ -8,6 +8,10 @@
 #include "Instrumentor.h"
 #include <cmath>
 #include <boost/program_options.hpp>
+#include <update.h>
+
+#include "file_operations.h"
+#include "imaging.h"
 
 namespace po = boost::program_options;
 
@@ -90,8 +94,8 @@ void randomInit(Tensor3f &T, const float lower, const float upper) {
 
 void randomInit(Tensor1f &T, const float lower, const float upper) {
     const auto &dimensions = T.dimensions();
-    Tensor3f T1(dimensions[0]);
-    Tensor3f T2(dimensions[0]);
+    Tensor1f T1(dimensions[0]);
+    Tensor1f T2(dimensions[0]);
     T.setRandom();
     T1.setConstant(lower);
     T2.setConstant(upper - lower);
@@ -105,10 +109,10 @@ int main(int argc, char* argv[]) {
     desc.add_options()
             ("help,h", "Produce help message")
             ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
-            ("endTime,f", po::value<float>()->default_value(10), "Where to end with event consideration")
+            ("endTime,f", po::value<float>()->default_value(60), "Where to end with event consideration")
             ("timeStep,f", po::value<float>()->default_value(0.0460299576597383), "Size of the event frames")
-            ("resourceDirectory,s", po::value<std::string>()->default_value("boxes_rotation"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("boxes_rotation"), "Where to store the results, located in output directory")
+            ("resourceDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
+            ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
             ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
@@ -247,8 +251,6 @@ int main(int argc, char* argv[]) {
     V_Vis.setZero();
     float V;
     cv::Mat VIGF;
-
-
 
     // Initialize optical flow
     Tensor3f F(height, width, 2);
@@ -441,7 +443,7 @@ int main(int argc, char* argv[]) {
                     writeToFile(event->time, R, R_path, true);
                 }
 
-    #ifdef IMAGES
+    //#ifdef IMAGES
                     float loss = VFG_check(V_Vis, F, G);
                     //std::cout << "VFG Check: " << loss << std::endl;
                     writeToFile(event->time, loss, VLossPath);
@@ -452,27 +454,14 @@ int main(int argc, char* argv[]) {
                     filename<<std::to_string(static_cast<int>((startIndex + vis_counter)));
 
                     std::string image_name = "VIGF_" + filename.str() + ".png";
-
                     fs::path image_path = folder_path / image_name;
-                    //create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
-                    //image_name = "VvsFG" + std::to_string(int(counter)) + ".png";
-                    //image_path = folder_path / image_name;
-                    //plot_VvsFG(Tensor2Matrix(V_Vis), F, G, image_path, true);
-
-                    create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, cutoff);
+                    create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, 0.1);
                     saveImage(Tensor2Matrix(MI), folder_path / ("frame_" + filename.str() + ".png"), true);
-                    // cv::imshow("VIGF", VIGF);
-                    // // Press 'q' to exit
-                    // if (cv::waitKey(1) == 'q') {
-                    //     break;
-                    // }
                     V_Vis.setZero();
-                    F.setRandom();
-                    F = F * F2 - F1;
-                    F = F * F3;
+                    randomInit(F, -1, 1);
                     G.setZero();
 
-    #endif
+   // #endif
                 //globalDecay(MI, decayTimeSurface, nP, t, dP);
             }
 

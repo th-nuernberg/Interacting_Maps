@@ -5,10 +5,7 @@
 #ifndef INTERACTINGMAPS_DATATYPES_H
 #define INTERACTINGMAPS_DATATYPES_H
 
-#include <iostream>
 #include <vector>
-#include <string>
-#include <Eigen/Dense>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <opencv2/opencv.hpp>
 

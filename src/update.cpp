@@ -100,7 +100,7 @@ void crossProduct3x3(const Tensor3f &A, const Vector3f &B, Vector3f &C, int y, i
     C(2) = A(y, x, 1) * B(0) - A(y, x, 0) * B(1);  // z
 }
 
-void crossProduct1x3(const Tensor<float,1> &A, const Tensor3f &B, Tensor3f &C){
+void crossProduct1x3(const Tensor1f &A, const Tensor3f &B, Tensor3f &C){
     const auto& dimensions = B.dimensions();
     for (long i = 0; i < dimensions[0]; ++i){
         for (long j = 0; j < dimensions[1]; ++j){
@@ -165,7 +165,7 @@ void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f 
     crossProduct3x3(C_x,C_y,C1);
     crossProduct3x3(C_y,C1,C2);
     computeDotProductWithLoops(In,C2,dot);
-    sign = dot.unaryExpr(std::ptr_fun(sign_func));
+    sign = dot.unaryExpr(std::function(sign_func));
     vector_distance(In, C_y, distance1);
     vector_distance(C_x, C_y, distance2);
     Out.chip(1,2) = sign * distance1/distance2;
@@ -173,7 +173,7 @@ void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f 
     crossProduct3x3(C_y,C_x,C1);
     crossProduct3x3(C_x,C1,C2);
     computeDotProductWithLoops(In,C2,dot);
-    sign = dot.unaryExpr(std::ptr_fun(sign_func));
+    sign = dot.unaryExpr(std::function(sign_func));
     vector_distance(In, C_x, distance1);
     vector_distance(C_y, C_x, distance2);
     Out.chip(0,2) = sign * distance1/distance2;
@@ -417,7 +417,7 @@ void update_Ifusion(Tensor2f &I, const cv::Mat &realImage, const float weight_If
     I = (1-weight_Ifusion) * lastPotential + 255 * weight_Ifusion * Matrix2Tensor(cvMatToEigen(realImage));
 }
 
-void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor<float,1> &R, const float weight_FR, float eps=1e-8, float gamma=255.0){
+void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor1f &R, const float weight_FR, float eps=1e-8, float gamma=255.0){
     PROFILE_FUNCTION();
     Tensor3f cross(CCM.dimensions());
     const auto& dimensions = F.dimensions();
@@ -455,7 +455,7 @@ void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tenso
     }
 }
 
-//void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, const float weight_RF, const std::vector<Event> &frameEvents) {
+//void update_RF(Tensor1f &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, const float weight_RF, const std::vector<Event> &frameEvents) {
 //    PROFILE_FUNCTION();
 //    const auto &dimensions = F.dimensions();
 //    Vector3f transformed_F(3);
@@ -484,7 +484,7 @@ void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tenso
 //}
 
 
-void update_RF(Tensor<float,1> &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, float weight_RF, int y, int x) {
+void update_RF(Tensor1f &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, float weight_RF, int y, int x) {
     PROFILE_FUNCTION();
     Vector3f transformed_F(3);
     Vector3f point(3);

@@ -32,7 +32,7 @@ void writeToFile(const Tensor3f &t, int y, int x, const std::string &fileName){
     }
 }
 
-void writeToFile(const Tensor<float,1> &t, const std::string &fileName){
+void writeToFile(const Tensor1f &t, const std::string &fileName){
     std::ofstream file(fileName);
     if (file.is_open())
     {
@@ -48,7 +48,7 @@ void writeToFile(const float time, const float loss, const std::string &fileName
     }
 }
 
-void writeToFile(const float time, const Tensor<float,1> &t, const std::string &fileName, bool append = true) {
+void writeToFile(const float time, const Tensor1f &t, const std::string &fileName, bool append = true) {
     if (append) {
         std::ofstream file(fileName, std::ios::app);
         if (file.is_open())
@@ -232,7 +232,7 @@ void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event
             if (time > end_time) break;
             if (counter > max_events) break;
             std::vector coords = {height, width};
-            events.emplace_back(std::shared_ptr<Event>(new CameraEvent(time, coords, polarity*2-1)));
+            events.emplace_back(std::make_shared<CameraEvent>(time, coords, polarity*2-1));
             counter++;
         }
     }
@@ -263,7 +263,7 @@ void read_imu(const std::string &file_path, std::vector<std::shared_ptr<Event>> 
             if (counter > max_events) break;
             accel = {a2, a1, a3};
             angVel = {g2, g1, g3};
-            events.emplace_back(std::shared_ptr<Event>(new IMUEvent(time, accel, angVel)));
+            events.emplace_back(std::make_shared<IMUEvent>(time, accel, angVel));
             counter++;
         }
     }
@@ -291,7 +291,7 @@ void readImage(const std::string &file_path, std::vector<std::shared_ptr<Event>>
             if (image.empty()) {
                 std::cerr << "Error: Could not load image at " << imagePath << std::endl;
             } else {
-                events.emplace_back(std::shared_ptr<Event>(new ImageEvent(time, img32f)));
+                events.emplace_back(std::make_shared<ImageEvent>(time, img32f));
                 counter++;
             }
         }

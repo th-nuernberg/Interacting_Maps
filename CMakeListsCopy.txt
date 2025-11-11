@@ -7,11 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Include directories
 include_directories(
-        ${PROJECT_SOURCE_DIR}/external/eigen
-        ${PROJECT_SOURCE_DIR}/external/autodiff
-        ${PROJECT_SOURCE_DIR}/include
-        ${OpenCV_INCLUDE_DIRS}
-        ${Boost_INCLUDE_DIRS}
+    ${PROJECT_SOURCE_DIR}/external/eigen
+    ${PROJECT_SOURCE_DIR}/external/autodiff
+    ${PROJECT_SOURCE_DIR}/include
+    ${OpenCV_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS}
 )
 
 # Find packages
@@ -25,7 +25,7 @@ add_subdirectory(src)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-g)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_options(Executable PRIVATE -O3 -march=native)
+    add_compile_options(-O3)
 endif()
 
 if (PROFILING)
