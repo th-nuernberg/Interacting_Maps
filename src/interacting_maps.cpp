@@ -9,6 +9,7 @@
 #include <cmath>
 #include <boost/program_options.hpp>
 #include <update.h>
+#include <cost.h>
 
 #include "file_operations.h"
 #include "imaging.h"
@@ -112,8 +113,8 @@ int main(int argc, char* argv[]) {
             ("endTime,f", po::value<float>()->default_value(60), "Where to end with event consideration")
             ("timeFormat,s", po::value<std::string>()->default_value("muS"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
             ("timeStep,f", po::value<float>()->default_value(0.0460299576597383), "Size of the event frames")
-            ("resourceDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
+            ("resourceDirectory,s", po::value<std::string>()->default_value("22_peds_town7_backward_clear-noon"), "Which dataset to use, searches in res directory")
+            ("resultsDirectory,s", po::value<std::string>()->default_value("22_peds_town7_backward_clear-noon"), "Where to store the results, located in output directory")
             ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
@@ -458,6 +459,11 @@ int main(int argc, char* argv[]) {
                     std::string image_name = "VIGF_" + filename.str() + ".png";
                     fs::path image_path = folder_path / image_name;
                     create_VIGF(Tensor2Matrix(V_Vis), Tensor2Matrix(MI), G, F, image_path, true, 0.1);
+                    float cost1, cost2, cost3;
+                    cost1 = costFR(F, CCM, dCdx, dCdy, R);
+                    cost2 = costFG(F, V_Vis, G);
+                    cost3 = costGI(G, delta_I);
+                    std::cout << "Costs" << cost1 << " " << cost2 << " " << cost3;
                     saveImage(Tensor2Matrix(MI), folder_path / ("frame_" + filename.str() + ".png"), true);
                     V_Vis.setZero();
                     randomInit(F, -1, 1);

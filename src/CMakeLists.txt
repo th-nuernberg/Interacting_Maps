@@ -8,6 +8,7 @@ set(SOURCES
         update.cpp
         events.cpp
         datatypes.cpp
+        cost.cpp
 )
 
 # List headers (optional, for IDE support)
@@ -22,6 +23,7 @@ set(HEADERS
         ../include/video.h
         ../include/update.h
         ../include/events.h
+        ../include/cost.h
 )
 
 
@@ -31,7 +33,10 @@ add_executable(Executable ${SOURCES} ${HEADERS})
 # Link libraries
 target_link_libraries(Executable
         ${OpenCV_LIBS}
-        ${Boost_LIBRARIES})
+        ${Boost_LIBRARIES}
+        ${HDF5_LIBRARIES}
+        ${HDF5_CXX_LIBRARIES})
+
 
 # Set output directory
 set_target_properties(Executable PROPERTIES
