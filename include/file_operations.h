@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include "datatypes.h"
+#include <H5Cpp.h>
 
 namespace fs = std::filesystem;
 
@@ -45,4 +46,13 @@ void read_imu(const std::string &file_path, std::vector<std::shared_ptr<Event>> 
 void readImage(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events);
 
 void mergeTimeCollections(std::vector<std::shared_ptr<Event>>& collection1, std::vector<std::shared_ptr<Event>>& collection2, std::vector<std::shared_ptr<Event>> &mergedCollection);
+
+size_t searchSorted(const std::vector<float>& times, float target);
+
+std::vector<std::vector<int>> readHDF5Events(
+    const std::string& filePath,
+    int maxEvents,
+    double startTime,
+    double endTime
+);
 #endif //INTERACTINGMAPS_FILE_OPERATIONS_H

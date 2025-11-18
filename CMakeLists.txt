@@ -17,15 +17,14 @@ include_directories(
 # Find packages
 find_package(OpenCV REQUIRED)
 find_package(Boost COMPONENTS program_options REQUIRED)
-
-# Add the src directory
+find_package(HDF5 NAMES hdf5)# Add the src directory
 add_subdirectory(src)
 
 # Compiler options
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_options(-g)
+    add_compile_options(-g -lhdf5 -lhdf5_cpp)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_options(Executable PRIVATE -O3 -march=native)
+    add_compile_options(Executable PRIVATE -O3 -march=native -lhdf5 -lhdf5_cpp)
 endif()
 
 if (PROFILING)
