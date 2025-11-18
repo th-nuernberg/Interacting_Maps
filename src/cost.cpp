@@ -46,7 +46,7 @@ float costFG(const Tensor3f &F, const Tensor2f &V, const Tensor3f &G){
     return cost;
 }
 
-float costGI(Tensor3f &G, const Tensor3f &I_gradient){
+float costGI(const Tensor3f &G, const Tensor3f &I_gradient){
     const auto& dimensions = G.dimensions();
     Eigen::array<int, 1> dims({2 /* dimension to reduce */});
     Tensor<float, 3> square(dimensions);

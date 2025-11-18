@@ -370,7 +370,7 @@ int main(int argc, char* argv[]) {
         std::vector<std::shared_ptr<Event>> cameraEventData;
         read_events(eventPath, cameraEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX, timeFormat);
         std::cout << "Readout events at " << eventPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
-
+        std::cout << "Read " << cameraEventData.size() << " events." << std::endl;
         std::vector<std::shared_ptr<Event>> event_data;
 
         if (vm["fuseR"].as<bool>()) {
