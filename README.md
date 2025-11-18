@@ -11,6 +11,12 @@ The executable creates a folder of output frames for visual inspection, a time s
 
 The events currently have to be provided with via a text file, called events.txt. Each event consists of a time stamp, a x and y coordinate and a polarity [0,1]
 
+## Packages
+Eigen
+Boost
+OpenCV
+hdf5
+autodiff
 
 
 ## Acknowledgements
