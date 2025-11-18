@@ -110,6 +110,7 @@ int main(int argc, char* argv[]) {
             ("help,h", "Produce help message")
             ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
             ("endTime,f", po::value<float>()->default_value(60), "Where to end with event consideration")
+            ("timeFormat,s", po::value<std::string>()->default_value("muS"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
             ("timeStep,f", po::value<float>()->default_value(0.0460299576597383), "Size of the event frames")
             ("resourceDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
             ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
@@ -132,6 +133,7 @@ int main(int argc, char* argv[]) {
     // Retrieve values (using defaults if not provided)
     float startTime = vm["startTime"].as<float>();
     float endTime = vm["endTime"].as<float>();
+    std::string timeFormat = vm["timeFormat"].as<std::string>();
     // Split time interval into sub intervals to allow loading of larger files.
     int nIntervals = 1;
     float maxIntervalLength = 2.5;
@@ -365,7 +367,7 @@ int main(int argc, char* argv[]) {
         // Read events file
 
         std::vector<std::shared_ptr<Event>> cameraEventData;
-        read_events(eventPath, cameraEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
+        read_events(eventPath, cameraEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX, timeFormat);
         std::cout << "Readout events at " << eventPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
 
         std::vector<std::shared_ptr<Event>> event_data;

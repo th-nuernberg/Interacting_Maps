@@ -38,7 +38,7 @@ void read_single_line_txt(const std::string &file_path, std::vector<float> &cali
 
 Calibration_Data get_calibration_data(const std::vector<float> &raw_data, int frame_height, int frame_width);
 
-void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events);
+void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events, std::string timeFormat);
 
 void read_imu(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events);
 

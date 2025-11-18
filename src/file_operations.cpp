@@ -219,7 +219,7 @@ Calibration_Data get_calibration_data(const std::vector<float> &raw_data, int fr
  * @param event_factor allows scaling the event intensity with an factor
  * @param max_events upper limit on the amount of events to save if end_time is not reached before
  */
-void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events = INT32_MAX){
+void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events = INT32_MAX, std::string timeFormat="muS"){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
@@ -227,12 +227,20 @@ void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event
         int counter = 0;
         float time;
         int width, height, polarity;
+        int timeFactor = 1;
+        if (timeFormat == "ms") {
+            timeFactor = 1/1000;
+        }
+        if (timeFormat == "mus") {
+            timeFactor = 1/1000000;
+        }
         while (event_file >> time >> width >> height >> polarity){
             if (time < start_time) continue;
             if (time > end_time) break;
             if (counter > max_events) break;
             std::vector coords = {height, width};
-            events.emplace_back(std::make_shared<CameraEvent>(time, coords, polarity*2-1));
+
+            events.emplace_back(std::make_shared<CameraEvent>(time*timeFactor, coords, polarity*2-1));
             counter++;
         }
     }
