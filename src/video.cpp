@@ -4,7 +4,6 @@
 #include <opencv2/opencv.hpp>
 #include <filesystem>
 #include <vector>
-#include <algorithm>
 #include <iostream>
 
 namespace fs = std::filesystem;

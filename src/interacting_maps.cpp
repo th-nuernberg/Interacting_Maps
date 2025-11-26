@@ -506,9 +506,9 @@ int main(int argc, char* argv[]) {
 
     std::string outputFile = "output.mp4";
 
-#ifdef IMAGES
-    VideoCreator::createMP4Video(folder_path, folder_path / outputFile, static_cast<int>((parameters["fps"])));
-#endif
+//#ifdef IMAGES
+//    VideoCreator::createMP4Video(folder_path, folder_path / outputFile, static_cast<int>((parameters["fps"])));
+//#endif
 
     Instrumentor::Get().EndSession();
 }
