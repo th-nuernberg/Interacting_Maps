@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.26)
 project(InteractingMaps LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,14 +39,18 @@ CPMAddPackage(
 )
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
+find_package(HDF5 NAMES hdf5)# Add the src directory
+
 
 # Include directories for the entire project
 include_directories(
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/external
+        ${PROJECT_SOURCE_DIR}/external/autodiff
+        ${PROJECT_SOURCE_DIR}/external/eigen
         ${OpenCV_INCLUDE_DIRS}
 )
 
 # Add the src subdirectory
 add_subdirectory(src)
-add_subdirectory(external/autodiff)
+#add_subdirectory(external/autodiff)

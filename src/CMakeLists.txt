@@ -11,25 +11,11 @@ add_library(interacting_maps_lib
         cost.cpp
 )
 
-target_include_directories(interacting_maps_lib
-        PUBLIC ${PROJECT_SOURCE_DIR}/include
-)
+#target_include_directories(interacting_maps_lib
+#        PUBLIC ${PROJECT_SOURCE_DIR}/include
+#)
 
-# Link libraries to the executable
-target_link_libraries(InteractingMaps
-        PRIVATE
-        autodiff
-        Eigen3::Eigen
-        Boost::container
-        Boost::filesystem
-        Boost::log
-        Boost::program_options
-        ${OpenCV_LIBS}
-        opencv_core
-        opencv_imgproc
-        opencv_calib3d  # <-- Add this line (required for cv::undistort)
-        opencv_highgui
-)
+
 
 # target_link_libraries(example  Boost::asio Boost::container Boost::filesystem Boost::log)
 # === Executables ===
@@ -50,10 +36,20 @@ target_link_libraries(InteractingMaps
         interacting_maps_lib
         Eigen3::Eigen
         Boost::program_options
+        Boost::container
+        Boost::filesystem
+        Boost::log
         ${OpenCV_LIBS}
-        //${Boost_LIBRARIES}
+        opencv_core
+        opencv_imgproc
+        opencv_calib3d  # <-- Add this line (required for cv::undistort)
+        opencv_highgui
+        autodiff
+        # ${Boost_LIBRARIES}
         ${HDF5_LIBRARIES}
-        ${HDF5_CXX_LIBRARIES})
+        ${HDF5_CXX_LIBRARIES}
+)
+
 
 set_target_properties(InteractingMaps
         PROPERTIES

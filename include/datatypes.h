@@ -17,7 +17,7 @@ using namespace Eigen;
  * Define some common datatypes. Sometimes the non-standard RowMajor versions of eigen matrices/tensors are prefered
  * If other libraries have their data stored in a row-major format.
  */
-namespace{
+namespace Eigen{
     typedef Matrix<float, Dynamic, Dynamic, RowMajor> MatrixXfRowMajor;
     typedef Matrix<double, Dynamic, Dynamic, RowMajor> MatrixXdRowMajor;
     typedef Matrix<int, Dynamic, Dynamic, RowMajor> MatrixXiRowMajor;
