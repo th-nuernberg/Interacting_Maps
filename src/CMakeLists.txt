@@ -58,12 +58,12 @@ set_target_properties(InteractingMaps
 
 # Add compiler options
 foreach(exe IN ITEMS InteractingMaps)
+    # Compiler options
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        target_compile_options(${exe} PRIVATE -g)
+        add_compile_options(-g -lhdf5 -lhdf5_cpp)
     elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-        target_compile_options(${exe} PRIVATE -O3)
+        add_compile_options(Executable PRIVATE -O3 -march=native -lhdf5 -lhdf5_cpp)
     endif()
-
     if(PROFILING)
         target_compile_definitions(${exe} PRIVATE PROFILING=1)
     endif()
