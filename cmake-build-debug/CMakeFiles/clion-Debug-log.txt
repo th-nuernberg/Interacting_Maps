@@ -1,30 +1,85 @@
-/home/arbeit/.cache/JetBrains/RemoteDev/dist/7c26c46eeb42c_CLion-242.20224.214/bin/cmake/linux/x64/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/usr/bin/ninja -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ "-DCMAKE_CXX_FLAGS=-Wall -Wextra -DDEBUG -l boost_program_options" -DCMAKE_TOOLCHAIN_FILE=toolchain-gcc13.cmake -G Ninja -S /home/arbeit/Code/Interacting_Maps -B /home/arbeit/Code/Interacting_Maps/cmake-build-debug
-CMake Warning at cmake/CPM.cmake:80 (message):
-  CPM: Your project is using an unstable development version of CPM.cmake.
-  Please update to a recent release if possible.  See
-  https://github.com/cpm-cmake/CPM.cmake for details.
-Call Stack (most recent call first):
-  CMakeLists.txt:9 (include)
-
-
+/Applications/CLion.app/Contents/bin/cmake/mac/aarch64/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/Applications/CLion.app/Contents/bin/ninja/mac/aarch64/ninja -DCMAKE_BUILD_TYPE=Debug -DIMAGES=ON -G Ninja -S /Users/dapo/CLionProjects/Interacting_Maps -B /Users/dapo/CLionProjects/Interacting_Maps/cmake-build-debug
 -- CPM: Adding package Boost@1.86.0 (1.86.0)
 -- Boost: Debug build, static libraries, MPI OFF, Python OFF, testing OFF
 -- Boost: libraries included: container;asio;filesystem;regex;log;program_options
--- Boost.Context: architecture x86_64, binary format elf, ABI sysv, assembler gas, suffix .S, implementation fcontext
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Performing Test BOOST_ATOMIC_TARGET_X86
+-- Performing Test BOOST_ATOMIC_TARGET_X86 - Failed
+-- Boost.Context: architecture arm64, binary format mach-o, ABI aapcs, assembler gas, suffix .S, implementation fcontext
+-- The ASM compiler identification is AppleClang
+-- Found assembler: /usr/bin/cc
+CMake Deprecation Warning at cmake-build-debug/_deps/boost-src/libs/filesystem/CMakeLists.txt:10 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Performing Test BOOST_FILESYSTEM_HAS_INIT_PRIORITY
+-- Performing Test BOOST_FILESYSTEM_HAS_INIT_PRIORITY - Success
+-- Performing Test BOOST_FILESYSTEM_HAS_CXX20_ATOMIC_REF
+-- Performing Test BOOST_FILESYSTEM_HAS_CXX20_ATOMIC_REF - Success
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_BLKSIZE
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_BLKSIZE - Success
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_MTIM
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_MTIM - Failed
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_MTIMENSEC
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_MTIMENSEC - Failed
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_MTIMESPEC
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_MTIMESPEC - Success
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_BIRTHTIMENSEC
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_BIRTHTIMENSEC - Failed
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_BIRTHTIMESPEC
+-- Performing Test BOOST_FILESYSTEM_HAS_STAT_ST_BIRTHTIMESPEC - Success
+-- Performing Test BOOST_FILESYSTEM_HAS_STATX
+-- Performing Test BOOST_FILESYSTEM_HAS_STATX - Failed
+-- Performing Test BOOST_FILESYSTEM_HAS_STATX_SYSCALL
+-- Performing Test BOOST_FILESYSTEM_HAS_STATX_SYSCALL - Failed
+-- Performing Test BOOST_FILESYSTEM_HAS_FDOPENDIR_NOFOLLOW
+-- Performing Test BOOST_FILESYSTEM_HAS_FDOPENDIR_NOFOLLOW - Success
+-- Performing Test BOOST_FILESYSTEM_HAS_DIRENT_D_TYPE
+-- Performing Test BOOST_FILESYSTEM_HAS_DIRENT_D_TYPE - Success
+-- Performing Test BOOST_FILESYSTEM_HAS_POSIX_AT_APIS
+-- Performing Test BOOST_FILESYSTEM_HAS_POSIX_AT_APIS - Failed
+-- Performing Test BOOST_FILESYSTEM_HAS_FALLOCATE
+-- Performing Test BOOST_FILESYSTEM_HAS_FALLOCATE - Failed
+CMake Deprecation Warning at cmake-build-debug/_deps/boost-src/libs/log/CMakeLists.txt:6 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Performing Test BOOST_LOG_TARGET_X86
+-- Performing Test BOOST_LOG_TARGET_X86 - Failed
+-- Performing Test BOOST_LOG_HAS_LOCK_FREE_ATOMIC_INT32
+-- Performing Test BOOST_LOG_HAS_LOCK_FREE_ATOMIC_INT32 - Success
+-- Performing Test BOOST_LOG_HAS_NATIVE_SYSLOG
+-- Performing Test BOOST_LOG_HAS_NATIVE_SYSLOG - Success
 -- Boost.Thread: threading API is pthread
 -- CPM: Adding package Eigen@3.4 (3.4)
 -- 
 -- Configured Eigen 3.4.1
 -- 
 -- CPM: Adding package Catch2@3.9.1 (v3.9.1)
+-- Performing Test HAVE_FLAG__ffile_prefix_map__Users_dapo_CLionProjects_Interacting_Maps_cmake_build_debug__deps_catch2_src__
+-- Performing Test HAVE_FLAG__ffile_prefix_map__Users_dapo_CLionProjects_Interacting_Maps_cmake_build_debug__deps_catch2_src__ - Success
 -- CPM: Adding package pybind11@3.0.0 (v3.0.0)
 -- pybind11 v3.0.0 
--- Found Python: /home/arbeit/.pyenv/shims/python3.10 (found suitable version "3.10.12", minimum required is "3.8") found components: Interpreter Development.Module Development.Embed
+-- Found Python: /opt/homebrew/Frameworks/Python.framework/Versions/3.14/bin/python3.14 (found suitable version "3.14.0", minimum required is "3.8") found components: Interpreter Development.Module Development.Embed
 Using compatibility mode for Python, set PYBIND11_FINDPYTHON to NEW/OLD to silence this message
--- CPM: Adding package autodiff@1.1.2 (v1.1.2)
--- Eigen library has been found.
--- No CUDA compiler found
--- Found Python: /home/arbeit/.pyenv/shims/python3.10 (found version "3.10.12") found components: Interpreter Development Development.Module Development.Embed
--- Configuring done (11.6s)
--- Generating done (0.1s)
--- Build files have been written to: /home/arbeit/Code/Interacting_Maps/cmake-build-debug
+-- Performing Test HAS_FLTO_THIN
+-- Performing Test HAS_FLTO_THIN - Success
+-- Found OpenCV: /opt/homebrew/Cellar/opencv/4.12.0_11 (found version "4.12.0") found components: core imgproc highgui
+CMake Error at src/CMakeLists.txt:14:
+  Parse error.  Expected a command name, got unquoted argument with text
+  "<<<<<<<".
+
+
+-- Configuring incomplete, errors occurred!
