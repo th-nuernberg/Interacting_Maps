@@ -112,7 +112,7 @@ int main(int argc, char* argv[]) {
             ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
             ("endTime,f", po::value<float>()->default_value(60), "Where to end with event consideration")
             ("timeFormat,s", po::value<std::string>()->default_value("muS"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
-            ("timeStep,f", po::value<float>()->default_value(0.0460299576597383), "Size of the event frames")
+            ("timeStep,f", po::value<float>()->default_value(0.001), "Size of the event frames")
             ("resourceDirectory,s", po::value<std::string>()->default_value("22_peds_town7_backward_clear-noon"), "Which dataset to use, searches in res directory")
             ("resultsDirectory,s", po::value<std::string>()->default_value("22_peds_town7_backward_clear-noon"), "Where to store the results, located in output directory")
             ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
@@ -137,7 +137,7 @@ int main(int argc, char* argv[]) {
     std::string timeFormat = vm["timeFormat"].as<std::string>();
     // Split time interval into sub intervals to allow loading of larger files.
     int nIntervals = 1;
-    float maxIntervalLength = 2.5;
+    float maxIntervalLength = 0.1;
     std::vector intervals = {startTime, endTime};
     if (endTime - startTime > maxIntervalLength) {
         float currentTime = startTime;
@@ -345,6 +345,7 @@ int main(int argc, char* argv[]) {
     // For keeping track of the current Event
     int y;
     int x;
+    float time;
     std::vector<float> ang_velocity = {0,0,0};
     std::vector<float> acceleration = {0,0,0};
     bool cEventFlag = true;
@@ -397,6 +398,7 @@ int main(int argc, char* argv[]) {
                 PROFILE_SCOPE("CAMERA_EVENT");
                 y = cEvent->coordinates[0];
                 x = cEvent->coordinates[1];
+                time = cEvent->time;
                 V = static_cast<float>(cEvent->polarity) * parameters["eventContribution"];
                 //decayTimeSurface(y,x) = event->time;
 
@@ -405,7 +407,7 @@ int main(int argc, char* argv[]) {
 
                 // Perform an update step for the current event for I G R and F
                 exponentialDecay(MI, decayTimeSurface, y, x, event->time, parameters["neutralPotential"], parameters["decayParam"]);
-                for (int i = 0; i < 1; ++i) {
+                for (int i = 0; i < 2; ++i) {
                     event_step(V, MI, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
                                Identity_minus_outerProducts, old_points, parameters, permutation, y, x);
                 }
@@ -463,11 +465,11 @@ int main(int argc, char* argv[]) {
                     cost1 = costFR(F, CCM, dCdx, dCdy, R);
                     cost2 = costFG(F, V_Vis, G);
                     cost3 = costGI(G, delta_I);
-                    std::cout << "Costs" << cost1 << " " << cost2 << " " << cost3;
+                    std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
                     saveImage(Tensor2Matrix(MI), folder_path / ("frame_" + filename.str() + ".png"), true);
                     V_Vis.setZero();
-                    randomInit(F, -1, 1);
-                    G.setZero();
+                    //randomInit(F, -1, 1);
+                    //G.setZero();
 
    // #endif
                 //globalDecay(MI, decayTimeSurface, nP, t, dP);
@@ -490,7 +492,6 @@ int main(int argc, char* argv[]) {
     writeToFile(ss.str(), folder_path / "time_complete.txt");
     writeToFile(ssrt.str(), folder_path / "time_realtime.txt");
     std::cout << "Algorithm took: " << elapsed_realtime.count() << "seconds/ Real elapsed time: " << parameters["endTime"] - parameters["startTime"] << std::endl;
-
 
     std::string outputFile = "output.mp4";
 

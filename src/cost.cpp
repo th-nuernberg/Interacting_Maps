@@ -27,7 +27,7 @@ float costFR(const Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const T
     cross_colMajor = cross.swap_layout().shuffle(shuffle);
     sum = cross_colMajor.sum(dims);
     float cost = static_cast<Eigen::Tensor<float, 0>>(sum.sum(dims2).eval())();
-    return cost;
+    return cost/static_cast<float>((dimensions[0]*dimensions[1]));
 }
 
 float costFG(const Tensor3f &F, const Tensor2f &V, const Tensor3f &G){
@@ -43,7 +43,7 @@ float costFG(const Tensor3f &F, const Tensor2f &V, const Tensor3f &G){
 
     diff = (V_colMajor - dot_colMajor).square();
     float cost = static_cast<Eigen::Tensor<float, 0>>(diff.sum().eval())();
-    return cost;
+    return cost/static_cast<float>((dimensions[0]*dimensions[1]));
 }
 
 float costGI(const Tensor3f &G, const Tensor3f &I_gradient){
@@ -62,5 +62,5 @@ float costGI(const Tensor3f &G, const Tensor3f &I_gradient){
     square = (Igrad_colMajor - G_colMajor).square();
     sum = square.sum(dims);
     float cost = static_cast<Eigen::Tensor<float, 0>>(sum.sum().eval())();
-    return cost;
+    return cost/static_cast<float>((dimensions[0]*dimensions[1]));
 }
