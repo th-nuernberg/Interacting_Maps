@@ -5,7 +5,7 @@
 #define INTERACTINGMAPS_CONVERSIONS_H
 
 #include "datatypes.h"
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
 
 using namespace Eigen;
 

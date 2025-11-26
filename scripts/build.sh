@@ -12,8 +12,14 @@ mkdir -p build
 cmake -S . -B build -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=toolchain-gcc13.cmake \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=1
-  #-DBUILD_SHARED_LIBS=OFF
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
+  -D BUILD_SHARED_LIBS=OFF \
+  -D WITH_GTK=OFF \
+  -D WITH_QT=OFF \
+  -D BUILD_opencv_videoio=OFF \
+  -D WITH_FFMPEG=OFF \
+  -D IMAGES=ON \
+  -D AUTODIFF_BUILD_PYTHON=OFF  # <-- Add this line to disable Python bindings
 
 cmake --build build
 

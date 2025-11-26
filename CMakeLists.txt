@@ -1,11 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
 project(InteractingMaps LANGUAGES CXX)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# toolchain-gcc13.cmake
-
+# Include CPM for dependency management
 include(cmake/CPM.cmake)
 
 # Dependencies
@@ -25,16 +23,8 @@ CPMAddPackage(
         NAME Eigen
         GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
         GIT_TAG 3.4
-        OPTIONS "EIGEN_BUILD_DOC OFF"
-        "EIGEN_BUILD_PKGCONFIG OFF"
+        OPTIONS "EIGEN_BUILD_DOC OFF" "EIGEN_BUILD_PKGCONFIG OFF"
 )
-
-# CPMAddPackage(
-#         NAME opencv
-#         GIT_REPOSITORY https://github.com/opencv/opencv.git
-#         GIT_TAG 4.5.0
-# )
-
 
 CPMAddPackage(
         NAME Catch2
@@ -48,36 +38,15 @@ CPMAddPackage(
         GIT_TAG v3.0.0
 )
 
-CPMAddPackage(
-        NAME autodiff
-        GIT_REPOSITORY https://github.com/autodiff/autodiff.git
-        GIT_TAG v1.1.2
-        OPTIONS "AUTODIFF_BUILD_PYTHON OFF"
-)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
 
-#CPMAddPackage(
-#        NAME libusb-1.0
-#        GIT_REPOSITORY https://github.com/libusb/libusb.git
-#        GIT_TAG v1.0.29
-#)
-#
-#CPMAddPackage(
-#        NAME dv-processing
-#        GIT_REPOSITORY https://gitlab.com/inivation/dv/dv-processing.git
-#        GIT_TAG 2.0.2
-#)
-
-find_package(OpenCV REQUIRED)
-#find_package(Boost REQUIRED COMPONENTS program_options)
-
+# Include directories for the entire project
 include_directories(
-#        ${PROJECT_SOURCE_DIR}/external/eigen
-#        ${PROJECT_SOURCE_DIR}/external/autodiff
         ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/external
         ${OpenCV_INCLUDE_DIRS}
 )
 
-# Build src/
+# Add the src subdirectory
 add_subdirectory(src)
-
-
+add_subdirectory(external/autodiff)

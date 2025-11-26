@@ -15,15 +15,20 @@ target_include_directories(interacting_maps_lib
         PUBLIC ${PROJECT_SOURCE_DIR}/include
 )
 
-target_link_libraries(interacting_maps_lib
-        PUBLIC
-        ${OpenCV_LIBS}
-        Eigen3::Eigen
+# Link libraries to the executable
+target_link_libraries(InteractingMaps
+        PRIVATE
         autodiff
+        Eigen3::Eigen
         Boost::container
         Boost::filesystem
         Boost::log
         Boost::program_options
+        ${OpenCV_LIBS}
+        opencv_core
+        opencv_imgproc
+        opencv_calib3d  # <-- Add this line (required for cv::undistort)
+        opencv_highgui
 )
 
 # target_link_libraries(example  Boost::asio Boost::container Boost::filesystem Boost::log)

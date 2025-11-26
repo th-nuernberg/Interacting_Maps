@@ -2,7 +2,12 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <opencv2/opencv.hpp>
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
+#include <unsupported/Eigen/CXX11/Tensor>
+#include <opencv2/core.hpp>
+#include <autodiff/forward/real.hpp>
+#include <autodiff/forward/real/eigen.hpp>
 #include <filesystem>
 
 #include "datatypes.h"

@@ -7,7 +7,9 @@
 
 #include <vector>
 #include <unsupported/Eigen/CXX11/Tensor>
-#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 
 using namespace Eigen;
 

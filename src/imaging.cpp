@@ -5,6 +5,7 @@
 #include "datatypes.h"
 #include "conversions.h"
 
+
 #define PI 3.14159265
 
 /**
@@ -527,8 +528,8 @@ cv::Mat plot_VvsFG(const MatrixXfRowMajor &V, const Tensor3f &F, const Tensor3f 
         imwrite(path, finalImage);
     }
     else{
-        cv::imshow("V vs F dot G", finalImage);
-        cv::waitKey(0); // Wait for a key press before closing the window
+        //cv::imshow("V vs F dot G", finalImage);
+        //cv::waitKey(0); // Wait for a key press before closing the window
     }
     return finalImage;
 }
