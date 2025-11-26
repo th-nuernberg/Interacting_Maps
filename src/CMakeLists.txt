@@ -36,7 +36,7 @@ target_link_libraries(InteractingMaps
 )
 
 # Set output directory for the executable
-set_target_properties(InteractingMaps PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+set_target_properties(InteractingMaps PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 # Compiler options
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
