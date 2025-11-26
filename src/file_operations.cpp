@@ -227,20 +227,21 @@ void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event
         int counter = 0;
         float time;
         int width, height, polarity;
-        int timeFactor = 1;
-        if (timeFormat == "ms") {
-            timeFactor = 1/1000;
+        float timeFactor = 1.0;
+        if (timeFormat == "mS") {
+            timeFactor = 1.0/1000;
         }
-        if (timeFormat == "mus") {
-            timeFactor = 1/1000000;
+        if (timeFormat == "muS") {
+            timeFactor = 1.0/1000000;
         }
         while (event_file >> time >> width >> height >> polarity){
+            time = time*timeFactor;
             if (time < start_time) continue;
             if (time > end_time) break;
             if (counter > max_events) break;
             std::vector coords = {height, width};
 
-            events.emplace_back(std::make_shared<CameraEvent>(time*timeFactor, coords, polarity*2-1));
+            events.emplace_back(std::make_shared<CameraEvent>(time, coords, polarity*2-1));
             counter++;
         }
     }
