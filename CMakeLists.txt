@@ -53,4 +53,4 @@ include_directories(
 
 # Add the src subdirectory
 add_subdirectory(src)
-#add_subdirectory(external/autodiff)
+add_subdirectory(external/autodiff)
