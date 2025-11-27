@@ -45,9 +45,7 @@ target_link_libraries(InteractingMaps
         opencv_calib3d  # <-- Add this line (required for cv::undistort)
         opencv_highgui
         autodiff
-        # ${Boost_LIBRARIES}
-        ${HDF5_LIBRARIES}
-        ${HDF5_CXX_LIBRARIES}
+        #${Boost_LIBRARIES}
 )
 
 
@@ -60,9 +58,9 @@ set_target_properties(InteractingMaps
 foreach(exe IN ITEMS InteractingMaps)
     # Compiler options
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        add_compile_options(-g -lhdf5 -lhdf5_cpp)
+        add_compile_options(-g)
     elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-        add_compile_options(Executable PRIVATE -O3 -march=native -lhdf5 -lhdf5_cpp)
+        add_compile_options(Executable PRIVATE -O3 -march=native)
     endif()
     if(PROFILING)
         target_compile_definitions(${exe} PRIVATE PROFILING=1)

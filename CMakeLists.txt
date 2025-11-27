@@ -39,8 +39,6 @@ CPMAddPackage(
 )
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
-find_package(HDF5 NAMES hdf5)# Add the src directory
-
 
 # Include directories for the entire project
 include_directories(
@@ -48,6 +46,7 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/external
         ${PROJECT_SOURCE_DIR}/external/autodiff
         ${PROJECT_SOURCE_DIR}/external/eigen
+        ${HDF5_INCLUDE_DIRS}  # Add this line
         ${OpenCV_INCLUDE_DIRS}
 )
 
