@@ -7,7 +7,6 @@
 #include <memory>
 #include "Instrumentor.h"
 #include <cmath>
-#include <boost/program_options.hpp>
 #include <update.h>
 #include <cost.h>
 

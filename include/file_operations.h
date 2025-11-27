@@ -9,7 +9,6 @@
 #include <filesystem>
 #include <fstream>
 #include "datatypes.h"
-#include <H5Cpp.h>
 
 namespace fs = std::filesystem;
 

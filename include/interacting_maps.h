@@ -9,6 +9,7 @@
 #include <autodiff/forward/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
 #include <filesystem>
+#include <boost/program_options.hpp>
 
 #include "datatypes.h"
 

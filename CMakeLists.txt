@@ -1,10 +1,14 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.26, FATAL_ERROR)
 project(InteractingMaps LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Include CPM for dependency management
 include(cmake/CPM.cmake)
+
+#set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+#set(BUILD_SHARED_LIBS OFF)
+#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
 
 # Dependencies
 CPMAddPackage(
@@ -19,12 +23,12 @@ CPMAddPackage(
         "BOOST_INCLUDE_LIBRARIES container\\\;asio\\\;filesystem\\\;regex\\\;log\\\;program_options"
 )
 
-CPMAddPackage(
-        NAME Eigen
-        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        GIT_TAG 3.4
-        OPTIONS "EIGEN_BUILD_DOC OFF" "EIGEN_BUILD_PKGCONFIG OFF"
-)
+#CPMAddPackage(
+#        NAME Eigen
+#        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+#        GIT_TAG 3.4
+#        OPTIONS "EIGEN_BUILD_DOC OFF" "EIGEN_BUILD_PKGCONFIG OFF"
+#)
 
 CPMAddPackage(
         NAME Catch2
@@ -39,8 +43,10 @@ CPMAddPackage(
 )
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
+find_package(Eigen3)
 
 # Include directories for the entire project
+message("Project source dir: " ${PROJECT_SOURCE_DIR})
 include_directories(
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/external
