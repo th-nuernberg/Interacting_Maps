@@ -23,10 +23,14 @@ target_link_libraries(interacting_maps_lib
         Boost::program_options
         Eigen3::Eigen
         ${OpenCV_LIBS}
+        #${HDF5_L}
         opencv_core
         opencv_imgproc
         opencv_calib3d  # <-- Add this line (required for cv::undistort)
         opencv_highgui
+        hdf5-shared
+        ${HDF5_CXX_LIBRARIES}
+        ${HDF5_C_LIBRARIES}
 )
 
 # === Executables ===
