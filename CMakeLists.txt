@@ -20,7 +20,18 @@ CPMAddPackage(
         "BOOST_ENABLE_CMAKE ON"
         "BOOST_SKIP_INSTALL_RULES ON"
         "BUILD_SHARED_LIBS OFF"
-        "BOOST_INCLUDE_LIBRARIES container\\\;asio\\\;filesystem\\\;regex\\\;log\\\;program_options"
+        "BOOST_INCLUDE_LIBRARIES container\\\;asio\\\;filesystem\\\;regex\\\;log\\\;program_options\\\;nowide"
+)
+# After CPMAddPackage for Boost
+add_library(Boost::boost INTERFACE IMPORTED)
+target_link_libraries(Boost::boost INTERFACE
+        Boost::container
+        Boost::asio
+        Boost::filesystem
+        Boost::regex
+        Boost::log
+        Boost::program_options
+        Boost::nowide
 )
 
 #CPMAddPackage(
@@ -44,6 +55,9 @@ CPMAddPackage(
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
 find_package(Eigen3)
+find_package(Boost)
+FIND_PACKAGE(dv-processing REQUIRED)
+
 
 # Include directories for the entire project
 message("Project source dir: " ${PROJECT_SOURCE_DIR})
@@ -59,3 +73,4 @@ include_directories(
 # Add the src subdirectory
 add_subdirectory(src)
 add_subdirectory(external/autodiff)
+add_subdirectory(external/dv-processing EXCLUDE_FROM_ALL)
