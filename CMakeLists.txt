@@ -59,3 +59,5 @@ include_directories(
 # Add the src subdirectory
 add_subdirectory(src)
 add_subdirectory(external/autodiff)
+enable_testing()
+add_subdirectory(tests)

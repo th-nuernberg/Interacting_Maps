@@ -145,6 +145,9 @@ float sign_func(float x);
  * @param D Output Tensor of shape NxM
  */
 void computeDotProductWithLoops(const Tensor3f &A, const Tensor3f &B, Tensor2f &D);
+
+void computeDotProduct(const Tensor3f& A, const Tensor3f& B, Tensor2f& D);
+
 /**
  * Maps a 3 dimensional world vectors to 2 dimensional image vectors. Expects vectors as a 3-Tensor. Vector dimension is
  * last dimension (depth)
@@ -164,6 +167,8 @@ void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f 
  * @param Out Resulting 3-Vector
  */
 void m23(const Tensor3f &In, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &Out, int y, int x);
+
+void m23(const Tensor3f &In, const Tensor3f &Cx, const Tensor3f &Cy, Tensor3f &Out);
 
 /**
  * Calculates the gradient of 2-Tensor via central differences at a location (x,y) in x and y direction.
@@ -186,6 +191,14 @@ void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x);
  * @param x left and right position of gradient of interest
  */
 void computeGradient(const Tensor3f &data, Tensor3f &gradients, int y, int x);
+
+/**
+ * Calculates the gradient of 2-Tensor via central differences in x and y direction.
+ * Reuses first/last value at border (effectively using forward difference).
+ * @param data
+ * @param gradients
+ */
+void computeGradient(const Tensor2f& data, Tensor3f& gradients);
 
 /**
  * Checks how close the dot product of F and G are to -V, using the infinity norm.
@@ -226,6 +239,20 @@ void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::vector<s
  * @param gamma cap F values with a greater magnitude than gamma to gamma.
  */
 void update_FG(Tensor3f &F, float V, const Tensor3f &G, int y, int x, float lr, float weight_FG, float eps, float gamma);
+
+/**
+ * Update the optical flow F at a pixel based on the spatial gradient G and the temporal gradient V (for example given by Events
+ * from an Event camera)
+ * @param F Optical Flow, 3-Tensor, shape NxMx2, collection of 2-Vectors
+ * @param V Temporal Gradients, float
+ * @param G Spatial gradients, 3-Tensor, shape NxMx2, collection of 2-Vectors
+ * @param lr learning rate, currently fixed to 1.0
+ * @param weight_FG weight of the update for the convex combination with the old F value. 0.0 = no update
+ * @param eps round F values with a magnitude below eps to 0.0
+ * @param gamma cap F values with a greater magnitude than gamma to gamma.
+ */
+void update_FG(Tensor3f &F, float V, const Tensor3f &G, float lr, float weight_FG, float eps, float gamma);
+
 
 /**
  * Update the spatial gradient G at a pixel based on the optical flow F and the temporal gradient V (for example given by Events
