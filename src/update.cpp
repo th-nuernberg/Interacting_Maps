@@ -2,25 +2,26 @@
 // Created by root on 7/29/25.
 //
 #include <update.h>
+#include <Eigen/Core>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  INTERACTING MAPS HELPER FUNCTIONS  /////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 bool isApprox(Tensor3f &t1, Tensor3f &t2, const float precision = 1e-8){
-    Map<VectorXf> mt1(t1.data(), t1.size());
-    Map<VectorXf> mt2(t2.data(), t2.size());
+    const Map<VectorXf> mt1(t1.data(), t1.size());
+    const Map<VectorXf> mt2(t2.data(), t2.size());
     return mt1.isApprox(mt2, precision);
 }
 
 bool isApprox(Tensor2f &t1, Tensor2f &t2, const float precision = 1e-8){
-    Map<VectorXf> mt1(t1.data(), t1.size());
-    Map<VectorXf> mt2(t2.data(), t2.size());
+    const Map<VectorXf> mt1(t1.data(), t1.size());
+    const Map<VectorXf> mt2(t2.data(), t2.size());
     return mt1.isApprox(mt2, precision);
 }
 
 void norm_tensor_along_dim3(const Tensor3f &T, Tensor2f &norm){
-    array<int,1> dims({2});
+    constexpr array<int,1> dims({2});
     norm = T.square().sum(dims).sqrt();
 }
 
@@ -69,29 +70,32 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F, dCdy);
 
             // C_x = dCdx
-            C_x(i,j,0) = (float) dCdx(0); // y
-            C_x(i,j,1) = (float) dCdx(1); // x
-            C_x(i,j,2) = (float) dCdx(2); // z
+            C_x(i,j,0) = static_cast<float>(dCdx(0)); // y
+            C_x(i,j,1) = static_cast<float>(dCdx(1)); // x
+            C_x(i,j,2) = static_cast<float>(dCdx(2)); // z
 
             // C_y = -dCdy
-            C_y(i,j,0) = (float) -dCdy(0); // y
-            C_y(i,j,1) = (float) -dCdy(1); // x
-            C_y(i,j,2) = (float) -dCdy(2); // z
+            C_y(i,j,0) = static_cast<float>(-dCdy(0)); // y
+            C_y(i,j,1) = static_cast<float>(-dCdy(1)); // x
+            C_y(i,j,2) = static_cast<float>(-dCdy(2)); // z
         }
     }
 }
 
 void crossProduct3x3(const Tensor3f &A, const Tensor3f &B, Tensor3f &C) {
-    const auto& dims = A.dimensions();
-    long rows = dims[0]; // height
-    long cols = dims[1]; // width
-    for (long i = 0; i < rows; ++i){
-        for (long j = 0; j < cols; ++j){
-            C(i, j, 0) = A(i, j, 2) * B(i, j, 1) - A(i, j, 1) * B(i, j, 2);  // y
-            C(i, j, 1) = A(i, j, 0) * B(i, j, 2) - A(i, j, 2) * B(i, j, 0);  // x
-            C(i, j, 2) = A(i, j, 1) * B(i, j, 0) - A(i, j, 0) * B(i, j, 1);  // z
-        }
-    }
+    // Extract slices for each channel
+    const auto A0 = A.chip<2>(0);  // A[:,:,0]
+    const auto A1 = A.chip<2>(1);  // A[:,:,1]
+    const auto A2 = A.chip<2>(2);  // A[:,:,2]
+
+    const auto B0 = B.chip<2>(0);  // B[:,:,0]
+    const auto B1 = B.chip<2>(1);  // B[:,:,1]
+    const auto B2 = B.chip<2>(2);  // B[:,:,2]
+
+    // Compute cross product components using broadcasting
+    C.chip<2>(0) = A2 * B1 - A1 * B2;  // C[:,:,0] = A[:,:,2] * B[:,:,1] - A[:,:,1] * B[:,:,2]
+    C.chip<2>(1) = A0 * B2 - A2 * B0;  // C[:,:,1] = A[:,:,0] * B[:,:,2] - A[:,:,2] * B[:,:,0]
+    C.chip<2>(2) = A1 * B0 - A0 * B1;  // C[:,:,2] = A[:,:,1] * B[:,:,0] - A[:,:,0] * B[:,:,1]
 }
 
 void crossProduct3x3(const Tensor3f &A, const Vector3f &B, Vector3f &C, int y, int x) {
@@ -101,16 +105,17 @@ void crossProduct3x3(const Tensor3f &A, const Vector3f &B, Vector3f &C, int y, i
 }
 
 void crossProduct1x3(const Tensor1f &A, const Tensor3f &B, Tensor3f &C){
-    const auto& dimensions = B.dimensions();
-    for (long i = 0; i < dimensions[0]; ++i){
-        for (long j = 0; j < dimensions[1]; ++j){
-            C(i, j, 0) = A(2) * B(i, j, 1) - A(1) * B(i, j, 2);  // y
-            C(i, j, 1) = A(0) * B(i, j, 2) - A(2) * B(i, j, 0);  // x
-            C(i, j, 2) = A(1) * B(i, j, 0) - A(0) * B(i, j, 1);  // z
-        }
-    }
+    // Extract slices for each channel of B
+    const auto B0 = B.chip<2>(0);  // B[:,:,0]
+    const auto B1 = B.chip<2>(1);  // B[:,:,1]
+    const auto B2 = B.chip<2>(2);  // B[:,:,2]
 
+    // Compute cross product components using broadcasting
+    C.chip<2>(0) = A(2) * B1 - A(1) * B2;  // C[:,:,0] = A(2) * B[:,:,1] - A(1) * B[:,:,2]
+    C.chip<2>(1) = A(0) * B2 - A(2) * B0;  // C[:,:,1] = A(0) * B[:,:,2] - A(2) * B[:,:,0]
+    C.chip<2>(2) = A(1) * B0 - A(0) * B1;  // C[:,:,2] = A(1) * B[:,:,0] - A(0) * B[:,:,1]
 }
+
 
 void vector_distance(const Tensor3f &vec1, const Tensor3f &vec2, Tensor2f &distance){
     PROFILE_FUNCTION();
@@ -126,7 +131,7 @@ void vector_distance(const Tensor3f &vec1, const Tensor3f &vec2, Tensor2f &dista
     distance = norm/norm2;
 }
 
-float sign_func(float x){
+float sign_func(const float x){
     if (x > 0)
         return +1.0;
     else if (x == 0)
@@ -151,6 +156,15 @@ void computeDotProductWithLoops(const Tensor3f &A, const Tensor3f &B, Tensor2f &
             D(i, j) = dotProduct; // Store the result in tensor D
         }
     }
+}
+
+void computeDotProduct(const Tensor3f& A, const Tensor3f& B, Tensor2f& D) {
+    // Compute the element-wise product of A and B
+    const Tensor3f elementwiseProduct = A * B;
+    std::cout << elementwiseProduct << std::endl;
+
+    // Sum along the depth dimension (k) to get the dot product for each (i, j)
+    D = elementwiseProduct.sum(Eigen::array<int, 1>{2});
 }
 
 void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f &Out){
@@ -185,6 +199,12 @@ void m23(const Tensor3f &In, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &O
     Out(2) = In(y, x, 1) * Cx(y, x, 2) + In(y, x, 0) * Cy(y, x, 2);
 }
 
+void m23(const Tensor3f &In, const Tensor3f &Cx, const Tensor3f &Cy, Tensor3f &Out) {
+    Out.chip<2>(0) = In.chip<2>(1) * Cx.chip<2>(0) + In.chip<2>(0) * Cy.chip<2>(0);
+    Out.chip<2>(1) = In.chip<2>(1) * Cx.chip<2>(1) + In.chip<2>(0) * Cy.chip<2>(1);
+    Out.chip<2>(2) = In.chip<2>(1) * Cx.chip<2>(2) + In.chip<2>(0) * Cy.chip<2>(2);
+}
+
 void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     PROFILE_FUNCTION();
     // Compute gradient for update_IG
@@ -210,6 +230,39 @@ void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     } else {
         gradients(y, x, 1) = (data(y, x + 1) - data(y, x - 1)) / 2.0f;
     }
+}
+
+void computeGradient(const Tensor2f& data, Tensor3f& gradients) {
+    const int rows = static_cast<int>(data.dimension(0));
+    const int cols = static_cast<int>(data.dimension(1));
+
+    // Compute gradient along columns (y-direction)
+    // Central difference for interior points
+    gradients.slice(Eigen::array<Eigen::Index, 3> {1,0,0}, Eigen::array<Eigen::Index, 3> {rows-2,cols,1}).chip<2>(0) =
+        (data.slice(Eigen::array<int, 2>{2, 0}, Eigen::array<int, 2>{rows - 2, cols}) -
+         data.slice(Eigen::array<int, 2>{0, 0}, Eigen::array<int, 2>{rows - 2, cols})) / 2.0f;
+
+    // Forward difference for top border (y = 0)
+    gradients.chip<2>(0).chip<0>(0) =
+        (data.chip<0>(1) - data.chip<0>(0));
+
+    // Backward difference for bottom border (y = rows - 1)
+    gradients.chip<2>(0).chip<0>(rows - 1) =
+        (data.chip<0>(rows - 1) - data.chip<0>(rows - 2));
+
+    // Compute gradient along rows (x-direction)
+    // Central difference for interior points
+    gradients.slice(Eigen::array<Eigen::Index, 3> {0,1,1}, Eigen::array<Eigen::Index, 3> {rows,cols-2,1}).chip<2>(0) =
+        (data.slice(Eigen::array<int, 2>{0, 2}, Eigen::array<int, 2>{rows, cols-2}) -
+         data.slice(Eigen::array<int, 2>{0, 0}, Eigen::array<int, 2>{rows, cols-2})) / 2.0f;
+
+    // Forward difference for top border (x = 0)
+    gradients.chip<2>(1).chip<1>(0) =
+        (data.chip<1>(1) - data.chip<1>(0));
+
+    // Backward difference for bottom border (x = cols - 1)
+    gradients.chip<2>(1).chip<1>(cols - 1) =
+        (data.chip<1>(cols - 1) - data.chip<1>(cols - 2));
 }
 
 void computeGradient(const Tensor3f &data, Tensor3f &gradients, int y, int x) {
@@ -282,6 +335,39 @@ void update_FG(Tensor3f &F, const float V, const Tensor3f &G, int y, int x, cons
     Vector2f update_F;
     update_F.setZero();
     float norm = std::abs((G(y, x, 0) * G(y, x, 0) + G(y, x, 1) * G(y, x, 1)));
+    if (norm != 0.0) {
+        update_F(0) = F(y, x, 0) - ((G(y, x, 0) / norm) * (V + (F(y, x, 0) * G(y, x, 0) + F(y, x, 1) * G(y, x, 1))));
+        update_F(1) = F(y, x, 1) - ((G(y, x, 1) / norm) * (V + (F(y, x, 0) * G(y, x, 0) + F(y, x, 1) * G(y, x, 1))));
+        F(y, x, 0) = (1 - weight_FG) * F(y, x, 0) + lr * weight_FG * update_F(0);
+        F(y, x, 1) = (1 - weight_FG) * F(y, x, 1) + lr * weight_FG * update_F(1);
+        if (F(y, x, 0) > gamma){
+            F(y, x, 0) = gamma;
+        }
+        if (F(y, x, 1) > gamma){
+            F(y, x, 1) = gamma;
+        }
+        if (F(y, x, 0) < -gamma){
+            F(y, x, 0) = -gamma;
+        }
+        if (F(y, x, 1) < -gamma){
+            F(y, x, 1) = -gamma;
+        }
+        if (std::abs(F(y, x, 0)) < eps){
+            F(y, x, 0) = 0.0;
+        }
+        if (std::abs(F(y, x, 1)) < eps){
+            F(y, x, 1) = 0.0;
+        }
+    }
+}
+
+void update_FG(Tensor3f &F, const float V, const Tensor3f &G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
+    PROFILE_FUNCTION();
+    Vector2f update_F;
+    update_F.setZero();
+
+    // TODO: Fix Vector norm in event based algo |g0|+|g1| = |G|
+    float norm = std::abs((G(y, x, 0)+ G(y, x, 1) * G(y, x, 1)));
     if (norm != 0.0) {
         update_F(0) = F(y, x, 0) - ((G(y, x, 0) / norm) * (V + (F(y, x, 0) * G(y, x, 0) + F(y, x, 1) * G(y, x, 1))));
         update_F(1) = F(y, x, 1) - ((G(y, x, 1) / norm) * (V + (F(y, x, 0) * G(y, x, 0) + F(y, x, 1) * G(y, x, 1))));

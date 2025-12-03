@@ -1,7 +1,6 @@
 //
 // Created by daniel on 11/25/24.
 //
-
 #ifndef INTERACTINGMAPS_DATATYPES_H
 #define INTERACTINGMAPS_DATATYPES_H
 
