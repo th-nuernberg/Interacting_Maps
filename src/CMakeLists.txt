@@ -15,19 +15,24 @@ add_library(interacting_maps_lib
 
 target_link_libraries(interacting_maps_lib
         PUBLIC
+        ${BLAS_LIBRARIES}
+        ${LAPACK_LIBRARIES}
+        Eigen3::Eigen
+        ${OpenCV_LIBS}
         autodiff
         Boost::asio
         Boost::container
         Boost::filesystem
         Boost::log
         Boost::program_options
-        Eigen3::Eigen
-        ${OpenCV_LIBS}
         opencv_core
         opencv_imgproc
         opencv_calib3d  # <-- Add this line (required for cv::undistort)
         opencv_highgui
+        xtensor
+        xtensor-blas
 )
+
 
 # === Executables ===
 # Example 2: Main program
@@ -35,6 +40,12 @@ target_link_libraries(InteractingMaps PUBLIC interacting_maps_lib)
 
 # Set output directory for the executable (optional, since global is already set)
 set_target_properties(InteractingMaps PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+)
+
+add_executable(xTensorTest xtensorTest.cpp)
+target_link_libraries(xTensorTest PUBLIC interacting_maps_lib)
+set_target_properties(xTensorTest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
 

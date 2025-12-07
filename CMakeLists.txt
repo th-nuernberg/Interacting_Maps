@@ -53,11 +53,46 @@ CPMAddPackage(
         GIT_TAG v3.0.0
 )
 
+CPMAddPackage(
+        NAME xtensor
+        GIT_REPOSITORY https://github.com/xtensor-stack/xtensor.git
+        GIT_TAG 0.27.1
+)
+CPMAddPackage(
+        NAME xtl
+        GIT_REPOSITORY https://github.com/xtensor-stack/xtl.git
+        GIT_TAG 0.8.1
+)
+CPMAddPackage(
+        NAME xtensor-blas
+        GIT_REPOSITORY https://github.com/xtensor-stack/xtensor-blas.git
+        GIT_TAG 0.23.0
+)
+CPMAddPackage(
+        NAME lapack
+        GIT_REPOSITORY https://github.com/Reference-LAPACK/lapack.git
+        GIT_TAG v3.12.1
+)
+
+add_definitions(-DHAVE_CBLAS=1)
+
+if (WIN32)
+    find_package(OpenBLAS REQUIRED)
+    set(BLAS_LIBRARIES ${CMAKE_INSTALL_PREFIX}${OpenBLAS_LIBRARIES})
+else()
+    find_package(BLAS REQUIRED)
+    find_package(LAPACK REQUIRED)
+endif()
+message(STATUS "BLAS VENDOR:    " ${BLA_VENDOR})
+message(STATUS "BLAS LIBRARIES: " ${BLAS_LIBRARIES})
+
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
 find_package(Eigen3)
 find_package(Boost)
 FIND_PACKAGE(dv-processing REQUIRED)
 
+find_package(xtensor REQUIRED)
+find_package(xtensor-blas REQUIRED)
 
 # Include directories for the entire project
 message("Project source dir: " ${PROJECT_SOURCE_DIR})
