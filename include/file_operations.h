@@ -20,7 +20,9 @@ void writeToFile(const Tensor1f &t, const std::string &fileName);
 
 void writeToFile(const float time, const float loss, const std::string &fileName);
 
-void writeToFile(const float time, const Tensor1f &t, const std::string &fileName, bool append) ;
+void writeToFile(const float time, const Tensor1f &t, const std::string &fileName, bool append);
+
+void writeToFile(const float time, const xt::xtensor<float, 1>& t, const std::string& fileName, bool append = true);
 
 void writeToFile(const Tensor2f &t, const std::string &fileName);
 
