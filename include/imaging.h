@@ -24,9 +24,7 @@ cv::Mat vector_field2image(const Tensor3f &vector_field);
 
 Tensor3f create_outward_vector_field(int grid_size);
 
-
 cv::Mat create_circular_band_mask(const cv::Size &image_size, float inner_radius, float outer_radius);
-
 
 cv::Mat create_colorwheel(int grid_size);
 
@@ -36,6 +34,7 @@ void saveImage(const Tensor3f &Image, const std::string &path);
 
 cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const Tensor3f &G, const Tensor3f &F, const std::string &path, bool save, float cutoff);
 
+cv::Mat create_VIGF(const xt::xtensor<float, 2> &V, const xt::xtensor<float, 2> &I, const xt::xtensor<float, 3> &G, const xt::xtensor<float, 3> &F, const std::string &path, const bool save, const float cutoff, bool masked);
 
 cv::Mat createColorbar(double globalMin, double globalMax, int height, int width, int colormapType);
 

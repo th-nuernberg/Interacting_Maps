@@ -80,6 +80,35 @@ cv::Mat frame2grayscale(const MatrixXfRowMajor &frame) {
 }
 
 /**
+ * receives a frame and converts it to an greyscale image
+ * @param frame in form of an Eigen matrix
+ * @return opencv matrix of the greyscale image
+ */
+cv::Mat frame2grayscale(const xt::xtensor<float, 2>& frame) {
+    // Get dimensions
+    size_t rows = frame.shape()[0];
+    size_t cols = frame.shape()[1];
+
+    // Find min and max polarity
+    float min_polarity = 0;//xt::amin(frame)();
+    float max_polarity = 255;//xt::amax(frame)();
+
+    // Normalize the frame to [0, 1]
+    xt::xtensor<uint8_t, 2> normalized_frame = xt::cast<uint8_t>((frame - min_polarity) / (max_polarity - min_polarity) * 255.0);
+
+    // Convert to cv::Mat with float values in [0, 1]
+    cv::Mat output(rows, cols, CV_8UC1);
+    std::copy(normalized_frame.data(), normalized_frame.data() + rows * cols, output.data);
+    //std::memcpy(frame_cv.data, normalized_frame.data(), rows * cols * sizeof(float));
+
+    // Scale to 0-255 and convert to CV_8U
+    //cv::Mat output;
+    //frame_cv.convertTo(output, CV_8UC1, 255.0);
+
+    return output;
+}
+
+/**
  * Converts an Event frame to an image. positive polarity results in green coloring, negative in red.
  * @param V agglomerated Events in a Eigen matrix
  * @param cutoff Events with intensity less than cutoff are not visualised
@@ -104,6 +133,46 @@ cv::Mat V2image(const MatrixXfRowMajor &V, const float cutoff=0.1) {
             }
         }
     }
+
+    return image;
+}
+
+/**
+ * Converts an Event frame to an image. positive polarity results in green coloring, negative in red.
+ * @param V agglomerated Events in a Eigen matrix
+ * @param cutoff Events with intensity less than cutoff are not visualised
+ * @return opencv matrix of the colorcoded event frame
+ */
+cv::Mat V2image(const xt::xtensor<float, 2>& V, const float cutoff = 0.1f) {
+    // Get dimensions
+    size_t rows = V.shape()[0];
+    size_t cols = V.shape()[1];
+
+    // Create masks for positive and negative events
+    xt::xtensor<float, 2> positive_mask = V > cutoff;
+    xt::xtensor<float, 2> negative_mask = V < -cutoff;
+
+    // Create an empty image with 3 channels (BGR)
+    cv::Mat image = cv::Mat::zeros(rows, cols, CV_8UC3);
+
+    // Create views for each channel
+    std::vector<cv::Mat> channels;
+    cv::split(image, channels);
+
+    // Convert masks to OpenCV format
+    cv::Mat pos_mask(rows, cols, CV_8UC1);
+    cv::Mat neg_mask(rows, cols, CV_8UC1);
+
+    // Fill OpenCV masks from xtensor masks
+    std::copy(positive_mask.data(), positive_mask.data() + rows * cols, pos_mask.data);
+    std::copy(negative_mask.data(), negative_mask.data() + rows * cols, neg_mask.data);
+
+    // Set channels based on masks
+    channels[1].setTo(255, pos_mask);  // Green channel for positive events
+    channels[2].setTo(255, neg_mask);  // Red channel for negative events
+
+    // Merge channels back
+    cv::merge(channels, image);
 
     return image;
 }
@@ -176,6 +245,67 @@ cv::Mat vector_field2image(const Tensor3f &vector_field) {
     //minMaxLoc( saturation, &minVal, &maxVal, &minLoc, &maxLoc );
     //std::cout << "min val: " << minVal << std::endl;
     //std::cout << "max val: " << maxVal << std::endl;
+
+    // Merge HSV channels
+    std::vector<cv::Mat> hsv_channels = {hue, saturation, value};
+    cv::Mat hsv_image;
+    cv::merge(hsv_channels, hsv_image);
+
+    // Convert HSV image to BGR format
+    cv::Mat bgr_image;
+    cv::cvtColor(hsv_image, bgr_image, cv::COLOR_HSV2BGR);
+
+    return bgr_image;
+}
+
+cv::Mat vector_field2image(const xt::xtensor<float, 3>& vector_field) {
+    // Get dimensions
+    size_t rows = vector_field.shape()[0];
+    size_t cols = vector_field.shape()[1];
+
+    // Create xtensors for angles and saturations
+    xt::xtensor<float, 2> angles = xt::zeros<float>({rows, cols});
+    xt::xtensor<float, 2> saturations = xt::zeros<float>({rows, cols});
+
+    // Calculate angles and saturations using vectorized operations
+    angles = xt::atan2(xt::view(vector_field, xt::all(), xt::all(), 0),
+                       xt::view(vector_field, xt::all(), xt::all(), 1));
+
+    // Calculate saturations (magnitudes)
+    saturations = xt::sqrt(xt::square(xt::view(vector_field, xt::all(), xt::all(), 0)) + xt::square(xt::view(vector_field, xt::all(), xt::all(), 1)));
+
+    // Normalize angles to [0, 179] for hue channel
+    cv::Mat hue(rows, cols, CV_8UC1);
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            hue.at<uint8_t>(i, j) = static_cast<uint8_t>((angles(i, j) + M_PI)/(2 * M_PI) * 179);
+        }
+    }
+
+    // Create value channel (full brightness)
+    cv::Mat value(rows, cols, CV_8UC1, cv::Scalar(255));
+
+    // Normalize saturations to [0, 255] for saturation channel
+    cv::Mat saturation(rows, cols, CV_8UC1);
+    {
+        // Find max saturation
+        float max_saturation = xt::amax(saturations)();
+        float min_saturation = xt::amin(saturations)();
+
+        // Normalize saturations and convert to uint8_t
+        xt::xtensor<float, 2> normalized_saturations = 255.0f * saturations / (max_saturation + 1e-8f);
+
+        // Set zero saturations to zero in value channel
+        for (size_t i = 0; i < rows; ++i) {
+            for (size_t j = 0; j < cols; ++j) {
+                if (saturations(i, j) == 0) {
+                    value.at<uint8_t>(i, j) = 0;
+                }
+                saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(
+                    std::max(std::min(normalized_saturations(i, j), 255.0f), 100.0f));
+            }
+        }
+    }
 
     // Merge HSV channels
     std::vector<cv::Mat> hsv_channels = {hue, saturation, value};
@@ -296,7 +426,6 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
     cv::Mat I_img = frame2grayscale(I);
     cv::Mat G_img = vector_field2image(G);
     cv::Mat F_img = vector_field2image(F);
-
     cv::Mat masked_F;
 
     if (false){
@@ -324,12 +453,91 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
          masked_F = F_img;
     }
 
-
-
     long rows = V.rows();
     long cols = V.cols();
     long I_rows = I.rows();
     long I_cols = I.cols();
+
+    // Calculate the size of the color wheel
+    int colourwheel_size = cols / 2;
+
+    // Calculate the size of the final output image (double size + padding and color wheel)
+    int y_size = rows * 2 + 20;
+    int x_size = cols * 2 + 30 + colourwheel_size;
+
+    cv::Mat image(y_size, x_size, CV_8UC3, cv::Scalar(0, 0, 0));
+//    std::cout << image.size() << std::endl;
+
+    // Place V image
+    V_img.copyTo(image(cv::Rect(5, 5, cols, rows)));
+
+    // Place I image (convert to BGR first)
+    cvtColor(I_img, I_img, cv::COLOR_GRAY2BGR);
+    I_img.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, 5, I_cols, I_rows)));
+
+    // Place G image
+    G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
+
+    // Place F image
+    masked_F.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, rows + 10, cols, rows)));
+
+    // Create and place the color wheel
+    cv::Mat colourwheel = create_colorwheel(colourwheel_size);
+    colourwheel.copyTo(image(cv::Rect(cols + 10, 2 * rows + 10 - colourwheel_size, colourwheel_size, colourwheel_size)));
+
+    // Save the image if required
+    if (save && !path.empty()) {
+        cv::imwrite(path, image);
+    }
+
+    return image;
+}
+
+/**
+ * Visualise the Event information V, image I, spatial gradient field G, and optical flow F in a single image
+ * @param V Eigen matrix of Event frame
+ * @param I Eigen matrix of light intensities
+ * @param G 3 Tensor containing the spatial gradients of the image
+ * @param F 3 Tensor containing the optical flow of the image
+ * @param path where to save the image on the disk if desired
+ * @param save if a save to disk is desired
+ * @param cutoff Events with intensity less than cutoff are not visualised
+ * @return bgr image of the joined visualisation as opencv matrix
+ */
+cv::Mat create_VIGF(const xt::xtensor<float, 2> &V, const xt::xtensor<float, 2> &I, const xt::xtensor<float, 3> &G, const xt::xtensor<float, 3> &F, const std::string &path = "VIGF", const bool save = false, const float cutoff=0.1, bool masked=false) {
+    //std::cout << V << std::endl;
+    //std::cout << I << std::endl;
+    //std::cout << G << std::endl;
+    //std::cout << F << std::endl;
+    cv::Mat V_img = V2image(V, cutoff);
+    float min_polarity = xt::amin(I)();
+    float max_polarity = xt::amax(I)();
+    //std::cout << min_polarity << std::endl;
+    //std::cout << max_polarity << std::endl;
+    cv::Mat I_img = frame2grayscale(I);
+    cv::Mat G_img = vector_field2image(G);
+    cv::Mat F_img = vector_field2image(F);
+    //std::cout << V_img << std::endl;
+    //std::cout << I_img << std::endl;
+    //std::cout << G_img << std::endl;
+    //std::cout << F_img << std::endl;
+
+    cv::Mat masked_F;
+
+    if (masked){
+        cv::Mat mask;
+        cv::transform(V_img, mask, cv::Matx13f(1,1,1));
+        mask = mask/255;
+        cv::cvtColor(mask, mask, cv::COLOR_GRAY2BGR);
+        cv::multiply(mask, F_img, masked_F);
+    }else{
+         masked_F = F_img;
+    }
+
+    int rows = static_cast<int>(V.shape()[0]);
+    int cols = static_cast<int>(V.shape()[1]);
+    int I_rows = static_cast<int>(V.shape()[0]);
+    int I_cols = static_cast<int>(I.shape()[1]);
 
     // Calculate the size of the color wheel
     int colourwheel_size = cols / 2;
