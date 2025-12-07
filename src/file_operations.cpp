@@ -73,6 +73,23 @@ void writeToFile(const float time, const Tensor1f &t, const std::string &fileNam
     }
 }
 
+void writeToFile(const float time, const xt::xtensor<float, 1>& t, const std::string& fileName, bool append) {
+    std::ios_base::openmode mode = append ? (std::ios::out | std::ios::app) : std::ios::out;
+    std::ofstream file(fileName, mode);
+
+    if (file.is_open()) {
+        // Write time
+        file << time;
+
+        // Write tensor elements
+        for (size_t i = 0; i < t.size(); ++i) {
+            file << " " << t(i);
+        }
+
+        file << std::endl;
+    }
+}
+
 /**
  * Saves a 2Tensor as string to a file on disk
  * @param t 2Tensor to be saved
