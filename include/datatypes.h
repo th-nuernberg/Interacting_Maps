@@ -9,8 +9,19 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#include <xtensor.hpp>
 
 using namespace Eigen;
+
+using array_type = xt::xarray<float>;
+using shape_type = array_type::shape_type;
+
+using tensor_type3 = xt::xtensor<float, 3>;
+using tensor_type2 = xt::xtensor<float, 2>;
+using tensor_type1 = xt::xtensor<float, 1>;
+using shape_type3 = tensor_type3::shape_type;
+using shape_type2 = tensor_type2::shape_type;
+using shape_type1 = tensor_type1::shape_type;
 
 /*
  * Define some common datatypes. Sometimes the non-standard RowMajor versions of eigen matrices/tensors are prefered
@@ -85,6 +96,13 @@ struct ImageEvent : Event {
 struct Calibration_Data{
     std::vector<float> focal_point;
     MatrixXf camera_matrix;
+    std::vector<float> distortion_coefficients;
+    std::vector<float> view_angles;
+};
+
+struct CalibrationData{
+    std::vector<float> focal_point;
+    xt::xarray<float> camera_matrix;
     std::vector<float> distortion_coefficients;
     std::vector<float> view_angles;
 };
