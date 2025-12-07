@@ -58,6 +58,16 @@ Tensor2f Matrix2Tensor(const MatrixXfRowMajor& input) {
 cv::Mat eigenToCvMat(const MatrixXfRowMajor& eigen_matrix) {
     return {static_cast<int>(eigen_matrix.rows()), static_cast<int>(eigen_matrix.cols()), CV_32F, (void*)eigen_matrix.data()};
 }
+
+/**
+ * Converts a Eigen matrix to a opencv matrix, without copying the data
+ * @param eigen_matrix
+ * @return opencv matrix
+ */
+cv::Mat xtensorToCvMat(const xt::xtensor<float, 2>& matrix) {
+    auto shape = matrix.shape();
+    return {static_cast<int>(shape[0]), static_cast<int>(shape[1]), CV_32F, (void*)matrix.data()};
+}
 /**
  * Creates a copy of an Eigen matrix and saves it in a opencv matrix
  * @param eigen_matrix
