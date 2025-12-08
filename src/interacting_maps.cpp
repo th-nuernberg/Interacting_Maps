@@ -441,13 +441,9 @@ int main(int argc, char* argv[]) {
 
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float> elapsed = end - start;
     std::chrono::duration<float> elapsed_realtime = end - start_realtime;
-    std::stringstream ss;
     std::stringstream ssrt;
-    ss << "Time elapsed: " << elapsed.count() << " seconds" << std::endl;
     ssrt << "Time elapsed: " << elapsed_realtime.count() << " seconds" << std::endl;
-    writeToFile(ss.str(), folder_path / "time_complete.txt");
     writeToFile(ssrt.str(), folder_path / "time_realtime.txt");
     std::cout << "Algorithm took: " << elapsed_realtime.count() << "seconds/ Real elapsed time: " << parameters["endTime"] - parameters["startTime"] << std::endl;
     std::string outputFile = "output.mp4";
