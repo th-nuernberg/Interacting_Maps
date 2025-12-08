@@ -302,7 +302,9 @@ cv::Mat vector_field2image(const xt::xtensor<float, 3>& vector_field) {
                     value.at<uint8_t>(i, j) = 0;
                 }
                 saturation.at<uint8_t>(i, j) = static_cast<uint8_t>(
-                    std::max(std::min(normalized_saturations(i, j), 255.0f), 100.0f));
+                    std::max(std::min(normalized_saturations(i, j), 255.0f), 0.0f));
+                value.at<uint8_t>(i, j) = static_cast<uint8_t>(
+                    std::max(std::min(normalized_saturations(i, j), 255.0f), 0.0f));
             }
         }
     }

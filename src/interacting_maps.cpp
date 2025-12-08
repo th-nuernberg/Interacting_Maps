@@ -93,7 +93,6 @@ void event_step(const xt::xtensor<float, 2> &V, xt::xtensor<float, 2> &I, xt::xt
                 update_FG(F, V, G, parameters["lr"], parameters["weight_FG"], parameters["eps"], parameters["gamma"]);
                 break;
             case 1:
-                // Gets called separately because we do not want to do an update of F based on R with every event since this update is global
                 update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
                 break;
             case 2:
@@ -162,24 +161,54 @@ int main(int argc, char* argv[]) {
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
             ("fuseI,b", po::value<bool>()->default_value(false), "Fuse with images?");
-    std::vector permutation {1,2,4,5}; // Which update steps to take; 1 is not needed
-    int event_steps = 1;
-
     // Parse command-line arguments
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
-
     // Display help message if requested
     if (vm.count("help")) {
         std::cout << desc << "\n";
         return 0;
     }
-
     // Retrieve values (using defaults if not provided)
     float startTime = vm["startTime"].as<float>();
     float endTime = vm["endTime"].as<float>();
+    float timeStep = vm["timeStep"].as<float>();
+    bool addTime = vm["addTime"].as<bool>();
+    int startIndex = vm["startIndex"].as<int>();
     std::string timeFormat = vm["timeFormat"].as<std::string>();
+    std::string resourceDirectory = vm["resourceDirectory"].as<std::string>();
+    std::string resultsDirectory = vm["resultsDirectory"].as<std::string>();
+
+    std::vector permutation {0,1,2,3,4,5}; // Which update steps to take; 1 is not needed
+    bool eventBased = false;
+
+    std::unordered_map<std::string,float> parameters;
+    parameters["startTime"] = startTime;                                    // in seconds
+    parameters["endTime"] = endTime;                                        // in seconds
+    parameters["time_step"] = timeStep;                                     // in seconds
+    parameters["weight_FG"] = 0.2;                                          // [0-1]
+    parameters["weight_FR"] = 0.8;                                          // [0-1]
+    parameters["weight_GF"] = 0.2;                                          // [0-1]
+    parameters["weight_GI"] = 0.2;                                          // [0-1]
+    parameters["weight_IG"] = 0.2;                                          // [0-1]
+    parameters["weight_IV"] = 1.0;                                          // [0-1]
+    parameters["weight_RF"] = 0.8;                                          // [0-1]
+    parameters["weight_RIMU"] = 0.0;                                        // [0-1]
+    parameters["weight_Ifusion"] = 0.0;                                     // [0-1]
+    parameters["lr"] = 1.0;                                                 // [0-1]
+    parameters["eventContribution"] = 10.0f;                                // mainly important for the visibility of the intensity image
+    parameters["eps"] = 0.00001;                                            // lowest value allowed for F, G,...
+    parameters["gamma"] = 255;                                              // highest value allowed for F, G,...
+    parameters["decayParam"] = 1e-1;                                        // 1e-1 for exponential decay
+    parameters["minPotential"] = 0.0;                                       // minimum Value for Image
+    parameters["maxPotential"] = 255.0;                                     // maximal Value for Image
+    parameters["neutralPotential"] = 128;                                   // base value where image decays back to
+    parameters["convergenceSteps"] = 100;
+    //parameters["fps"] = 1.0f/parameters["time_step"];                       // how often shown images are update
+    //parameters["FR_updates_per_second"] = 1.0f/parameters["time_step"];     // how often the FR update is performed; It is not done after every event
+    //parameters["updateIterationsFR"] = 4;                                   // more iterations -> F captures general movement of scene/camera better but significantly more computation time
+
     // Split time interval into sub intervals to allow loading of larger files.
     int nIntervals = 1;
     float maxIntervalLength = 0.05;
@@ -197,23 +226,13 @@ int main(int argc, char* argv[]) {
         nIntervals++;
     }
 
-    float timeStep = vm["timeStep"].as<float>();
-    bool addTime = vm["addTime"].as<bool>();
-    int startIndex = vm["startIndex"].as<int>();
-    std::string resourceDirectory = vm["resourceDirectory"].as<std::string>();
-    std::string resultsDirectory = vm["resultsDirectory"].as<std::string>();
-
     std::cout << "Parsed startTime: " << startTime << "\n";
     std::cout << "Parsed endTime: " << endTime << "\n";
     std::cout << "Parsed timeStep: " << timeStep << "\n";
     std::cout << "Parsed resourceDirectory: " << resourceDirectory << "\n";
     std::cout << "Parsed resultsDirectory: " << resultsDirectory << "\n";
 
-    auto start = std::chrono::high_resolution_clock::now();
-
-    //##################################################################################################################
     // Create results_folder
-
     std::string folder_name;
     if (addTime) {
         auto clock_time = std::chrono::system_clock::now();
@@ -236,9 +255,7 @@ int main(int argc, char* argv[]) {
     std::string imuPath = "res/" + resourceDirectory + "/imu.txt";
     std::string imagesPath = "res/" + resourceDirectory + "/images.txt";
     std::string settingsPath = "res/" + resourceDirectory + "/settings.txt";
-
     fs::path R_path = folder_path / ("R.txt");
-
     if (fs::exists(R_path)) {
         try {
             fs::remove(R_path);
@@ -246,35 +263,8 @@ int main(int argc, char* argv[]) {
             std::cerr << "Error deleting file: " << e.what() << '\n';
         }
     }
-
     fs::path VLossPath = folder_path / ("VLoss.txt");
-
     std::cout << "Parsed calibrationPath: " << calibrationPath << "\n";
-
-    std::unordered_map<std::string,float> parameters;
-    parameters["startTime"] = startTime;                                   // in seconds
-    parameters["endTime"] = endTime;                                       // in seconds
-    parameters["time_step"] = timeStep;                                     // in seconds
-    parameters["weight_FG"] = 0.2;                                          // [0-1]
-    parameters["weight_FR"] = 0.8;                                          // [0-1]
-    parameters["weight_GF"] = 0.2;                                          // [0-1]
-    parameters["weight_GI"] = 0.2;                                          // [0-1]
-    parameters["weight_IG"] = 0.2;                                          // [0-1]
-    parameters["weight_IV"] = 1.0;                                          // [0-1]
-    parameters["weight_RF"] = 0.8;                                          // [0-1]
-    parameters["weight_RIMU"] = 0.0;                                     // [0-1]
-    parameters["weight_Ifusion"] = 0.0;                                     // [0-1]
-    parameters["lr"] = 1.0;                                                 // [0-1]
-    parameters["eventContribution"] = 10.0f;                                   // mainly important for the visibility of the intensity image
-    parameters["eps"] = 0.00001;                                            // lowest value allowed for F, G,...
-    parameters["gamma"] = 255;                                              // highest value allowed for F, G,...
-    parameters["decayParam"] = 1e-1;                                        // 1e-1 for exponential decay
-    parameters["minPotential"] = 0.0;                                       // minimum Value for Image
-    parameters["maxPotential"] = 255.0;                                       // maximal Value for Image
-    parameters["neutralPotential"] = 128;                                   // base value where image decays back to
-    parameters["fps"] = 1.0f/parameters["time_step"];                       // how often shown images are update
-    parameters["FR_updates_per_second"] = 1.0f/parameters["time_step"];     // how often the FR update is performed; It is not done after every event
-    parameters["updateIterationsFR"] = 4;                                  // more iterations -> F captures general movement of scene/camera better but significantly more computation time
 
     // Read resolution from file
     std::vector<float> settings;
@@ -287,8 +277,6 @@ int main(int argc, char* argv[]) {
     int width = int(settings[1]); // in pixels
     int cols = int(settings[1]); // in pixels
 
-    // iterations are done after event calculations for a frame are done
-    // Perm
     std::random_device myRandomDevice;
     unsigned seed = myRandomDevice();
     std::default_random_engine rng(seed);
@@ -296,13 +284,10 @@ int main(int argc, char* argv[]) {
     //##################################################################################################################
     // Optic flow F, temporal derivative V, spatial derivative G, intensity I, rotation vector R
     xt::xtensor<float, 2> V = xt::zeros<float>({height, width});
-    cv::Mat VIGF;
 
     // Initialize optical flow
     auto engine = xt::random::get_default_random_engine();
-    xt::xtensor<float, 3> F = xt::random::randn<float>({height, width, 2}, 0, 0, engine);
-    xt::view(F, xt::all(), xt::all(), 0) = 0.0;
-    std::cout << F << std::endl;
+    xt::xtensor<float, 3> F = xt::random::randn<float>({height, width, 2}, 0, 1, engine);
 
     // Initialize spatial gradient G
     xt::xtensor<float, 3> G = xt::random::randn<float>({height, width, 2}, 0, 1, engine);
@@ -310,26 +295,15 @@ int main(int argc, char* argv[]) {
     // Initialize intensity image I
     xt::xtensor<float, 2> I = xt::ones<float>({height, width})*128.0;
     xt::xtensor<float, 3> delta_I = xt::zeros_like(F);
+    Tensor2f decayTimeSurface(height, width);
+    decayTimeSurface.setConstant(parameters["startTime"]);
 
     // For the "I from G" update rule we need helper values.
     xt::xtensor<float, 3> GIDiff = xt::random::randn<float>({height, width, 2}, 0, 1, engine);
     xt::xtensor<float, 3> GIDiffGradient = xt::random::randn<float>({height, width, 2}, 0, 1, engine);
 
-    // For the image we want to decay the image intensity. We save for each pixel how old the
-    // information is.
-    Tensor2f decayTimeSurface(height, width);
-    decayTimeSurface.setConstant(parameters["startTime"]);
-
     // Initialize rotational velocity to a random vector with values between -10 and 10
-    xt::xtensor<float, 1> R = xt::random::randn<float>({3}, 0, 0, engine);
-    R[2] = 1.0;
-
-    //##################################################################################################################
-    // Read calibration file
-    std::vector<float> raw_calibration_data;
-    read_single_line_txt(calibrationPath, raw_calibration_data);
-    Calibration_Data calibration_data = get_calibration_data(raw_calibration_data, height, width);
-    std::cout << "Readout calibration file at " << calibrationPath << std::endl;
+    xt::xtensor<float, 1> R = xt::random::randn<float>({3}, 0, 1, engine);
 
     //##################################################################################################################
     // Bin events
@@ -344,15 +318,18 @@ int main(int argc, char* argv[]) {
     //create_frames(binned_events, frames, height, width, parameters["eventContribution"]);
     //std::cout << "Created frames " << frame_count << " out of " << event_data.size() << " events" << std::endl;
 
-    //##################################################################################################################
+    // Read calibration file
+    std::vector<float> raw_calibration_data;
+    read_single_line_txt(calibrationPath, raw_calibration_data);
+    Calibration_Data calibration_data = get_calibration_data(raw_calibration_data, height, width);
+    std::cout << "Readout calibration file at " << calibrationPath << std::endl;
     // Camera calibration matrix (C/CCM) and dCdx/dCdy
-    xt::xtensor<float, 3> CCM = xt::zeros<float>({height, width, 2});
-    xt::xtensor<float, 3> dCdx = xt::zeros<float>({height, width, 2});
-    xt::xtensor<float, 3> dCdy = xt::zeros<float>({height, width, 2});
+    xt::xtensor<float, 3> CCM = xt::zeros<float>({height, width, 3});
+    xt::xtensor<float, 3> dCdx = xt::zeros<float>({height, width, 3});
+    xt::xtensor<float, 3> dCdy = xt::zeros<float>({height, width, 3});
     find_C(static_cast<size_t>(width), static_cast<size_t>(height), calibration_data.view_angles[1], calibration_data.view_angles[0], 1.0f, CCM, dCdx, dCdy);
     std::cout << "Calculated Camera Matrix" << std::endl;
 
-    //##################################################################################################################
     // A matrix and outerProducts for update_R
     xt::xtensor<float, 2> A = xt::zeros<float>({3, 3});
     xt::xtensor<float, 1> B = xt::zeros<float>({3});
@@ -367,29 +344,21 @@ int main(int argc, char* argv[]) {
     xt::xtensor<float, 2> decayBase = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
     xt::xtensor<float, 2> expDecay = xt::ones<float>({rows, cols});
 
-    // For keeping track of the current Event
+    // Tensors for Image decay
+    xt::xtensor<float, 2> np = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
+    xt::xtensor<float, 2> t = xt::zeros<float>({rows, cols});
+    xt::xtensor<float, 2> dP = xt::ones<float>({rows, cols})*parameters["decayParameter"];
+
+    int vis_counter = -1;
     int y;
     int x;
     float time;
     float polarity;
     std::vector<float> ang_velocity = {0,0,0};
     std::vector<float> acceleration = {0,0,0};
-    bool cEventFlag = true;
-    //std::vector<Event> frameEvents;
-
-    // Tensors for Image decay
-    xt::xtensor<float, 2> np = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
-    xt::xtensor<float, 2> t = xt::zeros<float>({rows, cols});
-    xt::xtensor<float, 2> dP = xt::ones<float>({rows, cols})*parameters["decayParameter"];
-
+    cv::Mat VIGF;
+    //bool cEventFlag = true;
     auto start_realtime = std::chrono::high_resolution_clock::now();
-
-    int vis_counter = -1;
-    int FR_update_counter = 0;
-    bool eventBased = false;
-    const int maxConvergenceSteps = 100;
-
-
     for (int currentInterval = 0; currentInterval<nIntervals; ++currentInterval) {
         std::cout << "Frame: " << currentInterval << std::endl;
         //##################################################################################################################
@@ -436,7 +405,7 @@ int main(int argc, char* argv[]) {
             float loss = VFG_check(V, F, G);
             writeToFile(event->time, loss, VLossPath);
         }
-        for (int convergenceStep = 0; convergenceStep<maxConvergenceSteps; ++convergenceStep) {
+        for (int convergenceStep = 0; convergenceStep<static_cast<int>(parameters["convergenceSteps"]); ++convergenceStep) {
             std::shuffle(std::begin(permutation), std::end(permutation), rng);
             event_step(V, I, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
                                Identity_minus_outerProducts, old_points, parameters, permutation);

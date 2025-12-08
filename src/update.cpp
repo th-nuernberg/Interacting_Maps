@@ -29,6 +29,9 @@ void norm_tensor_along_dim3(const Tensor3f &T, Tensor2f &norm){
     norm = T.square().sum(dims).sqrt();
 }
 
+/**
+* Calculate the 2 norm along the third axis of a 3 tensor. Return a 2 Tensor containing the result
+*/
 void norm_tensor_along_dim3(const xt::xtensor<float, 3> &T, xt::xtensor<float, 2> &norm){
     auto Tshape = T.shape();
     auto normShape = norm.shape();
@@ -165,6 +168,11 @@ void crossProduct3x3(const Tensor3f &A, const Tensor3f &B, Tensor3f &C) {
     C.chip<2>(2) = A1 * B0 - A0 * B1;  // C[:,:,2] = A[:,:,1] * B[:,:,0] - A[:,:,0] * B[:,:,1]
 }
 
+/**
+* Calculate the cross product of two 3-Tensors which consist of a field of 3-Vectors.
+The 3 Tensors must have the same shape. The crossproduct is calcuated between each corresponding entry
+in the two tensors. Result is another 3 Tensor that contains all cross products.
+*/
 void crossProduct3x3(const xt::xtensor<float, 3>& A,
                      const xt::xtensor<float, 3>& B,
                      xt::xtensor<float, 3>& C) {
@@ -201,6 +209,10 @@ void crossProduct1x3(const Tensor1f &A, const Tensor3f &B, Tensor3f &C){
     C.chip<2>(2) = A(1) * B0 - A(0) * B1;  // C[:,:,2] = A(1) * B[:,:,0] - A(0) * B[:,:,1]
 }
 
+/**
+* Calculate the cross product between a 3-Vector and a 3-Tensor containing a field of 3 Vectors.
+Returns a 3-Tensor with the cross prodcut between A and all Vectors in 3.
+*/
 void crossProduct1x3(const xt::xtensor<float, 1>& A,
                      const xt::xtensor<float, 3>& B,
                      xt::xtensor<float, 3>& C) {
@@ -362,6 +374,7 @@ void m23(const xt::xtensor<float, 3>& In,
     xt::view(Out, xt::all(), xt::all(), 2) = xt::view(In, xt::all(), xt::all(), 1) * xt::view(Cx, xt::all(), xt::all(), 2) +
                                                  xt::view(In, xt::all(), xt::all(), 0) * xt::view(Cy, xt::all(), xt::all(), 2);
 }
+
 void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     PROFILE_FUNCTION();
     // Compute gradient for update_IG
