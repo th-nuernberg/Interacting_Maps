@@ -11,10 +11,10 @@
 
 int main() {
     // Use VGA resolution for this sample
-    const cv::Size resolution(640, 480);
+    const cv::Size resolution(346, 260);
 
     // Initialize an ideal pinhole camera model parameters with no distortion
-    dv::camera::CameraGeometry geometry(640.f, 640.f, 320.f, 240.f, resolution);
+    dv::camera::CameraGeometry geometry(640.f, 640.f, 173.f, 130.f, resolution);
     dv::EventStore positiveEvents;
 
     // Generate a sample set of events and filter out only positive events for this sample
