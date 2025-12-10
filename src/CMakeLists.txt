@@ -31,6 +31,7 @@ target_link_libraries(interacting_maps_lib
         opencv_highgui
         xtensor
         xtensor-blas
+        dv::processing
 )
 
 
@@ -83,6 +84,18 @@ set_target_properties(DV_6 PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_
 add_executable(DV_7 07_Undistort.cpp)
 target_link_libraries(DV_7 ${OpenCV_LIBS} dv::processing)
 set_target_properties(DV_7 PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/output)
+
+add_executable(DV_8 08_VandI.cpp)
+target_link_libraries(DV_8 ${OpenCV_LIBS} dv::processing)
+set_target_properties(DV_8 PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/output)
+
+add_executable(DV_9 09_NoiseFilterAdvanced.cpp)
+target_link_libraries(DV_9 ${OpenCV_LIBS} dv::processing)
+set_target_properties(DV_9 PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/output)
+
+add_executable(DV_10 10_testV2Image.cpp)
+target_link_libraries(DV_10 ${OpenCV_LIBS} dv::processing interacting_maps_lib)
+set_target_properties(DV_10 PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/output)
 
 # Add compiler options
 foreach(exe IN ITEMS InteractingMaps)
