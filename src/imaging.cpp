@@ -143,37 +143,37 @@ cv::Mat V2image(const MatrixXfRowMajor &V, const float cutoff=0.1) {
  * @param cutoff Events with intensity less than cutoff are not visualised
  * @return opencv matrix of the colorcoded event frame
  */
-cv::Mat V2image(const xt::xtensor<float, 2>& V, const float cutoff = 0.1f) {
+cv::Mat V2image(const xt::xtensor<float, 2>& V, const float cutoff = 1.0f) {
     // Get dimensions
     size_t rows = V.shape()[0];
     size_t cols = V.shape()[1];
 
     // Create masks for positive and negative events
+    //std::cout << V << std::endl;
     xt::xtensor<float, 2> positive_mask = V > cutoff;
     xt::xtensor<float, 2> negative_mask = V < -cutoff;
+    // std::cout << positive_mask << std::endl;
+    // std::cout << negative_mask << std::endl;
+    cv::Mat pos_mask = xtensorToCvMat(positive_mask);
+    cv::Mat neg_mask = xtensorToCvMat(negative_mask);
 
     // Create an empty image with 3 channels (BGR)
     cv::Mat image = cv::Mat::zeros(rows, cols, CV_8UC3);
-
     // Create views for each channel
-    std::vector<cv::Mat> channels;
+    cv::Mat channels[3];
     cv::split(image, channels);
 
-    // Convert masks to OpenCV format
-    cv::Mat pos_mask(rows, cols, CV_8UC1);
-    cv::Mat neg_mask(rows, cols, CV_8UC1);
+    pos_mask.convertTo(pos_mask, CV_8UC1);
+    neg_mask.convertTo(neg_mask, CV_8UC1);
 
-    // Fill OpenCV masks from xtensor masks
-    std::copy(positive_mask.data(), positive_mask.data() + rows * cols, pos_mask.data);
-    std::copy(negative_mask.data(), negative_mask.data() + rows * cols, neg_mask.data);
 
     // Set channels based on masks
+    channels[0].setTo(0);
     channels[1].setTo(255, pos_mask);  // Green channel for positive events
     channels[2].setTo(255, neg_mask);  // Red channel for negative events
 
     // Merge channels back
-    cv::merge(channels, image);
-
+    cv::merge(channels, 3, image);
     return image;
 }
 

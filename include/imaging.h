@@ -18,9 +18,15 @@ std::vector<cv::Mat> undistort_images(const std::vector<cv::Mat> &images, const 
 
 cv::Mat frame2grayscale(const MatrixXfRowMajor &frame);
 
+cv::Mat frame2grayscale(const xt::xtensor<float, 2> &frame);
+
 cv::Mat V2image(const MatrixXfRowMajor &V, float cutoff);
 
+cv::Mat V2image(const xt::xtensor<float, 2> &V, float cutoff);
+
 cv::Mat vector_field2image(const Tensor3f &vector_field);
+
+cv::Mat vector_field2image(const xt::xtensor<float, 3> &vector_field);
 
 Tensor3f create_outward_vector_field(int grid_size);
 
