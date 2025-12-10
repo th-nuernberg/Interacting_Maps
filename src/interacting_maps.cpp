@@ -9,10 +9,21 @@
 #include <cmath>
 #include <update.h>
 #include <cost.h>
-
 #include "file_operations.h"
 #include "imaging.h"
 #include <xtensor.hpp>
+#include <dv-processing/io/camera/discovery.hpp>
+#include <dv-processing/visualization/event_visualizer.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+#include <dv-processing/noise/k_noise_filter.hpp>
+#include <csignal>
+
+static std::atomic<bool> globalShutdown(false);
+
+static void handleShutdown(int) {
+    globalShutdown.store(true);
+}
 
 namespace po = boost::program_options;
 
@@ -83,8 +94,9 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
     }
 }
 
-void event_step(const xt::xtensor<float, 2> &V, xt::xtensor<float, 2> &I, xt::xtensor<float, 3> &delta_I, xt::xtensor<float, 3> &GIDiff, xt::xtensor<float, 3> &GIDiffGradient, xt::xtensor<float, 3> &F, xt::xtensor<float, 3> &G, xt::xtensor<float, 1> &R, const xt::xtensor<float, 3> &CCM, const xt::xtensor<float, 3> &dCdx, const xt::xtensor<float, 3> &dCdy, const xt::xtensor<float, 2> &A, xt::xtensor<float, 1> &B, const xt::xtensor<float, 4> &Identity_minus_outerProducts, xt::xtensor<float, 3> &old_points, std::unordered_map<std::string,float> &parameters, std::vector<int> &permutation){
+void event_step(const xt::xtensor<float, 2> &V, xt::xtensor<float, 2> &I, xt::xtensor<float, 3> &delta_I, xt::xtensor<float, 3> &GIDiff, xt::xtensor<float, 3> &GIDiffGradient, xt::xtensor<float, 3> &F, xt::xtensor<float, 3> &G, xt::xtensor<float, 1> &R, const xt::xtensor<float, 3> &CCM, const xt::xtensor<float, 3> &dCdx, const xt::xtensor<float, 3> &dCdy, const xt::xtensor<float, 2> &A, xt::xtensor<float, 1> &B, const xt::xtensor<float, 4> &Identity_minus_outerProducts, xt::xtensor<float, 3> &old_points, std::unordered_map<std::string,float> &parameters, std::vector<int> &permutation, std::default_random_engine &rng){
     PROFILE_FUNCTION();
+    std::uniform_real_distribution<> dis(0.0, 1.0);
     for (const auto& element : permutation){
         switch( element ){
             default:
@@ -93,7 +105,9 @@ void event_step(const xt::xtensor<float, 2> &V, xt::xtensor<float, 2> &I, xt::xt
                 update_FG(F, V, G, parameters["lr"], parameters["weight_FG"], parameters["eps"], parameters["gamma"]);
                 break;
             case 1:
+                // if (dis(rng) < 1.0) {
                 update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
+                // }
                 break;
             case 2:
                 update_FG(G, V, F, parameters["lr"], parameters["weight_GF"], parameters["eps"], parameters["gamma"]);
@@ -155,8 +169,8 @@ int main(int argc, char* argv[]) {
             ("endTime,f", po::value<float>()->default_value(15), "Where to end with event consideration")
             ("timeFormat,s", po::value<std::string>()->default_value("s"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
             ("timeStep,f", po::value<float>()->default_value(0.001), "Size of the event frames")
-            ("resourceDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
+            ("resourceDirectory,s", po::value<std::string>()->default_value("live"), "Which dataset to use, searches in res directory")
+            ("resultsDirectory,s", po::value<std::string>()->default_value("live"), "Where to store the results, located in output directory")
             ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
@@ -180,7 +194,8 @@ int main(int argc, char* argv[]) {
     std::string resourceDirectory = vm["resourceDirectory"].as<std::string>();
     std::string resultsDirectory = vm["resultsDirectory"].as<std::string>();
 
-    std::vector permutation {0,1,2,3,4,5}; // Which update steps to take; 1 is not needed
+    std::vector permutation {0,1,2,3,4}; // Which update steps to take; 1 is not needed
+    // FG, FR, GF, RF, GI, IG
     bool eventBased = false;
 
     std::unordered_map<std::string,float> parameters;
@@ -190,21 +205,21 @@ int main(int argc, char* argv[]) {
     parameters["weight_FG"] = 0.2;                                          // [0-1]
     parameters["weight_FR"] = 0.8;                                          // [0-1]
     parameters["weight_GF"] = 0.2;                                          // [0-1]
-    parameters["weight_GI"] = 0.2;                                          // [0-1]
+    parameters["weight_GI"] = 0.8;                                          // [0-1]
     parameters["weight_IG"] = 0.2;                                          // [0-1]
     parameters["weight_IV"] = 1.0;                                          // [0-1]
     parameters["weight_RF"] = 0.8;                                          // [0-1]
     parameters["weight_RIMU"] = 0.0;                                        // [0-1]
     parameters["weight_Ifusion"] = 0.0;                                     // [0-1]
     parameters["lr"] = 1.0;                                                 // [0-1]
-    parameters["eventContribution"] = 10.0f;                                // mainly important for the visibility of the intensity image
+    parameters["eventContribution"] = 20.0f;                                // mainly important for the visibility of the intensity image
     parameters["eps"] = 0.00001;                                            // lowest value allowed for F, G,...
     parameters["gamma"] = 255;                                              // highest value allowed for F, G,...
     parameters["decayParam"] = 1e-1;                                        // 1e-1 for exponential decay
     parameters["minPotential"] = 0.0;                                       // minimum Value for Image
     parameters["maxPotential"] = 255.0;                                     // maximal Value for Image
     parameters["neutralPotential"] = 128;                                   // base value where image decays back to
-    parameters["convergenceSteps"] = 100;
+    parameters["convergenceSteps"] = 40;
     //parameters["fps"] = 1.0f/parameters["time_step"];                       // how often shown images are update
     //parameters["FR_updates_per_second"] = 1.0f/parameters["time_step"];     // how often the FR update is performed; It is not done after every event
     //parameters["updateIterationsFR"] = 4;                                   // more iterations -> F captures general movement of scene/camera better but significantly more computation time
@@ -306,17 +321,15 @@ int main(int argc, char* argv[]) {
     xt::xtensor<float, 1> R = xt::random::randn<float>({3}, 0, 1, engine);
 
     //##################################################################################################################
-    // Bin events
-    //std::vector<std::vector<Event>> binned_events;
-    //binned_events = bin_events(event_data, parameters["time_step"]);
-    //std::cout << "Binned events" << std::endl;
+    // Memory Image for I to remember previous image
+    xt::xtensor<float, 2> MI = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
+    xt::xtensor<float, 2> decayBase = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
+    xt::xtensor<float, 2> expDecay = xt::ones<float>({rows, cols});
 
-    //##################################################################################################################
-    // Create frames
-    //size_t frame_count = binned_events.size();
-    //std::vector<Tensor2f> frames(frame_count);
-    //create_frames(binned_events, frames, height, width, parameters["eventContribution"]);
-    //std::cout << "Created frames " << frame_count << " out of " << event_data.size() << " events" << std::endl;
+    // Tensors for Image decay
+    xt::xtensor<float, 2> np = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
+    xt::xtensor<float, 2> t = xt::zeros<float>({rows, cols});
+    xt::xtensor<float, 2> dP = xt::ones<float>({rows, cols})*parameters["decayParameter"];
 
     // Read calibration file
     std::vector<float> raw_calibration_data;
@@ -338,119 +351,131 @@ int main(int argc, char* argv[]) {
     xt::xtensor<float, 3> old_points = xt::zeros<float>({rows, cols, 3});
     setup_R_update(CCM, A, B, Identity_minus_outerProducts, old_points);
 
-    //##################################################################################################################
-    // Memory Image for I to remember previous image
-    xt::xtensor<float, 2> MI = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
-    xt::xtensor<float, 2> decayBase = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
-    xt::xtensor<float, 2> expDecay = xt::ones<float>({rows, cols});
+    // SETUP EVENT CAMERA
+    using namespace std::chrono_literals;
+    static constexpr int ESC_KEYCODE = 27;
+    // Install signal handlers for a clean shutdown
+    std::signal(SIGINT, handleShutdown);
+    std::signal(SIGTERM, handleShutdown);
+    // Open the specified camera
+    auto capture = dv::io::camera::DAVIS("00001088");
+    std::cout << "Camera [" << capture.getCameraName() << "] has been opened!" << std::endl;
+    std::cout << "Resolution [" << capture.getEventResolution()->width << "x" << capture.getEventResolution()->height << "]." << std::endl;
+    if (capture.isImuStreamAvailable()) {
+        // Print the imu data stream capability
+        std::cout << "* IMU measurements" << std::endl;
+    }
+    cv::Size ROI_size = cv::Size(width, height);
+    // Setting camera readout to events and frames (default).
+    capture.setEventsRunning(true);
+    capture.setFramesRunning(true);
+    // Configure frame output mode to color (default), only on COLOR cameras. Other mode available: GRAYSCALE
+    capture.setColorMode(dv::io::camera::parser::DAVIS::ColorMode::DEFAULT);
+    // Enable frame auto-exposure (default behavior)
+    capture.setAutoExposure(true);
+    // Disable auto-exposure, set frame exposure (here 10ms)
+    capture.setAutoExposure(false);
+    capture.setExposureDuration(50ms);
+    // Read current frame exposure duration value
+    std::chrono::microseconds duration = capture.getExposureDuration();
+    // Set frame interval duration (here 33ms for ~30FPS)
+    capture.setFrameInterval(50ms);
+    // Read current frame interval duration value
+    std::chrono::microseconds interval = capture.getFrameInterval();
+    // Initialize an accumulator with some resolution
+    //dv::visualization::EventVisualizer visualizer(*capture.getEventResolution());
+    //dv::Accumulator accumulator(*capture.getEventResolution());
+    dv::visualization::EventVisualizer visualizer(ROI_size);
+    dv::Accumulator accumulator(ROI_size);
+    // Apply event color scheme configuration, these values can be modified to taste
+    visualizer.setBackgroundColor(dv::visualization::colors::black);
+    visualizer.setPositiveColor(dv::visualization::colors::green);
+    visualizer.setNegativeColor(dv::visualization::colors::red);
+    // Apply accumulator configuration, these values can be modified to taste
+    accumulator.setMinPotential(0.f);
+    accumulator.setMaxPotential(1.f);
+    accumulator.setNeutralPotential(0.5f);
+    accumulator.setEventContribution(parameters["eventContribution"]/255.0f);
+    accumulator.setDecayFunction(dv::Accumulator::Decay::EXPONENTIAL);
+    accumulator.setDecayParam(1e+6);
+    accumulator.setIgnorePolarity(false);
+    accumulator.setSynchronousDecay(false);
+    dv::EventRegionFilter regionFilter(cv::Rect(0, 0, width, height));
+    dv::noise::KNoiseFilter kNoiseFilter(ROI_size);
+    // Initialize a slicer
+    dv::EventStreamSlicer slicer;
+    // Register a callback every 33 milliseconds
 
-    // Tensors for Image decay
-    xt::xtensor<float, 2> np = xt::ones<float>({rows, cols})*parameters["neutralPotential"];
-    xt::xtensor<float, 2> t = xt::zeros<float>({rows, cols});
-    xt::xtensor<float, 2> dP = xt::ones<float>({rows, cols})*parameters["decayParameter"];
+    std::cout << "Setup complete; Streaming start!" << std::endl;
 
-    int vis_counter = -1;
-    int y;
-    int x;
-    float time;
-    float polarity;
-    std::vector<float> ang_velocity = {0,0,0};
-    std::vector<float> acceleration = {0,0,0};
-    cv::Mat VIGF;
-    //bool cEventFlag = true;
-    auto start_realtime = std::chrono::high_resolution_clock::now();
-    for (int currentInterval = 0; currentInterval<nIntervals; ++currentInterval) {
-        std::cout << "Frame: " << currentInterval << std::endl;
-        //##################################################################################################################
-        // Read events file
+    // Initialize a preview window
+    cv::namedWindow("Events", cv::WINDOW_NORMAL);
+    cv::namedWindow("Images", cv::WINDOW_NORMAL);
+    cv::namedWindow("RealFrame", cv::WINDOW_NORMAL);
+    cv::namedWindow("VIGF", cv::WINDOW_NORMAL);
 
-        std::vector<std::shared_ptr<Event>> event_data;
-        std::vector<std::shared_ptr<Event>> cameraEventData;
-        std::vector<std::shared_ptr<Event>> imuEventData;
-        std::vector<std::shared_ptr<Event>> imageEventData;
+    slicer.doEveryTimeInterval(50ms, [&visualizer, &accumulator, &kNoiseFilter, &regionFilter, &V, &I, &delta_I, &GIDiff, &GIDiffGradient, &F, &G, &R, &CCM, &dCdx, &dCdy, &A, &B,
+                               &Identity_minus_outerProducts, &old_points, &parameters, &permutation, &rng](const dv::EventStore &events) {
+        regionFilter.accept(events);
+        dv::EventStore regionFilteredEvents = regionFilter.generateEvents();
+        // kNoiseFilter.accept(regionFilteredEvents);
+        // dv::EventStore kNoiseFiltered = kNoiseFilter.generateEvents();
+        // cv::Mat kNoiseFilterPreview   = visualizer.generateImage(kNoiseFiltered);
+        // cv::putText(kNoiseFilterPreview, "K-Noise filter", textPosition, cv::FONT_HERSHEY_SIMPLEX, fontScale, fontColor,
+        //     fontThickness);
+        // cv::putText(kNoiseFilterPreview, fmt::format("Reduction factor: {:.2f}", kNoiseFilter.getReductionFactor()),
+        //     textPosition + textShift, cv::FONT_HERSHEY_SIMPLEX, fontScale, fontColor, fontThickness);
 
-        read_events(eventPath, cameraEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX, timeFormat);
-        std::cout << "Readout events at " << eventPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
-        std::cout << "Read " << cameraEventData.size() << " events." << std::endl;
+        // Pass events into the accumulator and generate a preview frame
+        accumulator.accept(regionFilteredEvents);
+        dv::Frame frame = accumulator.generateFrame();
+        cv::Mat eventImage = visualizer.generateImage(regionFilteredEvents);
+        //std::cout << "Accumulated" << std::endl;
 
-        if (vm["fuseR"].as<bool>()) {
-            read_imu(imuPath, imuEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
-            std::cout << "Readout IMU data at " << imuPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
-            mergeTimeCollections(cameraEventData, imuEventData, event_data);
-        }
-        else if (vm["fuseI"].as<bool>()) {
-            readImage(imagesPath, imageEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
-            std::cout << "Readout Image data at " << imuPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
-            mergeTimeCollections(cameraEventData, imageEventData, event_data);
-        }
-        else {
-            event_data = cameraEventData;
-        }
-        V = xt::zeros<float>({rows, cols});
-        for (const auto& event : event_data) {
-            // Shuffle the order of operations for the interacting maps operations
-            if (auto* cEvent = dynamic_cast<CameraEvent*>(event.get())) {
-                PROFILE_SCOPE("CAMERA_EVENT");
-                y = cEvent->coordinates[0];
-                x = cEvent->coordinates[1];
-                time = cEvent->time;
-                polarity = static_cast<float>(cEvent->polarity) * parameters["eventContribution"];
-                //decayTimeSurface(y,x) = event->time;
+        V = cvMatToV(eventImage, 0, parameters["eventContribution"]);
+        cv::Mat imageV = V2image(V, 1.0);
 
-                if (!eventBased) {
-                    V[{y, x}] = polarity;
-                    continue;
-                }
-            }
-            float loss = VFG_check(V, F, G);
-            writeToFile(event->time, loss, VLossPath);
-        }
+        I = cvMatToI(frame.image);
+        //I = xt::transpose(I);
+
+        //std::cout << "Transformed" << std::endl;
+
         for (int convergenceStep = 0; convergenceStep<static_cast<int>(parameters["convergenceSteps"]); ++convergenceStep) {
             std::shuffle(std::begin(permutation), std::end(permutation), rng);
             event_step(V, I, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
-                               Identity_minus_outerProducts, old_points, parameters, permutation);
+                               Identity_minus_outerProducts, old_points, parameters, permutation, rng);
         }
-#ifdef IMAGES
-        //std::cout << "VFG Check: " << loss << std::endl;
-        vis_counter++;
-        std::stringstream filename;
-        filename.fill('0');
-        filename.width(8);
-        filename<<std::to_string(static_cast<int>((startIndex + vis_counter)));
-        std::string image_name = "VIGF_" + filename.str() + ".png";
-        fs::path image_path = folder_path / image_name;
-        create_VIGF(V, I, G, F, image_path, true, 0.1, false);
-        float min_polarity = xt::amin(I)();
-        float max_polarity = xt::amax(I)();
-        std::cout << R << std::endl;
+        //std::cout << "Converged" << std::endl;
+        cv::Mat VIGF = create_VIGF(V, I, G, F, "VIGF.png", false, 0.1, false);
+        //std::cout << "VIGFed" << std::endl;
+        // Show the event image and the accumulated image
+        cv::imshow("VIGF", VIGF);
+        cv::waitKey(10);
 
-        //std::cout << min_polarity << std::endl;
-        //std::cout << max_polarity << std::endl;
-
-        float cost1, cost2, cost3;
-        /*cost1 = costFR(F, CCM, dCdx, dCdy, R);
-        cost2 = costFG(F, V, G);
-        cost3 = costGI(G, delta_I);*/
-        //std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
-        //saveImage(I, folder_path / ("frame_" + filename.str() + ".png"), true);
-        //randomInit(F, -1, 1);
-        //G.setZero();
-#endif
-
+    });
+    // Run the event processing while the camera is connected
+    while (!globalShutdown && capture.isRunning()) {
+        // Receive events, check if anything was received
+        if (const auto events = capture.getNextEventBatch()) {
+            // If so, pass the events into the slicer to handle them
+            slicer.accept(*events);
+        }
+        // Read a frame, check whether it is correct.
+        // The method does not wait for frame arrive, it returns immediately with
+        // the latest available frame or if no data is available, returns a `std::nullopt`.
+        // if (const auto frame = capture.getNextFrame(); frame.has_value()) {
+        //     std::cout << *frame << std::endl;
+        //     // Show a preview of the image
+        //     cv::imshow("RealFrame", frame->image);
+        // }
+        /*if (const auto imuBatch = capture.getNextImuBatch(); imuBatch.has_value() && !imuBatch->empty()) {
+            std::cout << "Received " << imuBatch->size() << " IMU measurements" << std::endl;
+        }
+        else {
+            // No data has arrived yet, short sleep to reduce CPU load.
+            std::this_thread::sleep_for(1ms);
+        }*/
     }
-
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float> elapsed_realtime = end - start_realtime;
-    std::stringstream ssrt;
-    ssrt << "Time elapsed: " << elapsed_realtime.count() << " seconds" << std::endl;
-    writeToFile(ssrt.str(), folder_path / "time_realtime.txt");
-    std::cout << "Algorithm took: " << elapsed_realtime.count() << "seconds/ Real elapsed time: " << parameters["endTime"] - parameters["startTime"] << std::endl;
-    std::string outputFile = "output.mp4";
-
-//#ifdef IMAGES
-//    VideoCreator::createMP4Video(folder_path, folder_path / outputFile, static_cast<int>((parameters["fps"])));
-//#endif
-
     Instrumentor::Get().EndSession();
+    return 0;
 }
