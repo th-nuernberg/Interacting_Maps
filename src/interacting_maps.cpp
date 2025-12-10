@@ -70,7 +70,7 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
                 break;
             case 1:
                 // Gets called separately because we do not want to do an update of F based on R with every event since this update is global
-                // update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
+                update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
                 break;
             case 2:
                 update_GF(G, V, F, y, x, parameters["lr"], parameters["weight_GF"], parameters["eps"], parameters["gamma"]);
@@ -120,11 +120,11 @@ int main(int argc, char* argv[]) {
     desc.add_options()
             ("help,h", "Produce help message")
             ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
-            ("endTime,f", po::value<float>()->default_value(60), "Where to end with event consideration")
-            ("timeFormat,s", po::value<std::string>()->default_value("muS"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
-            ("timeStep,f", po::value<float>()->default_value(0.001), "Size of the event frames")
-            ("resourceDirectory,s", po::value<std::string>()->default_value("22_peds_town7_backward_clear-noon"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("22_peds_town7_backward_clear-noon"), "Where to store the results, located in output directory")
+            ("endTime,f", po::value<float>()->default_value(10), "Where to end with event consideration")
+            ("timeFormat,s", po::value<std::string>()->default_value("S"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
+            ("timeStep,f", po::value<float>()->default_value(0.01), "Size of the event frames")
+            ("resourceDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
+            ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
             ("addTime,b", po::value<bool>()->default_value(false), "Add time to output folder?")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
     std::string timeFormat = vm["timeFormat"].as<std::string>();
     // Split time interval into sub intervals to allow loading of larger files.
     int nIntervals = 1;
-    float maxIntervalLength = 0.1;
+    float maxIntervalLength = 0.01;
     std::vector intervals = {startTime, endTime};
     if (endTime - startTime > maxIntervalLength) {
         float currentTime = startTime;
@@ -371,7 +371,7 @@ int main(int argc, char* argv[]) {
     auto start_realtime = std::chrono::high_resolution_clock::now();
 
     int vis_counter = -1;
-    int FR_update_counter = 0;
+    int FR_update_counter = 100;
 
     nP.setConstant(parameters["neutralPotential"]);
     dP.setConstant(parameters["decayParam"]);
@@ -481,7 +481,7 @@ int main(int argc, char* argv[]) {
                     saveImage(Tensor2Matrix(MI), folder_path / ("frame_" + filename.str() + ".png"), true);
                     V_Vis.setZero();
                     //randomInit(F, -1, 1);
-                    //G.setZero();
+                    G.setZero();
 
     #endif
                 //globalDecay(MI, decayTimeSurface, nP, t, dP);
