@@ -2,6 +2,8 @@
 // Created by daniel on 11/25/24.
 //
 #include "conversions.h"
+#include <imaging.h>
+#include <boost/stacktrace/detail/frame_decl.hpp>
 
 /**
  * Converts an Eigen 1Tensor to an Eigen Vector
@@ -56,18 +58,52 @@ Tensor2f Matrix2Tensor(const MatrixXfRowMajor& input) {
  * @return opencv matrix
  */
 cv::Mat eigenToCvMat(const MatrixXfRowMajor& eigen_matrix) {
-    return {static_cast<int>(eigen_matrix.rows()), static_cast<int>(eigen_matrix.cols()), CV_32F, (void*)eigen_matrix.data()};
+    return {static_cast<int>(eigen_matrix.rows()), static_cast<int>(eigen_matrix.cols()), CV_32F, (float*)eigen_matrix.data()};
 }
 
 /**
- * Converts a Eigen matrix to a opencv matrix, without copying the data
- * @param eigen_matrix
+ * Converts a xtensor matrix to a opencv matrix, without copying the data
+ * @param xtensor 2
  * @return opencv matrix
  */
-cv::Mat xtensorToCvMat(const xt::xtensor<float, 2>& matrix) {
-    auto shape = matrix.shape();
-    return {static_cast<int>(shape[0]), static_cast<int>(shape[1]), CV_32F, (void*)matrix.data()};
+cv::Mat xtensorToCvMat(const xt::xtensor<float, 2>& tensor) {
+    // Create a cv::Mat that shares the data (no copy)
+    cv::Mat mat(
+        static_cast<int>(tensor.shape()[0]), // rows
+        static_cast<int>(tensor.shape()[1]), // cols
+        CV_32F,                               // type
+        const_cast<float*>(tensor.data())    // data pointer (const_cast because cv::Mat constructor is not const-correct)
+    );
+    return mat;
 }
+
+xt::xtensor<float, 2> cvMatToXtensor(const cv::Mat& mat) {
+    // Check if the input is a 2D float matrix
+    if (mat.empty() || mat.dims != 2 || mat.type() != CV_32F) {
+        throw std::runtime_error("Input must be a non-empty 2D CV_32F cv::Mat.");
+    }
+
+    // Adapt the cv::Mat data to an xtensor
+    // Use xt::no_ownership() to avoid double-free (xtensor won't manage the memory)
+    std::vector<int> shape = {mat.rows, mat.cols};
+    return xt::adapt(
+        mat.ptr<float>(),                           // Data pointer (const for safety)
+        mat.rows*mat.cols,                          // size
+        xt::no_ownership(),                         // Let OpenCV manage the memory
+        shape                                       // Shape
+    );
+}
+
+/**
+ * Converts a xtensor tensor to a opencv matrix, without copying the data
+ * @param xtensor 3
+ * @return opencv matrix
+ */
+cv::Mat xtensorToCvMat(const xt::xtensor<float, 3>& tensor) {
+    int sz[] = {static_cast<int>(tensor.shape()[0]),static_cast<int>(tensor.shape()[1]),static_cast<int>(tensor.shape()[2])};
+    return {3, sz, CV_32F, (float*)tensor.data()};
+}
+
 /**
  * Creates a copy of an Eigen matrix and saves it in a opencv matrix
  * @param eigen_matrix
@@ -114,6 +150,50 @@ MatrixXfRowMajor cvMatToEigenCopy(const cv::Mat& mat) {
     }
     return eigen_matrix;
 }
+
+xt::xtensor<float, 2> cvMatToV(const cv::Mat& cv_image, const int neutral, const float contribution) {
+    cv::Mat float_image;
+    //Convert to float if not already
+    if (cv_image.type() != CV_32FC3) {
+        cv_image.convertTo(float_image, CV_32FC3);
+    } else {
+        float_image = cv_image.clone();
+    }
+    size_t size = float_image.total();
+    size_t channels = float_image.channels();
+    std::vector<int> boxOutputArrShape = { float_image.rows, float_image.cols , float_image.channels()};
+    xt::xtensor<float, 3> adapt = xt::adapt((float*)float_image.data, size * channels, xt::no_ownership(), boxOutputArrShape, xt::layout_type::row_major);
+
+    // USED FOR DEBUGGING
+    //std::cout << adapt << std::endl;
+    // std::cout<< xt::view(adapt, xt::all(), xt::all(), 0) << std::endl;
+    // std::cout<< xt::view(adapt, xt::all(), xt::all(), 1) << std::endl;
+    // std::cout<< xt::view(adapt, xt::all(), xt::all(), 2) << std::endl;
+    // xt::xtensor<float, 2> V = xt::view(adapt, xt::all(), xt::all(), 1)/128*contribution - xt::view(adapt, xt::all(), xt::all(), 2)/255*contribution;
+    // cv::Mat imageV = V2image(V, 1.0);
+    return xt::view(adapt, xt::all(), xt::all(), 1)/128*contribution - xt::view(adapt, xt::all(), xt::all(), 2)/255*contribution; // Bracket Initializer from xarray to xtensor
+}
+
+xt::xtensor<float, 2> cvMatToI(const cv::Mat& cv_image) {
+
+    //Convert to float if not already
+    // if (cv_image.type() != CV_32FC1) {
+    //     cv_image.convertTo(float_image, CV_32FC1);
+    // } else {
+    //     float_image = cv_image.clone();
+    // }
+    size_t size = cv_image.total();
+    size_t channels = cv_image.channels();
+    std::vector<int> boxOutputArrShape = { cv_image.rows, cv_image.cols};
+    xt::xtensor<uint8_t, 2> adapt = xt::adapt(cv_image.data, size * channels, xt::no_ownership(), boxOutputArrShape);
+    xt::xtensor<float, 2> res = xt::cast<float>(adapt);
+    cv::Mat test = frame2grayscale(res);
+    // xt::xtensor<float, 3> res = xt::empty<float>(boxOutputArrShape);
+    // res = xt::cast<float>(adapt);
+    return res; // Bracket Initializer from xarray to xtensor
+}
+
+
 /**
  * Converts a opencv matrix from integer [0,255] to a float [0,1] matrix
  * @param mat
