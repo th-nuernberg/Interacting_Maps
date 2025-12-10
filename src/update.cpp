@@ -112,20 +112,20 @@ void find_C(size_t N_x, size_t N_y, float view_angle_x, float view_angle_y, floa
             YY(i, j) = static_cast<float>(i);
         }
     }*/
-    std::cout << XX << std::endl;
-    std::cout << YY << std::endl;
+    // std::cout << XX << std::endl;
+    // std::cout << YY << std::endl;
     for (int i = 0; i < N_y; ++i) {
         for (int j = 0; j < N_x; ++j) {
             autodiff::real x = XX[{i,j}];
-            std::cout << x << std::endl;
-            std::cout << XX[{i,j}] << std::endl;
+            // std::cout << x << std::endl;
+            // std::cout << XX[{i,j}] << std::endl;
             autodiff::real y = YY[{i,j}];
-            std::cout << y << std::endl;
-            std::cout << YY[{i,j}] << std::endl;
+            // std::cout << y << std::endl;
+            // std::cout << YY[{i,j}] << std::endl;
 
             // Compute the function value
             autodiff::Vector3real c_val = C(x, y, N_x, N_y, height, width, rs);
-            std::cout << c_val << std::endl;
+            // std::cout << c_val << std::endl;
             CCM[{i,j,0}] = static_cast<float>(c_val(0)); // y
             CCM[{i,j,1}] = static_cast<float>(c_val(1)); // x
             CCM[{i,j,2}] = static_cast<float>(c_val(2)); // z
@@ -137,8 +137,8 @@ void find_C(size_t N_x, size_t N_y, float view_angle_x, float view_angle_y, floa
             autodiff::jacobian(C, wrt(x), at(x,y,N_x, N_y, height, width, rs), F, dCdx);
             VectorXd dCdy;
             autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F, dCdy);
-            std::cout << dCdx << std::endl;
-            std::cout << dCdy << std::endl;
+            // std::cout << dCdx << std::endl;
+            // std::cout << dCdy << std::endl;
             // C_x = dCdx
             C_x[{i,j,0}] = static_cast<float>(dCdx(0)); // y
             C_x[{i,j,1}] = static_cast<float>(dCdx(1)); // x
