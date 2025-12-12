@@ -94,7 +94,7 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
     }
 }
 
-void event_step(const xt::xtensor<float, 2> &V, xt::xtensor<float, 2> &I, xt::xtensor<float, 3> &delta_I, xt::xtensor<float, 3> &GIDiff, xt::xtensor<float, 3> &GIDiffGradient, xt::xtensor<float, 3> &F, xt::xtensor<float, 3> &G, xt::xtensor<float, 1> &R, const xt::xtensor<float, 3> &CCM, const xt::xtensor<float, 3> &dCdx, const xt::xtensor<float, 3> &dCdy, const xt::xtensor<float, 2> &A, xt::xtensor<float, 1> &B, const xt::xtensor<float, 4> &Identity_minus_outerProducts, xt::xtensor<float, 3> &old_points, std::unordered_map<std::string,float> &parameters, std::vector<int> &permutation, std::default_random_engine &rng){
+void event_step(const xt::xtensor<float, 2> &V, xt::xtensor<float, 2> &I, xt::xtensor<float, 3> &delta_I, xt::xtensor<float, 3> &GIDiff, xt::xtensor<float, 3> &GIDiffGradient, xt::xtensor<float, 3> &F, xt::xtensor<float, 3> &G, xt::xtensor<float, 1> &R, const xt::xtensor<float, 3> &CCM, const xt::xtensor<float, 3> &dCdx, const xt::xtensor<float, 3> &dCdy, const xt::xtensor<float, 2> &A, xt::xtensor<float, 1> &B, const xt::xtensor<float, 4> &Identity_minus_outerProducts, xt::xtensor<float, 3> &old_points, xt::xtensor<float, 3> &C1, xt::xtensor<float, 3> &C2, xt::xtensor<float, 2> &dot, xt::xtensor<float, 2> &distance, std::unordered_map<std::string,float> &parameters, std::vector<int> &permutation, std::default_random_engine &rng){
     PROFILE_FUNCTION();
     std::uniform_real_distribution<> dis(0.0, 1.0);
     for (const auto& element : permutation){
@@ -106,7 +106,7 @@ void event_step(const xt::xtensor<float, 2> &V, xt::xtensor<float, 2> &I, xt::xt
                 break;
             case 1:
                 // if (dis(rng) < 1.0) {
-                update_FR(F, CCM, dCdx, dCdy, R, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
+                update_FR(F, CCM, dCdx, dCdy, R, C1, C2, dot, distance, parameters["weight_FR"], parameters["eps"], parameters["gamma"]);
                 // }
                 break;
             case 2:
@@ -219,7 +219,7 @@ int main(int argc, char* argv[]) {
     parameters["minPotential"] = 0.0;                                       // minimum Value for Image
     parameters["maxPotential"] = 255.0;                                     // maximal Value for Image
     parameters["neutralPotential"] = 128;                                   // base value where image decays back to
-    parameters["convergenceSteps"] = 40;
+    parameters["convergenceSteps"] = 2;
     //parameters["fps"] = 1.0f/parameters["time_step"];                       // how often shown images are update
     //parameters["FR_updates_per_second"] = 1.0f/parameters["time_step"];     // how often the FR update is performed; It is not done after every event
     //parameters["updateIterationsFR"] = 4;                                   // more iterations -> F captures general movement of scene/camera better but significantly more computation time
@@ -397,7 +397,7 @@ int main(int argc, char* argv[]) {
     accumulator.setNeutralPotential(0.5f);
     accumulator.setEventContribution(parameters["eventContribution"]/255.0f);
     accumulator.setDecayFunction(dv::Accumulator::Decay::EXPONENTIAL);
-    accumulator.setDecayParam(1e+6);
+    accumulator.setDecayParam(1e5);
     accumulator.setIgnorePolarity(false);
     accumulator.setSynchronousDecay(false);
     dv::EventRegionFilter regionFilter(cv::Rect(0, 0, width, height));
@@ -414,22 +414,28 @@ int main(int argc, char* argv[]) {
     cv::namedWindow("RealFrame", cv::WINDOW_NORMAL);
     cv::namedWindow("VIGF", cv::WINDOW_NORMAL);
 
+    const shape_type3 &shape = CCM.shape();
+    xt::xtensor<float, 3> C1(shape);
+    xt::xtensor<float, 3> C2(shape);
+    xt::xtensor<float, 2> dot({shape[0], shape[1]});
+    xt::xtensor<float, 2> distance({shape[0], shape[1]});
+
     slicer.doEveryTimeInterval(50ms, [&visualizer, &accumulator, &kNoiseFilter, &regionFilter, &V, &I, &delta_I, &GIDiff, &GIDiffGradient, &F, &G, &R, &CCM, &dCdx, &dCdy, &A, &B,
-                               &Identity_minus_outerProducts, &old_points, &parameters, &permutation, &rng](const dv::EventStore &events) {
+                               &Identity_minus_outerProducts, &old_points, &parameters, &permutation, &rng, &C1, &C2, &dot, &distance](const dv::EventStore &events) {
         regionFilter.accept(events);
         dv::EventStore regionFilteredEvents = regionFilter.generateEvents();
-        // kNoiseFilter.accept(regionFilteredEvents);
-        // dv::EventStore kNoiseFiltered = kNoiseFilter.generateEvents();
-        // cv::Mat kNoiseFilterPreview   = visualizer.generateImage(kNoiseFiltered);
+        kNoiseFilter.accept(regionFilteredEvents);
+        dv::EventStore kNoiseFiltered = kNoiseFilter.generateEvents();
+        //cv::Mat kNoiseFilterPreview   = visualizer.generateImage(kNoiseFiltered);
         // cv::putText(kNoiseFilterPreview, "K-Noise filter", textPosition, cv::FONT_HERSHEY_SIMPLEX, fontScale, fontColor,
         //     fontThickness);
         // cv::putText(kNoiseFilterPreview, fmt::format("Reduction factor: {:.2f}", kNoiseFilter.getReductionFactor()),
         //     textPosition + textShift, cv::FONT_HERSHEY_SIMPLEX, fontScale, fontColor, fontThickness);
 
         // Pass events into the accumulator and generate a preview frame
-        accumulator.accept(regionFilteredEvents);
+        accumulator.accept(kNoiseFiltered);
         dv::Frame frame = accumulator.generateFrame();
-        cv::Mat eventImage = visualizer.generateImage(regionFilteredEvents);
+        cv::Mat eventImage = visualizer.generateImage(kNoiseFiltered);
         //std::cout << "Accumulated" << std::endl;
 
         V = cvMatToV(eventImage, 0, parameters["eventContribution"]);
@@ -443,14 +449,14 @@ int main(int argc, char* argv[]) {
         for (int convergenceStep = 0; convergenceStep<static_cast<int>(parameters["convergenceSteps"]); ++convergenceStep) {
             std::shuffle(std::begin(permutation), std::end(permutation), rng);
             event_step(V, I, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
-                               Identity_minus_outerProducts, old_points, parameters, permutation, rng);
+                               Identity_minus_outerProducts, old_points, C1, C2, dot, distance, parameters, permutation, rng);
         }
         //std::cout << "Converged" << std::endl;
         cv::Mat VIGF = create_VIGF(V, I, G, F, "VIGF.png", false, 0.1, false);
         //std::cout << "VIGFed" << std::endl;
         // Show the event image and the accumulated image
         cv::imshow("VIGF", VIGF);
-        cv::waitKey(10);
+        cv::waitKey(1);
 
     });
     // Run the event processing while the camera is connected
@@ -468,13 +474,19 @@ int main(int argc, char* argv[]) {
         //     // Show a preview of the image
         //     cv::imshow("RealFrame", frame->image);
         // }
-        /*if (const auto imuBatch = capture.getNextImuBatch(); imuBatch.has_value() && !imuBatch->empty()) {
-            std::cout << "Received " << imuBatch->size() << " IMU measurements" << std::endl;
+        if (const std::optional<std::vector<dv::IMU>> imuBatch = capture.getNextImuBatch(); imuBatch.has_value() && !imuBatch->empty()) {
+            //std::cout << "Received " << imuBatch->size() << " IMU measurements" << std::endl;
+            dv::IMU imu_ = imuBatch->at(0);
+            auto R_ = imu_.getAngularVelocities();
+            R[1] = R_[0];
+            R[0] = R_[1];
+            R[2] = R_[2];
+
         }
         else {
             // No data has arrived yet, short sleep to reduce CPU load.
             std::this_thread::sleep_for(1ms);
-        }*/
+        }
     }
     Instrumentor::Get().EndSession();
     return 0;
