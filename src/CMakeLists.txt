@@ -25,6 +25,8 @@ target_link_libraries(interacting_maps_lib
         Boost::filesystem
         Boost::log
         Boost::program_options
+        Eigen3::Eigen
+        ${OpenCV_LIBS}
         opencv_core
         opencv_imgproc
         opencv_calib3d  # <-- Add this line (required for cv::undistort)
