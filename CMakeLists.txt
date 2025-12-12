@@ -87,7 +87,7 @@ message(STATUS "BLAS VENDOR:    " ${BLA_VENDOR})
 message(STATUS "BLAS LIBRARIES: " ${BLAS_LIBRARIES})
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
-find_package(Eigen3)
+#find_package(Eigen3)
 find_package(Boost)
 FIND_PACKAGE(dv-processing REQUIRED)
 
