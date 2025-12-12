@@ -638,7 +638,10 @@ void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tenso
  * @param eps
  * @param gamma
  */
-void update_FR(xt::xtensor<float, 3> &F, const xt::xtensor<float, 3> &CCM, const xt::xtensor<float, 3> &Cx, const xt::xtensor<float, 3> &Cy, const xt::xtensor<float, 1> &R, float weight_FR, float eps, float gamma);
+void update_FR(xt::xtensor<float, 3> &F, const xt::xtensor<float, 3> &CCM, const xt::xtensor<float, 3> &Cx, const xt::xtensor<float, 3> &Cy, const xt::xtensor<float, 1> &R, xt::xtensor<float, 3>& C1,
+              xt::xtensor<float, 3>& C2,
+              xt::xtensor<float, 2>& dot,
+              xt::xtensor<float, 2>& distance,float weight_FR, float eps, float gamma);
 
 
 // void update_RF(Tensor1f &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::unique_ptr<Matrix3f[]> &Identity_minus_outerProducts, Vector3f &old_point, int y, int x, float weight_RF, const std::vector<Event> &frameEvents);

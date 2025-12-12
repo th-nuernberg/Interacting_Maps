@@ -321,31 +321,33 @@ void m32(const Tensor3f &In, const Tensor3f &C_x, const Tensor3f &C_y, Tensor3f 
     Out.chip(0,2) = sign * distance1/distance2;
 }
 
-void m32(const xt::xtensor<float, 3> &In, const xt::xtensor<float, 3> &C_x, const xt::xtensor<float, 3> &C_y, xt::xtensor<float, 3> &Out){
+void m32(const xt::xtensor<float, 3> &In, const xt::xtensor<float, 3> &C_x, const xt::xtensor<float, 3> &C_y, xt::xtensor<float, 3> &Out, xt::xtensor<float, 3> &C1, xt::xtensor<float, 3> &C2, xt::xtensor<float, 2> &dot, xt::xtensor<float, 2> &distance){
     const shape_type3&shape = In.shape();
     const shape_type3&shape2 = Out.shape();
-    xt::xtensor<float, 3> C1(shape);
-    xt::xtensor<float, 3> C2(shape);
-    xt::xtensor<float, 2> dot({shape[0], shape[1]});
-    xt::xtensor<float, 2> sign({shape[0], shape[1]});
-    xt::xtensor<float, 2> distance1({shape[0], shape[1]});
-    xt::xtensor<float, 2> distance2({shape[0], shape[1]});
+    // xt::xtensor<float, 3> C1(shape);
+    // xt::xtensor<float, 3> C2(shape);
+    // xt::xtensor<float, 2> dot({shape[0], shape[1]});
+    // xt::xtensor<float, 2> sign({shape[0], shape[1]});
+    // xt::xtensor<float, 2> distance1({shape[0], shape[1]});
+    // xt::xtensor<float, 2> distance2({shape[0], shape[1]});
 
     crossProduct3x3(C_x,C_y,C1);
     crossProduct3x3(C_y,C1,C2);
     computeDotProduct(In,C2,dot);
-    sign = xt::sign(dot);
-    vector_distance(In, C_y, distance1);
-    vector_distance(C_x, C_y, distance2);
-    xt::view(Out, xt::all(), xt::all(), 1) = sign * distance1/distance2;
+    dot = xt::sign(dot);
+    vector_distance(In, C_y, distance);
+    dot = dot * distance;
+    vector_distance(C_x, C_y, distance);
+    xt::view(Out, xt::all(), xt::all(), 1) = dot / distance;
 
     crossProduct3x3(C_y,C_x,C1);
     crossProduct3x3(C_x,C1,C2);
     computeDotProduct(In,C2,dot);
-    sign = xt::sign(dot);
-    vector_distance(In, C_x, distance1);
-    vector_distance(C_y, C_x, distance2);
-    xt::view(Out, xt::all(), xt::all(), 0) = sign * distance1/distance2;
+    dot = xt::sign(dot);
+    vector_distance(In, C_x, distance);
+    dot = dot * distance;
+    vector_distance(C_y, C_x, distance);
+    xt::view(Out, xt::all(), xt::all(), 0) = dot / distance;
 }
 
 void m23(const Tensor3f &In, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &Out, int y, int x) {
@@ -885,6 +887,10 @@ void update_FR(xt::xtensor<float, 3>& F,
               const xt::xtensor<float, 3>& Cx,
               const xt::xtensor<float, 3>& Cy,
               const xt::xtensor<float, 1>& R,
+              xt::xtensor<float, 3>& C1,
+              xt::xtensor<float, 3>& C2,
+              xt::xtensor<float, 2>& dot,
+              xt::xtensor<float, 2>& distance,
               const float weight_FR,
               float eps = 1e-8f,
               float gamma = 255.0f) {
@@ -896,7 +902,7 @@ void update_FR(xt::xtensor<float, 3>& F,
     crossProduct1x3(R, CCM, cross);
 
     // Compute m32
-    m32(cross, Cx, Cy, update);
+    m32(cross, Cx, Cy, update, C1, C2, dot, distance);
 
     // Update F using the update rule
     F = (1.0f - weight_FR) * F + weight_FR * update;
