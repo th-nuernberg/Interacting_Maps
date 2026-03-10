@@ -74,6 +74,15 @@ CPMAddPackage(
         GIT_TAG v3.12.1
 )
 
+# Install libbacktrace with:
+#git clone https://github.com/ianlancetaylor/libbacktrace.git
+#cd libbacktrace
+#mkdir build
+#cd build
+#../configure
+#make # no sudo needed
+#sudo make install
+
 add_definitions(-DHAVE_CBLAS=1)
 
 if (WIN32)
@@ -89,10 +98,11 @@ message(STATUS "BLAS LIBRARIES: " ${BLAS_LIBRARIES})
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
 #find_package(Eigen3)
 find_package(Boost)
-FIND_PACKAGE(dv-processing REQUIRED)
+find_package(dv-processing REQUIRED)
 
 find_package(xtensor REQUIRED)
 find_package(xtensor-blas REQUIRED)
+
 
 # Include directories for the entire project
 message("Project source dir: " ${PROJECT_SOURCE_DIR})

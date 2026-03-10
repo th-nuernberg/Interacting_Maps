@@ -27,7 +27,7 @@ target_link_libraries(interacting_maps_lib
         Boost::program_options
         opencv_core
         opencv_imgproc
-        opencv_calib3d  # <-- Add this line (required for cv::undistort)
+        opencv_calib3d
         opencv_highgui
         xtensor
         xtensor-blas
@@ -37,7 +37,14 @@ target_link_libraries(interacting_maps_lib
 
 # === Executables ===
 # Example 2: Main program
-target_link_libraries(InteractingMaps PUBLIC interacting_maps_lib)
+
+
+if (APPLE)
+    target_link_libraries(InteractingMaps PUBLIC interacting_maps_lib xtensor-blas "-framework Accelerate")
+else()
+    target_link_libraries(InteractingMaps PUBLIC interacting_maps_lib)
+endif()
+
 
 # Set output directory for the executable (optional, since global is already set)
 set_target_properties(InteractingMaps PROPERTIES

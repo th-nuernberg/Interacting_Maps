@@ -14,9 +14,9 @@
 #include <xtensor.hpp>
 #include <dv-processing/io/camera/discovery.hpp>
 #include <dv-processing/visualization/event_visualizer.hpp>
+#include <dv-processing/noise/k_noise_filter.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-#include <dv-processing/noise/k_noise_filter.hpp>
 #include <csignal>
 
 static std::atomic<bool> globalShutdown(false);
