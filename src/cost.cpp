@@ -11,7 +11,6 @@ float costFR(const Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const T
     const auto& dimensions = F.dimensions();
     Eigen::array<int, 1> dims({2 /* dimension to reduce */});
     Eigen::array<int, 2> dims2({0,1});
-
     Tensor3f ref(dimensions);
     Tensor3f square(dimensions);
     Tensor<float, 2> sum(dimensions[0], dimensions[0]);
@@ -30,6 +29,24 @@ float costFR(const Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const T
     return cost/static_cast<float>((dimensions[0]*dimensions[1]));
 }
 
+float costFR(xt::xtensor<float, 3>& F,
+              const xt::xtensor<float, 3>& CCM,
+              const xt::xtensor<float, 3>& Cx,
+              const xt::xtensor<float, 3>& Cy,
+              const xt::xtensor<float, 1>& R) {
+
+    xt::xtensor<float, 3> cross = xt::zeros<float>(CCM.shape());
+    xt::xtensor<float, 3> ref = xt::zeros<float>(CCM.shape());
+    xt::xtensor<float, 3> square = xt::zeros<float>(CCM.shape());
+    const auto& dimensions = F.shape();
+    xt::xtensor<float, 2> sum = xt::zeros<float>(dimensions);
+    crossProduct1x3(R, CCM, cross);
+    m32(cross, Cx, Cy, ref);
+    square = (F - ref) * (F - ref);
+    xt::xarray<float> cost = xt::sum<float>(square); // cost is a 0D-Tensor
+    return cost[0];
+}
+
 float costFG(const Tensor3f &F, const Tensor2f &V, const Tensor3f &G){
     const auto& dimensions = F.dimensions();
     Tensor2f dot(dimensions[0], dimensions[1]);
@@ -45,6 +62,18 @@ float costFG(const Tensor3f &F, const Tensor2f &V, const Tensor3f &G){
     float cost = static_cast<Eigen::Tensor<float, 0>>(diff.sum().eval())();
     return cost/static_cast<float>((dimensions[0]*dimensions[1]));
 }
+
+float costFG(const xt::xtensor<float, 3>& F,
+    const xt::xtensor<float, 2>& V,
+    const xt::xtensor<float, 3>& G) {
+    const auto& dimensions = F.shape();
+    xt::xtensor<float, 2> dot;
+    computeDotProduct(F,G,dot);
+    xt::xtensor<float, 2> diff = xt::square(V-dot);
+    xt::xarray<float> cost = xt::average(diff);
+    return cost[0];
+}
+
 
 float costGI(const Tensor3f &G, const Tensor3f &I_gradient){
     const auto& dimensions = G.dimensions();
@@ -63,4 +92,13 @@ float costGI(const Tensor3f &G, const Tensor3f &I_gradient){
     sum = square.sum(dims);
     float cost = static_cast<Eigen::Tensor<float, 0>>(sum.sum().eval())();
     return cost/static_cast<float>((dimensions[0]*dimensions[1]));
+}
+
+float costGI(const xt::xtensor<float, 3>& G,
+    const xt::xtensor<float, 3>& I_gradient) {
+    const auto& dimensions = G.shape();
+    xt::xtensor<float, 3> square(dimensions);
+    xt::xtensor<float, 2> diff = xt::square(G-I_gradient);
+    xt::xarray<float> cost = xt::average(diff);
+    return cost[0];
 }

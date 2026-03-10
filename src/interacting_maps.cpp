@@ -354,6 +354,7 @@ int main(int argc, char* argv[]) {
     int x;
     float time;
     float polarity;
+    float cost1, cost2, cost3;
     std::vector<float> ang_velocity = {0,0,0};
     std::vector<float> acceleration = {0,0,0};
     cv::Mat VIGF;
@@ -410,6 +411,12 @@ int main(int argc, char* argv[]) {
             event_step(V, I, delta_I, GIDiff, GIDiffGradient, F, G, R, CCM, dCdx, dCdy, A, B,
                                Identity_minus_outerProducts, old_points, parameters, permutation);
         }
+
+        cost1 = costFR(F, CCM, dCdx, dCdy, R);
+        cost2 = costFG(F, V, G);
+        cost3 = costGI(G, delta_I);
+        std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
+
 #ifdef IMAGES
         //std::cout << "VFG Check: " << loss << std::endl;
         vis_counter++;
@@ -427,11 +434,7 @@ int main(int argc, char* argv[]) {
         //std::cout << min_polarity << std::endl;
         //std::cout << max_polarity << std::endl;
 
-        float cost1, cost2, cost3;
-        /*cost1 = costFR(F, CCM, dCdx, dCdy, R);
-        cost2 = costFG(F, V, G);
-        cost3 = costGI(G, delta_I);*/
-        //std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
+
         //saveImage(I, folder_path / ("frame_" + filename.str() + ".png"), true);
         //randomInit(F, -1, 1);
         //G.setZero();
