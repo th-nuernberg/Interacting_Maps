@@ -56,15 +56,15 @@ struct CameraEvent : Event {
 };
 
 struct IMUEvent : Event {
-    std::vector<float> accelerations;
-    std::vector<float> ang_velocities;
+    std::vector<float> lin_acceleration;
+    std::vector<float> ang_velocity;
 
     // Default constructor
     IMUEvent() = default;
 
     // Constructor
-    IMUEvent(float t, const std::vector<float>& a, const std::vector<float>& v)
-            : Event(t), accelerations(a), ang_velocities(v) {}
+    IMUEvent(float t, const std::vector<float>& lin_acceleration, const std::vector<float>& ang_velocity)
+            : Event(t), lin_acceleration(lin_acceleration), ang_velocity(ang_velocity) {}
 };
 
 struct ImageEvent : Event {
