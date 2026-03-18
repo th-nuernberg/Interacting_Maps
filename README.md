@@ -53,6 +53,28 @@ mkdir .build && cd .build
 cmake ..
 cmake --build . --target install
 ```
+
+## Install dv-processing
+https://gitlab.com/inivation/dv/dv-processing
+###Clone repo
+```
+git clone https://gitlab.com/inivation/dv/dv-processing.git
+cd dv-processing
+```
+### Build
+Create the /opt/dv-processing if necessary
+```
+mkdir build && cd build
+CC=clang CXX=clang++ cmake -DCMAKE_INSTALL_PREFIX=/opt/dv-processing ..
+make -j4 -s
+make test
+```
+### Install Headers
+```
+sudo make install
+```
+
+
 -D AUTODIFF_BUILD_PYTHON=OFF  # <-- Add this line to the ```cmake -S . -B build -G Ninja...``` command to disable Python bindings
 pybind11 is then probably not needed. Otherwise python makes trouble
 
