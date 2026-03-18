@@ -30,11 +30,34 @@ namespace po = boost::program_options;
 //  INTERACTING MAPS MAIN FUNCTION  ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct Resolution
+{
+    int height;
+    int width;
+};
+
+Resolution readResolution(const fs::path& settingsPath)
+{
+    std::vector<float> settings;
+    read_single_line_txt(settingsPath, settings);
+    std::cout << "Parsed Settings: " << settingsPath << "\n";
+    return { int(settings[0]), int(settings[1]) };
+}
+
+Calibration_Data readCalibration(const fs::path& calibrationPath, int height, int width)
+{
+    std::vector<float> raw_calibration_data;
+    read_single_line_txt(calibrationPath, raw_calibration_data);
+    std::cout << "Readout calibration file at " << calibrationPath << "\n";
+    return get_calibration_data(raw_calibration_data, height, width);
+}
+
 struct ProgramArgs
 {
     float startTime;
     float endTime;
     float timeStep;
+    float maxIntervalLength;
     int startIndex;
     std::string timeFormat;
     std::string resourceDirectory;
@@ -58,6 +81,7 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .startTime         = vm["startTime"].as<float>(),
         .endTime           = vm["endTime"].as<float>(),
         .timeStep          = vm["timeStep"].as<float>(),
+        .maxIntervalLength = vm["maxIntervalLength"].as<float>(),
         .startIndex        = vm["startIndex"].as<int>(),
         .timeFormat        = vm["timeFormat"].as<std::string>(),
         .resourceDirectory = vm["resourceDirectory"].as<std::string>(),
@@ -347,9 +371,10 @@ int main(int argc, char* argv[]) {
     desc.add_options()
             ("help,h", "Produce help message")
             ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
-            ("endTime,f", po::value<float>()->default_value(1), "Where to end with event consideration")
+            ("endTime,f", po::value<float>()->default_value(5), "Where to end with event consideration")
             ("timeFormat,s", po::value<std::string>()->default_value("uS"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
             ("timeStep,f", po::value<float>()->default_value(0.01), "Size of the event frames")
+            ("maxIntervalLength,f", po::value<float>()->default_value(1.0), "Load events from time slice of this size at a time")
             ("resourceDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
             ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
@@ -360,9 +385,8 @@ int main(int argc, char* argv[]) {
     if (!args) return 0;
 
     // Split time interval into sub intervals to allow loading of larger files.
-    float maxIntervalLength = 0.01;
     std::vector intervals = {args->startTime, args->endTime};
-    intervals = splitTimeInterval(args->startTime, args->endTime, maxIntervalLength);
+    intervals = splitTimeInterval(args->startTime, args->endTime, args->maxIntervalLength);
 
     // Inform user
     std::cout << "Parsed startTime: " << args->startTime << "\n";
@@ -370,9 +394,6 @@ int main(int argc, char* argv[]) {
     std::cout << "Parsed timeStep: " << args->timeStep << "\n";
     std::cout << "Parsed resourceDirectory: " << args->resourceDirectory << "\n";
     std::cout << "Parsed resultsDirectory: " << args->resultsDirectory << "\n";
-
-    // Start time for logging
-    auto start = std::chrono::high_resolution_clock::now();
 
     // Create results_folder
     fs::path folder_path = create_folder_and_update_gitignore(args->resultsDirectory);
@@ -394,18 +415,13 @@ int main(int argc, char* argv[]) {
     fs::path R_path = setupFilePath(folder_path, "R.txt");
     fs::path VLossPath = setupFilePath(folder_path, "VLoss.txt");
 
-    Parameters parameters = initParameters(args->startTime, args->endTime, args->timeStep);
+
 
     // Read resolution and calibration from file
-    std::vector<float> settings;
-    read_single_line_txt(settingsPath, settings);
-    std::cout << "Parsed Settings: " << settingsPath << "\n";
-    int height = int(settings[0]); // in pixels
-    int width = int(settings[1]); // in pixels
-    std::vector<float> raw_calibration_data;
-    read_single_line_txt(calibrationPath, raw_calibration_data);
-    Calibration_Data calibration_data = get_calibration_data(raw_calibration_data, height, width);
-    std::cout << "Readout calibration file at " << calibrationPath << std::endl;
+    Resolution res                    = readResolution(settingsPath);
+    Calibration_Data calibration_data = readCalibration(calibrationPath, res.height, res.width);
+    Parameters parameters = initParameters(args->startTime, args->endTime, args->timeStep);
+    OpticalFlowState state = initOpticalFlowState(res.height, res.width, parameters, calibration_data);
 
     // iterations are done after event calculations for a frame are done
     std::vector permutation {0,2,3}; // Which update steps to take; 1 is not needed
@@ -413,14 +429,12 @@ int main(int argc, char* argv[]) {
     unsigned seed = myRandomDevice();
     std::default_random_engine rng(seed);
 
-    OpticalFlowState state = initOpticalFlowState(height, width, parameters, calibration_data);
-
     // For keeping track of the current Event
-    std::vector<int> currentCoordinates = {0,0};
-    CameraEvent currentCameraEvent = CameraEvent(args->startTime, currentCoordinates, 0);
-    std::vector<float> ang_velocity = {0,0,0};
-    std::vector<float> lin_acceleration = {0,0,0};
-    IMUEvent currentImuEvent = IMUEvent(args->startTime, lin_acceleration, ang_velocity);
+    // std::vector<int> currentCoordinates = {0,0};
+    // CameraEvent currentCameraEvent = CameraEvent(args->startTime, currentCoordinates, 0);
+    // std::vector<float> ang_velocity = {0,0,0};
+    // std::vector<float> lin_acceleration = {0,0,0};
+    // IMUEvent currentImuEvent = IMUEvent(args->startTime, lin_acceleration, ang_velocity);
 
     auto start_realtime = std::chrono::high_resolution_clock::now();
 
@@ -538,14 +552,10 @@ int main(int argc, char* argv[]) {
     }
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float> elapsed = end - start;
     std::chrono::duration<float> elapsed_realtime = end - start_realtime;
-    std::stringstream ss;
-    std::stringstream ssrt;
-    ss << "Time elapsed: " << elapsed.count() << " seconds" << std::endl;
-    ssrt << "Time elapsed: " << elapsed_realtime.count() << " seconds" << std::endl;
-    writeToFile(ss.str(), folder_path / "time_complete.txt");
-    writeToFile(ssrt.str(), folder_path / "time_realtime.txt");
+    std::stringstream ssTime;
+    ssTime << "Time elapsed: " << elapsed_realtime.count() << " seconds" << std::endl;
+    writeToFile(ssTime.str(), folder_path / "time_realtime.txt");
     std::cout << "Algorithm took: " << elapsed_realtime.count() << "seconds/ Real elapsed time: " << parameters.endTime - parameters.startTime << std::endl;
 
     std::string outputFile = "output.mp4";
