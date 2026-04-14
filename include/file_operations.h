@@ -5,9 +5,10 @@
 #ifndef INTERACTINGMAPS_FILE_OPERATIONS_H
 #define INTERACTINGMAPS_FILE_OPERATIONS_H
 
-#include <string>
 #include <filesystem>
 #include <fstream>
+#include <H5Cpp.h>
+#include <string>
 #include "datatypes.h"
 
 namespace fs = std::filesystem;

@@ -231,24 +231,58 @@ void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
+        if (fs::exists(path) && endsWith(file_path, ".hdf5")) {
+            try {
+                // Open the HDF5 file
+                H5::H5File file(path, H5F_ACC_RDONLY);
+
+                // Open the "events" group
+                H5::Group eventsGroup = file.openGroup("events");
+
+                // Open the "time" dataset
+                H5::DataSet timeDataset = eventsGroup.openDataSet("time");
+                H5::DataSpace timeSpace = timeDataset.getSpace();
+                hsize_t timeDims[1];
+                timeSpace.getSimpleExtentDims(timeDims);
+                size_t numEvents = std::min(static_cast<size_t>(timeDims[0]), static_cast<size_t>(max_events));
+
+                // Read the "time" data
+                std::vector<float> times(numEvents);
+                timeDataset.read(times.data(), H5::PredType::NATIVE_FLOAT);
+
+                // Open and read the "y", "x", and "polarity" datasets
+                H5::DataSet yDataset = eventsGroup.openDataSet("y");
+                H5::DataSet xDataset = eventsGroup.openDataSet("x");
+                H5::DataSet polarityDataset = eventsGroup.openDataSet("polarity");
+
+                std::vector<int> y(numEvents), x(numEvents), polarity(numEvents);
+                yDataset.read(y.data(), H5::PredType::NATIVE_INT);
+                xDataset.read(x.data(), H5::PredType::NATIVE_INT);
+                polarityDataset.read(polarity.data(), H5::PredType::NATIVE_INT);
+
+                // Find the first and last indices for the time range
+                float firstTime = times[0];
+                size_t firstIdx = searchSorted(times, firstTime + start_time);
+                size_t lastIdx = searchSorted(times, firstTime + end_time);
+
+                // Add events to the output vector
+                for (size_t i = firstIdx; i < lastIdx; ++i) {
+                    std::vector<int> coords = {y[i], x[i]};
+                    events.emplace_back(std::make_shared<CameraEvent>(times[i], coords, polarity[i] * 2 - 1));
+                }
+            } catch (const H5::Exception &e) {
+                std::cerr << "HDF5 Error: " << e.getDetailMsg() << std::endl;
+            }
+    }
         std::ifstream event_file(path);
         int counter = 0;
         float time;
         int width, height, polarity;
-        float timeFactor = 1.0;
-        if (timeFormat == "mS") {
-            timeFactor = 1.0/1000;
-        }
-        if (timeFormat == "muS") {
-            timeFactor = 1.0/1000000;
-        }
         while (event_file >> time >> width >> height >> polarity){
-            time = time*timeFactor;
             if (time < start_time) continue;
             if (time > end_time) break;
             if (counter > max_events) break;
             std::vector coords = {height, width};
-
             events.emplace_back(std::make_shared<CameraEvent>(time, coords, polarity*2-1));
             counter++;
         }

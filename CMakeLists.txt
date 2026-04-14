@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.26, FATAL_ERROR)
+cmake_minimum_required(VERSION 3.26 FATAL_ERROR)
 project(InteractingMaps LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,16 +44,24 @@ CPMAddPackage(
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
 find_package(Eigen3)
+# Find HDF5 with C++ support
+find_package(HDF5 NAMES hdf5 COMPONENTS C CXX REQUIRED)
+# Print HDF5 info for debugging
+message(STATUS "HDF5 found: ${HDF5_FOUND}")
+message(STATUS "HDF5 include dirs: ${HDF5_INCLUDE_DIRS}")
+message(STATUS "HDF5 C++ libraries: ${HDF5_CXX_LIBRARIES}")
+message(STATUS "HDF5 C libraries: ${HDF5_C_LIBRARIES}")
 
 # Include directories for the entire project
 message("Project source dir: " ${PROJECT_SOURCE_DIR})
+
 include_directories(
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/external
         ${PROJECT_SOURCE_DIR}/external/autodiff
         ${PROJECT_SOURCE_DIR}/external/eigen
-        ${HDF5_INCLUDE_DIRS}  # Add this line
         ${OpenCV_INCLUDE_DIRS}
+        ${HDF5_INCLUDE_DIRS}
 )
 
 # Add the src subdirectory

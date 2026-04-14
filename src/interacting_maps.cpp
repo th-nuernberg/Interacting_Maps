@@ -10,6 +10,7 @@
 #include <update.h>
 #include <cost.h>
 
+#include <boost/program_options.hpp>
 #include "file_operations.h"
 #include "imaging.h"
 
