@@ -1,38 +1,14 @@
-add_executable(my_tests tests.cpp)
-
-#[[add_library(interacting_maps_lib
-        interacting_maps.cpp
-        imaging.cpp
-        file_operations.cpp
-        conversions.cpp
-        video.cpp
-        update.cpp
-        events.cpp
-        datatypes.cpp
-        cost.cpp
+# Catch2 unit tests for the update rules and helpers.
+# tests.cpp is the older hand-rolled harness written against the xtensor API of the FrameBased
+# branch; it does not compile against the Eigen code on this branch and is not built here.
+add_executable(im_tests
+        test_update.cpp
 )
 
-target_link_libraries(interacting_maps_lib
-        PUBLIC
-        autodiff
-        Boost::asio
-        Boost::container
-        Boost::filesystem
-        Boost::log
-        Boost::program_options
-        Eigen3::Eigen
-        ${OpenCV_LIBS}
-        opencv_core
-        opencv_imgproc
-        opencv_calib3d  # <-- Add this line (required for cv::undistort)
-        opencv_highgui
-)]]
-
-target_link_libraries(my_tests PUBLIC interacting_maps_lib)
+target_link_libraries(im_tests PRIVATE interacting_maps_lib Catch2::Catch2WithMain)
 
 add_test(
-        NAME GeneralTest
-        COMMAND my_tests
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        NAME im_tests
+        COMMAND im_tests
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
-

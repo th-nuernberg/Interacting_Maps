@@ -1,4 +1,4 @@
-add_executable(InteractingMaps interacting_maps.cpp)
+add_executable(InteractingMaps main.cpp)
 
 # Common library (all reusable sources)
 add_library(interacting_maps_lib
@@ -29,6 +29,7 @@ target_link_libraries(interacting_maps_lib
         opencv_calib3d  # <-- Add this line (required for cv::undistort)
         opencv_highgui
         hdf5-shared
+        hdf5_cpp-shared
         ${HDF5_CXX_LIBRARIES}
         ${HDF5_C_LIBRARIES}
 )

@@ -37,6 +37,17 @@ CPMAddPackage(
 )
 
 CPMAddPackage(
+        NAME autodiff
+        GIT_REPOSITORY https://github.com/autodiff/autodiff.git
+        GIT_TAG v1.1.2
+        OPTIONS
+        "AUTODIFF_BUILD_TESTS OFF"
+        "AUTODIFF_BUILD_PYTHON OFF"
+        "AUTODIFF_BUILD_EXAMPLES OFF"
+        "AUTODIFF_BUILD_DOCS OFF"
+)
+
+CPMAddPackage(
         NAME pybind11
         GIT_REPOSITORY https://github.com/pybind/pybind11.git
         GIT_TAG v3.0.0
@@ -58,7 +69,6 @@ message("Project source dir: " ${PROJECT_SOURCE_DIR})
 include_directories(
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/external
-        ${PROJECT_SOURCE_DIR}/external/autodiff
         ${PROJECT_SOURCE_DIR}/external/eigen
         ${OpenCV_INCLUDE_DIRS}
         ${HDF5_INCLUDE_DIRS}
@@ -66,4 +76,6 @@ include_directories(
 
 # Add the src subdirectory
 add_subdirectory(src)
-add_subdirectory(external/autodiff)
+
+enable_testing()
+add_subdirectory(tests)
