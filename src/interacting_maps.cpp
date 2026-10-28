@@ -89,6 +89,7 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     s.Identity_minus_outerProducts.resize(height, std::vector<Matrix3f>(width));
     s.old_points.resize(height, std::vector<Vector3f>(width));
     setup_R_update(s.CCM, s.A, s.B, s.Identity_minus_outerProducts, s.old_points);
+    rebuild_R_sums(s.F, s.CCM, s.dCdx, s.dCdy, s.B, s.Identity_minus_outerProducts, s.old_points);
 
     // Memory image
     s.MI = Tensor2f(height, width);

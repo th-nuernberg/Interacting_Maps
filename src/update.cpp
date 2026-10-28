@@ -277,6 +277,20 @@ void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::vector<s
     }
 }
 
+void rebuild_R_sums(const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &points){
+    PROFILE_FUNCTION();
+    const auto &dimensions = F.dimensions();
+    Vector3f transformed_F;
+    B.setZero();
+    for (int i = 0; i < dimensions[0]; ++i){
+        for (int j = 0; j < dimensions[1]; ++j){
+            m23(F, Cx, Cy, transformed_F, i, j);
+            crossProduct3x3(C, transformed_F, points[i][j], i, j);
+            B += Identity_minus_outerProducts[i][j] * points[i][j];
+        }
+    }
+}
+
 void update_FG(Tensor3f &F, const float V, const Tensor3f &G, int y, int x, const float lr, const float weight_FG, float eps=1e-8, float gamma=255.0){
     PROFILE_FUNCTION();
     Vector2f update_F;

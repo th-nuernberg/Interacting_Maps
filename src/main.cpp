@@ -231,6 +231,9 @@ int main(int argc, char* argv[]) {
                     for (int i = 0; i < static_cast<int>(parameters.updateIterationsFR); ++i) {
                         update_FR(state.F, state.CCM, state.dCdx, state.dCdy, state.R, parameters.weight_FR, parameters.eps, parameters.gamma);
                     }
+                    // F changed at every pixel; the F -> R running sums must follow.
+                    rebuild_R_sums(state.F, state.CCM, state.dCdx, state.dCdy, state.B,
+                                   state.Identity_minus_outerProducts, state.old_points);
 
                 }
 

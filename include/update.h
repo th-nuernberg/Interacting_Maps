@@ -213,6 +213,20 @@ float VFG_check(const Tensor2f &V, const Tensor3f &F, const Tensor3f &G);
 void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &points);
 
 /**
+ * Recomputes the right-hand side B of the F -> R least squares and the per-pixel points C x m23(F) from the current
+ * flow at every pixel. update_RF only refreshes the event pixel, so this must run after anything that changes F
+ * globally (initialisation, update_FR).
+ * @param F optical flow
+ * @param C viewing directions
+ * @param Cx derivative of C along x
+ * @param Cy derivative of C along y (negated, see find_C)
+ * @param B Righthand side vector, overwritten
+ * @param Identity_minus_outerProducts I - C C^T per pixel, from setup_R_update
+ * @param points per-pixel points C x m23(F), overwritten
+ */
+void rebuild_R_sums(const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &points);
+
+/**
  * Update the optical flow F at a pixel based on the spatial gradient G and the temporal gradient V (for example given by Events
  * from an Event camera)
  * @param F Optical Flow, 3-Tensor, shape NxMx2, collection of 2-Vectors
