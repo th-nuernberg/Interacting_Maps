@@ -1,0 +1,33 @@
+# Base network plus simulated gyro supplying R (docs/simulated-gyro.md).
+# With delta.wR = 0 this network must reproduce base_network.yaml exactly.
+
+extends: base_network.yaml
+
+maps:
+  omega:     {kind: input,    shape: [3]}   # integrated gyro rotation over the bin (IMU frame, rad), bias not removed
+  R_cam_imu: {kind: constant, shape: [3, 3], source: sim.imu_extrinsics}
+  gyro_bias: {kind: global,   shape: [3]}   # rad/s, slowly varying
+
+relations:
+  gyro_rotation:
+    type: GyroRotation            # R <- R_cam_imu (omega - b * T_bin)
+    maps: [omega, R_cam_imu, gyro_bias, R]
+    delta: {wR: 0.2}              # open; set from gyro noise vs. visual R uncertainty
+  bias_estimate:
+    type: GyroBias               # b <- (omega - R_cam_imu^T R) / T_bin
+    maps: [omega, R_cam_imu, R, gyro_bias]
+    delta: {Rb: 0.001}            # open; small, bias changes slowly
+
+gyro:                             # simulated gyro model; all knobs independent
+  rate_hz: 1000
+  noise_density: 0.0              # rad/s/sqrt(Hz); set from the datasheet of the planned IMU
+  bias_rw: 0.0
+  bias_init: [0.0, 0.0, 0.0]
+  scale_error: [1.0, 1.0, 1.0]
+  misalignment_rad: [0.0, 0.0, 0.0]
+  time_offset_s: 0.0
+  quantisation: null
+  seed: 0
+
+solver:
+  order: [gyro_rotation, flow_constraint, gradient, rotation_flow, bias_estimate]

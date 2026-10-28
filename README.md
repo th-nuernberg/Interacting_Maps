@@ -11,7 +11,27 @@ The executable creates a folder of output frames for visual inspection, a time s
 
 The events currently have to be provided with via a text file, called events.txt. Each event consists of a time stamp, a x and y coordinate and a polarity [0,1]
 
-# Installation
+# Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `src/`, `include/`, `tests/` | Event-based C++ implementation, Catch2 tests |
+| `python/` | Python package `incomaps`: simulator with ground truth, NumPy reference, evaluation (in progress) |
+| `docs/` | Paper summary, design, work-package specs, validation plan |
+| `configs/` | Network declarations (maps, relations, rates) |
+| `TASKS.md` | Milestones with acceptance criteria |
+
+## Build and test (C++)
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
+
+Requires OpenCV, HDF5 (with C++ bindings) and Eigen to be installed; Boost, Catch2, pybind11 and autodiff are fetched by CPM.
+
+# Installation (manual dependency setup)
 ```
 mkdir external && cd external
 ```

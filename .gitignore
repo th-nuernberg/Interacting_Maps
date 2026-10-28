@@ -26,3 +26,11 @@ poster_rotation
 # Build artefacts
 build/
 /InteractingMaps
+
+# Experiment results (see docs/validation.md)
+experiments/results/
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/

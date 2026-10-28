@@ -1,0 +1,39 @@
+# Original Interacting Maps network (Cook et al. 2011): six maps, three relations.
+# Values marked "open" are not reported in the paper and are determined by sweeps (TASKS.md, M2).
+
+sensor:
+  name: dvs128_sim
+  resolution: [128, 128]          # [height, width]
+  intrinsics: {fx: 115.0, fy: 115.0, cx: 63.5, cy: 63.5}   # placeholder, set by simulator config
+
+time:
+  bin_length_s: 0.005             # open
+
+maps:
+  V: {kind: input,    shape: [128, 128]}
+  I: {kind: field,    shape: [129, 129]}
+  G: {kind: field,    shape: [128, 128, 2]}
+  F: {kind: field,    shape: [128, 128, 2]}
+  C: {kind: constant, shape: [128, 128, 3], source: camera.viewing_directions}
+  R: {kind: global,   shape: [3]}
+
+relations:
+  flow_constraint:
+    type: FlowConstraint          # -V = F · G
+    maps: [V, F, G]
+    delta: {VF: 0.1, VG: 0.1}     # open
+  gradient:
+    type: Gradient                # G = forward-difference grad of I
+    maps: [I, G]
+    delta: {IG: 0.1, GI: 0.1}     # open
+  rotation_flow:
+    type: RotationFlow            # F = m32(R x C)
+    maps: [R, C, F]
+    delta: {RF: 0.1, FR: 0.1}     # open
+
+solver:
+  mode: gauss_seidel              # or jacobi
+  iterations_per_bin: 50          # open
+  order: [flow_constraint, gradient, rotation_flow]
+  warm_start: true
+  init: {kind: random, seed: 0}
