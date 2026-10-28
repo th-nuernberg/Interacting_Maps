@@ -339,6 +339,30 @@ void linearDecay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int
 void exponentialDecay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam);
 
 /**
+ * Exponentially decay every pixel that event_step reads through a gradient stencil around (y, x), i.e. all pixels
+ * within Manhattan distance 2, so that gradients never mix decayed and stale potentials
+ * @param I image intensity
+ * @param decayTimeSurface time of the last decay for each pixel
+ * @param y vertical coordinate of the event pixel
+ * @param x horizontal coordinate of the event pixel
+ * @param time current time
+ * @param neutralPotential neutral potential
+ * @param decayParam decay time constant
+ */
+void decayNeighbourhood(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam);
+
+/**
+ * Copy of the image intensity with every pixel decayed to the given time; for display and costs only
+ * @param I image intensity
+ * @param decayTimeSurface time of the last decay for each pixel
+ * @param time current time
+ * @param neutralPotential neutral potential
+ * @param decayParam decay time constant
+ * @return decayed copy of I
+ */
+Tensor2f decayedCopy(const Tensor2f &I, const Tensor2f &decayTimeSurface, const float time, const float neutralPotential, const float decayParam);
+
+/**
  * Locally update Image Intensity I based on temporal gradient V
  * @param I image intensity, gray scale 0-255
  * @param V temporal gradient,

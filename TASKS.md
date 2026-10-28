@@ -22,6 +22,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] Duplicate short CLI flags (`-f`, `-s`, `-b`).
 - [x] Paper deviations switchable: decay, clamping, per-frame G reset under `IMAGES`.
 - [x] IMU fusion: gyro (x, y, z) was written into R's (y, x, z) slots unrotated and with the wrong sign; now rotated by `R_cam_imu`, reordered and negated.
+- [x] Lazy decay: gradients mixed decayed and stale potentials (only the event pixel was decayed); now the whole stencil (Manhattan distance 2) is decayed, and output frames show I decayed to the frame time.
 - [ ] IMU fusion units: choose `imuScale` (rad/s → R units). Open: R has no physical time unit yet, see `docs/cpp-implementation.md`. Needs V per time bin (paper) or a calibrated event contribution.
 
 ## M1 – Simulator with ground truth (`python/src/incomaps/sim`)

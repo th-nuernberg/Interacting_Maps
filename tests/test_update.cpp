@@ -379,3 +379,41 @@ TEST_CASE("update_RIMU turns a gyro reading into the R that reproduces the proje
         REQUIRE_THAT(F(pixel[0], pixel[1], 1), WithinAbs(expected(1), 2e-4));
     }
 }
+
+TEST_CASE("decayNeighbourhood brings every pixel read by event_step's gradients to the event time", "[update][decay]") {
+    // A uniform potential set at t = 0 decays uniformly, so its gradient must stay zero.
+    // Decaying only the event pixel (the old behaviour) produced spurious gradients around it.
+    Parameters p = initParameters(0.0f, 1.0f, 0.1f);
+    OpticalFlowState s = initOpticalFlowState(9, 9, p, smallCalibration(9, 9));
+    s.MI.setConstant(200.0f);
+    s.decayTimeSurface.setConstant(0.0f);
+    const float t = p.decayParam;
+
+    decayNeighbourhood(s.MI, s.decayTimeSurface, 4, 4, t, p.neutralPotential, p.decayParam);
+
+    const float expected = p.neutralPotential + (200.0f - p.neutralPotential) * std::exp(-1.0f);
+    REQUIRE_THAT(s.MI(4, 6), WithinAbs(expected, 1e-3));   // distance 2: decayed
+    REQUIRE_THAT(s.MI(5, 5), WithinAbs(expected, 1e-3));
+    REQUIRE_THAT(s.MI(4, 7), WithinAbs(200.0f, 1e-6));     // distance 3: not read, left alone
+    const int stencil[5][2] = {{4, 4}, {3, 4}, {5, 4}, {4, 3}, {4, 5}};
+    for (const auto &c : stencil) {
+        computeGradient(s.MI, s.delta_I, c[0], c[1]);
+        REQUIRE_THAT(s.delta_I(c[0], c[1], 0), WithinAbs(0.0f, 1e-4));
+        REQUIRE_THAT(s.delta_I(c[0], c[1], 1), WithinAbs(0.0f, 1e-4));
+    }
+}
+
+TEST_CASE("decayedCopy decays every pixel and leaves the state untouched", "[update][decay]") {
+    Parameters p = initParameters(0.0f, 1.0f, 0.1f);
+    OpticalFlowState s = initOpticalFlowState(4, 4, p, smallCalibration(4, 4));
+    s.MI.setConstant(200.0f);
+    s.decayTimeSurface.setConstant(0.0f);
+
+    const Tensor2f shown = decayedCopy(s.MI, s.decayTimeSurface, p.decayParam, p.neutralPotential, p.decayParam);
+
+    const float expected = p.neutralPotential + (200.0f - p.neutralPotential) * std::exp(-1.0f);
+    REQUIRE_THAT(shown(0, 0), WithinAbs(expected, 1e-3));
+    REQUIRE_THAT(shown(3, 3), WithinAbs(expected, 1e-3));
+    REQUIRE_THAT(s.MI(3, 3), WithinAbs(200.0f, 1e-6));
+    REQUIRE_THAT(s.decayTimeSurface(3, 3), WithinAbs(0.0f, 1e-9));
+}

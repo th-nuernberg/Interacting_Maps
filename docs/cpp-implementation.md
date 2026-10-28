@@ -30,7 +30,7 @@ Names read "target from source": `update_FG` updates F from G. This is the rever
 | gyro → R | `update_RIMU` | per IMU sample |
 | frame → I | `update_Ifusion` | per image |
 
-Per event, `event_step` applies V → I, then I → G around the pixel, then G → I, then F/G/R updates in a shuffled order.
+Per event, `decayNeighbourhood` first decays every pixel within Manhattan distance 2 of the event to the event time (decay is lazy; the gradient stencils of `event_step` read all of them). `event_step` then applies V → I, then I → G around the pixel, then G → I, then F/G/R updates in a shuffled order.
 
 ## Deliberate deviations from the paper
 

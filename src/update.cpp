@@ -429,6 +429,35 @@ void exponentialDecay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, cons
     //decayTimeSurface(y, x) = time;
 }
 
+void decayNeighbourhood(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam){
+    PROFILE_FUNCTION();
+    // event_step takes central differences at (y, x) and its 4 neighbours, which read every pixel within
+    // Manhattan distance 2. Decay is lazy, so all of them must be brought to the same time first.
+    const int rows = static_cast<int>(I.dimension(0));
+    const int cols = static_cast<int>(I.dimension(1));
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            const int yy = y + dy;
+            const int xx = x + dx;
+            if (std::abs(dy) + std::abs(dx) > 2 || yy < 0 || yy >= rows || xx < 0 || xx >= cols) continue;
+            exponentialDecay(I, decayTimeSurface, yy, xx, time, neutralPotential, decayParam);
+        }
+    }
+}
+
+Tensor2f decayedCopy(const Tensor2f &I, const Tensor2f &decayTimeSurface, const float time, const float neutralPotential, const float decayParam){
+    PROFILE_FUNCTION();
+    // Exponential decay composes exactly, so decaying a copy for display does not change the dynamics.
+    Tensor2f decayed = I;
+    Tensor2f times = decayTimeSurface;
+    for (int y = 0; y < I.dimension(0); ++y) {
+        for (int x = 0; x < I.dimension(1); ++x) {
+            exponentialDecay(decayed, times, y, x, time, neutralPotential, decayParam);
+        }
+    }
+    return decayed;
+}
+
 void update_IV(Tensor2f &I, const float V, const int y, const int x, const float minPotential, const float maxPotential, const float weight_IV){
     PROFILE_FUNCTION();
     contribute(I, V, y, x, minPotential, maxPotential, weight_IV);

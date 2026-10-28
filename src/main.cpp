@@ -236,7 +236,7 @@ int main(int argc, char* argv[]) {
 
                 // Perform an update step for the current event for I G R and F
                 if (parameters.useDecay) {
-                    exponentialDecay(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
+                    decayNeighbourhood(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
                 }
                 for (int i = 0; i < parameters.event_steps; ++i) {
                     event_step(state.V, state.MI, state.delta_I, state.GIDiff, state.GIDiffGradient, state.F, state.G, state.R, state.CCM, state.dCdx, state.dCdy, state.A, state.B,
@@ -283,6 +283,10 @@ int main(int argc, char* argv[]) {
                 }
 
     #ifdef IMAGES
+                    // Decay is lazy: show every pixel at the frame time, without touching the state.
+                    const Tensor2f MI_now = parameters.useDecay
+                        ? decayedCopy(state.MI, state.decayTimeSurface, event->time, parameters.neutralPotential, parameters.decayParam)
+                        : state.MI;
                     float loss = VFG_check(state.V_Vis, state.F, state.G);
                     //std::cout << "VFG Check: " << loss << std::endl;
                     writeToFile(event->time, loss, VLossPath);
@@ -294,13 +298,13 @@ int main(int argc, char* argv[]) {
 
                     std::string image_name = "VIGF_" + filename.str() + ".png";
                     fs::path image_path = folder_path / image_name;
-                    create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(state.MI), state.G, state.F, image_path, true, 0.1);
+                    create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), state.G, state.F, image_path, true, 0.1);
                     float cost1, cost2, cost3;
                     cost1 = costFR(state.F, state.CCM, state.dCdx, state.dCdy, state.R);
                     cost2 = costFG(state.F, state.V_Vis, state.G);
                     cost3 = costGI(state.G, state.delta_I);
                     std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
-                    saveImage(Tensor2Matrix(state.MI), folder_path / ("frame_" + filename.str() + ".png"), true);
+                    saveImage(Tensor2Matrix(MI_now), folder_path / ("frame_" + filename.str() + ".png"), true);
                     state.V_Vis.setZero();
                     //randomInit(F, -1, 1);
                     if (parameters.resetGEachFrame) {
