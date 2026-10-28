@@ -34,8 +34,9 @@ Each knob must be switchable independently, so experiments can isolate its effec
 
 - The paper's R is the **rotation per time bin**: F = m32(R × C).
 - The gyro measures ω in **rad/s in the IMU frame**.
-- Gyro → R candidate for a bin [t₀, t₁]: `R_gyro = R_cam_imu · ∫_{t₀}^{t₁} (ω_meas − b̂) dt` (trapezoidal over the samples inside the window).
-- Ground-truth R per bin: the rotation vector of the camera's orientation change over the bin, expressed in the camera frame. For small rotations per bin this equals ∫ω dt; use the exact log map in the simulator and check the difference stays negligible.
+- **Sign.** A static point seen from a camera rotating with ω moves as Ṗ = −ω × P, so its viewing direction moves by (−Δθ) × C. With the paper's F = m32(R × C), R is therefore the **negative** of the camera's rotation over the bin.
+- Gyro → R candidate for a bin [t₀, t₁]: `R_gyro = −R_cam_imu · ∫_{t₀}^{t₁} (ω_meas − b̂) dt`. Integrate trapezoidally over the samples inside the window **plus ω linearly interpolated at t₀ and t₁**. Integrating only between the first and last sample inside the window drops the two edge gaps, together up to one sample period (at 1 kHz and 5 ms bins: up to 20 % of the window).
+- Ground-truth R per bin: minus the rotation vector of the camera's orientation change over the bin, expressed in the camera frame. For small rotations per bin this equals −∫ω dt; use the exact log map in the simulator and check the difference stays negligible.
 - The sign of R × C must reproduce the simulator's ground-truth flow. Write a dedicated test: known ω → predicted F vs. projected pixel motion.
 
 ## New maps and relations
@@ -45,10 +46,12 @@ Each knob must be switchable independently, so experiments can isolate its effec
 | `omega` | input (global) | integrated gyro rotation for the current bin, raw (bias not removed) |
 | `R_cam_imu` | constant | camera–IMU rotation (known in simulation; calibrated on hardware) |
 | `gyro_bias` | global | slowly changing bias estimate b̂ |
-| `GyroRotation` | relation | ω → R: candidate = R_cam_imu (ω − b̂·T_bin); rate δ_ωR from gyro noise vs. visual R uncertainty |
-| `GyroBias` | relation | R → b: candidate = ω/T_bin − R_imu_cam R/T_bin; very small rate δ_Rb (bias changes slowly) |
+| `GyroRotation` | relation | ω → R: candidate = −R_cam_imu (ω − b̂·T_bin); rate δ_ωR from gyro noise vs. visual R uncertainty |
+| `GyroBias` | relation | R → b: candidate = ω/T_bin + R_imu_cam R/T_bin; very small rate δ_Rb (bias changes slowly) |
 
 The gyro is a weak input: it nudges R, it never clamps it. With δ_ωR = 0 the network reduces exactly to the paper's.
+
+**Bias observability.** b̂ is estimated from the disagreement between ω and R, while GyroRotation pulls R towards ω. If δ_ωR dominates the visual F → R pull (δ_FR), that disagreement collapses and b̂ cannot be estimated. Sweep δ_ωR and δ_FR jointly, not δ_ωR against δ_Rb alone.
 
 ## Experiments enabled
 

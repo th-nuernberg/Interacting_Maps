@@ -36,8 +36,8 @@ Read these before writing code:
 
 - Image coordinates: `x` = column (right), `y` = row (down), arrays indexed `[y, x]`. Map shapes follow the paper: V, G, F, C are 128 × 128; I is 129 × 129 (forward differences).
 - Intensity is **log intensity**. V is the temporal derivative of log intensity per time bin.
-- Camera frame: right-handed, z along the optical axis, x right, y down. C[y, x] is the unit (or z = 1) viewing direction of the pixel.
-- R is the **rotation vector per time bin** (radians per bin, camera frame), so that F = m32(R × C). The gyro measures ω in rad/s in the IMU frame; the gyro relation integrates ω over the bin window and rotates it into the camera frame. Write the sign convention down in code next to `m32`/`m23` and test it against the simulator's ground-truth flow.
+- Camera frame: right-handed, z along the optical axis, x right, y down. C[y, x] is the **unit** viewing direction of the pixel (the F → R distance formula assumes |C| = 1).
+- R is the **rotation vector per time bin** (radians per bin, camera frame), so that F = m32(R × C). A static point seen from a camera rotating with ω moves as Ṗ = −ω × P, so the paper's R is the **negative** of the camera's own rotation over the bin: R = −Δθ_cam. The gyro measures ω in rad/s in the IMU frame; the gyro relation integrates ω over the bin window, rotates it into the camera frame and negates it. Write the sign convention down in code next to `m32`/`m23` and test it against the simulator's ground-truth flow.
 - δ naming: `delta_AB` = rate for the update of B driven by A (e.g. `delta_IG`: I → G).
 
 ## Stack

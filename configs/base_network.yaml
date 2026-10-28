@@ -36,4 +36,4 @@ solver:
   iterations_per_bin: 50          # open
   order: [flow_constraint, gradient, rotation_flow]
   warm_start: true
-  init: {kind: random, seed: 0}
+  init: {kind: random, seed: 0}  # each map draws from its own stream, e.g. SeedSequence([seed, crc32(map name)])

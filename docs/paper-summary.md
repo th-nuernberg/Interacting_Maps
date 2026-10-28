@@ -56,7 +56,7 @@ X \leftarrow (1-\delta_{AB})\,X + \delta_{AB}\,X_{\text{candidate}}
 
 Each direction of each relation has its own rate δ (e.g. δ_IG for I → G, δ_GI for G → I). The paper does not report the δ values used.
 
-**V, F, G.** The constraint cannot be inverted per pixel (aperture problem): given V and G, valid F lie on a line perpendicular to G. Use the quadratic error and its gradient, or project F directly onto that line; both give the same direction. G → F and F → G are symmetric.
+**V, F, G.** The constraint cannot be inverted per pixel (aperture problem): given V and G, valid F lie on a line perpendicular to G. Use the quadratic error and its gradient, or project F directly onto that line; both give the same direction but **different step lengths**: the gradient step scales with |G|² (unstable at strong edges for fixed δ), the projection F − G (V + F·G)/|G|² is scale-free but undefined where G = 0. The choice changes what δ_VF means; the existing C++ code uses the projection. G → F and F → G are symmetric.
 
 ```latex
 Q_{V,G}(\vec{F}_{x,y}) = (V_{x,y} + \vec{F}_{x,y} \cdot \vec{G}_{x,y})^2, \qquad \frac{dQ}{d\vec{F}_{x,y}} = 2\,\vec{G}_{x,y}\,(V_{x,y} + \vec{F}_{x,y} \cdot \vec{G}_{x,y})
@@ -74,7 +74,7 @@ Q_{V,G}(\vec{F}_{x,y}) = (V_{x,y} + \vec{F}_{x,y} \cdot \vec{G}_{x,y})^2, \qquad
 \hat{\Psi}^{(x)}_{x,y} = \Psi^{(x)}_{x,y} - \Psi^{(x)}_{x-1,y}, \qquad I_{x,y} \leftarrow (1-\delta_{GI})\,I_{x,y} + \delta_{GI}\,(I_{x,y} - \hat{\Psi}^{(x)}_{x,y} - \hat{\Psi}^{(y)}_{x,y})
 ```
 
-(With the forward-difference convention above, ∂(½‖G − ∇I‖²)/∂I = Ψ̂^(x) + Ψ̂^(y), so the candidate I − Ψ̂^(x) − Ψ̂^(y) is one unit gradient-descent step. Verify against a finite-difference gradient in a unit test.)
+(With the forward-difference convention above, ∂(½‖G − ∇I‖²)/∂I = Ψ̂^(x) + Ψ̂^(y), so the candidate I − Ψ̂^(x) − Ψ̂^(y) is one unit gradient-descent step. Verify against a finite-difference gradient in a unit test. The Hessian is a graph Laplacian with largest eigenvalue ≈ 8, so the update is only stable for δ_GI < 0.25. The update conserves the mean of I, so I's offset is fixed by its initialisation. I at the far corner (x = W, y = H) enters no residual and is never updated.)
 
 **R → F.** Step each flow vector towards the flow the global rotation predicts.
 
@@ -88,7 +88,7 @@ Q_{V,G}(\vec{F}_{x,y}) = (V_{x,y} + \vec{F}_{x,y} \cdot \vec{G}_{x,y})^2, \qquad
 d^2_{\vec{R},x,y} = |\vec{R} - \vec{C}_{x,y} \times m_{23}(\vec{F}_{x,y})|^2 - (\vec{R} \cdot \vec{C}_{x,y})^2, \qquad \vec{R} \leftarrow (1-\delta_{FR})\,\vec{R} + \delta_{FR}\,\arg\min_{\vec{R}} \sum_{x,y} d^2_{\vec{R},x,y}
 ```
 
-(The distance formula assumes unit-length C.)
+(The distance formula assumes unit-length C. Sign: a camera rotating by Δθ moves static scene directions by (−Δθ) × C, so the paper's R is minus the camera rotation.)
 
 ## Results and limitations
 
