@@ -80,8 +80,8 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     s.CCM  = Tensor3f(height, width, 3);  s.CCM.setZero();
     s.dCdx = Tensor3f(height, width, 3);  s.dCdx.setZero();
     s.dCdy = Tensor3f(height, width, 3);  s.dCdy.setZero();
-    find_C(width, height, calibration_data.view_angles[1], calibration_data.view_angles[0],
-           1.0f, s.CCM, s.dCdx, s.dCdy);
+    const MatrixXf &K = calibration_data.camera_matrix;
+    find_C(width, height, K(0, 0), K(1, 1), K(0, 2), K(1, 2), s.CCM, s.dCdx, s.dCdy);
 
     // R update helpers
     s.A = Matrix3f::Zero();

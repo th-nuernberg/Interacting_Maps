@@ -24,23 +24,21 @@ void norm_tensor_along_dim3(const Tensor3f &T, Tensor2f &norm){
     norm = T.square().sum(dims).sqrt();
 }
 
-autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, int N_x, int N_y, float height, float width, float rs) {
+autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, float fx, float fy, float cx, float cy) {
     autodiff::Vector3real result;
-    result << height * (1 - (2 * y) / (N_y - 1)),
-              width * (-1 + (2 * x) / (N_x - 1)),
-              rs;
+    result << -(y - cy) / fy,
+              (x - cx) / fx,
+              1;
     return result;
 }
 
-autodiff::Vector3real C(autodiff::real x, autodiff::real y, int N_x, int N_y, float height, float width, float rs) {
-    autodiff::Vector3real c_star = C_star(x, y, N_x, N_y, height, width, rs);
+autodiff::Vector3real C(autodiff::real x, autodiff::real y, float fx, float fy, float cx, float cy) {
+    autodiff::Vector3real c_star = C_star(x, y, fx, fy, cx, cy);
     autodiff::real norm = sqrt(c_star.squaredNorm());
     return c_star / norm;
 }
 
-void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor3f &CCM, Tensor3f &C_x, Tensor3f &C_y) {
-    float height = tan(view_angle_y / 2);
-    float width = tan(view_angle_x / 2);
+void find_C(int N_x, int N_y, float fx, float fy, float cx, float cy, Tensor3f &CCM, Tensor3f &C_x, Tensor3f &C_y) {
     MatrixXf XX(N_y, N_x);
     MatrixXf YY(N_y, N_x);
     for (int i = 0; i < N_y; ++i) {
@@ -55,7 +53,7 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
             autodiff::real y = YY(i, j);
 
             // Compute the function value
-            autodiff::Vector3real c_val = C(x, y, N_x, N_y, height, width, rs);
+            autodiff::Vector3real c_val = C(x, y, fx, fy, cx, cy);
             CCM(i,j,0) = static_cast<float>(c_val(0)); // y
             CCM(i,j,1) = static_cast<float>(c_val(1)); // x
             CCM(i,j,2) = static_cast<float>(c_val(2)); // z
@@ -64,9 +62,9 @@ void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, 
 
             // NEEDS TO STAY D O U B L E
             VectorXd dCdx;
-            autodiff::jacobian(C, wrt(x), at(x,y,N_x, N_y, height, width, rs), F, dCdx);
+            autodiff::jacobian(C, wrt(x), at(x, y, fx, fy, cx, cy), F, dCdx);
             VectorXd dCdy;
-            autodiff::jacobian(C, wrt(y), at(x,y,N_x, N_y, height, width, rs), F, dCdy);
+            autodiff::jacobian(C, wrt(y), at(x, y, fx, fy, cx, cy), F, dCdy);
 
             // C_x = dCdx
             C_x(i,j,0) = (float) dCdx(0); // y

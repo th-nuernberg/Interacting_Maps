@@ -16,7 +16,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] G→I residual (`GIDiff`) random-initialised and only refreshed at the event pixel.
 - [x] F→R least squares: right-hand side `B` only contains pixels that saw an event, and goes stale after global F←R updates.
 - [x] `read_single_line_txt` parses floats with `std::stoi` (focal lengths truncated, distortion lost).
-- [ ] Calibration: fx/fy swapped in view angles; principal point ignored in C.
+- [x] Calibration: fx/fy swapped in view angles; principal point ignored in C. (Lens distortion is still not modelled; events are used as recorded.)
 - [ ] Camera frame is left-handed (y up, z forward) while cross products are right-handed; switch to x right, y down, z forward.
 - [ ] Seeded, reproducible runs (`--seed`, Eigen `setRandom`).
 - [ ] Duplicate short CLI flags (`-f`, `-s`, `-b`).

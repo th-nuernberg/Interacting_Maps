@@ -10,7 +10,7 @@ The C++ code in `src/` and `include/` predates the specs in this folder. It runs
 | I | `MI` | H × W | Not (H+1) × (W+1); see deviations |
 | G | `G` | H × W × 2 | channel 0 = y, channel 1 = x |
 | F | `F` | H × W × 2 | channel 0 = y, channel 1 = x |
-| C | `CCM`, with tangents `dCdx`, `dCdy` | H × W × 3 | 3-vectors stored as (y, x, z) |
+| C | `CCM`, with tangents `dCdx`, `dCdy` | H × W × 3 | 3-vectors stored as (y, x, z); pinhole from fx, fy, cx, cy, no distortion |
 | R | `R` | 3 | stored as (y, x, z) |
 
 3-vectors are stored in the order (y, x, z). `crossProduct3x3` and `crossProduct1x3` permute indices so that they compute the right-handed cross product of the underlying (x, y, z) vectors.

@@ -54,43 +54,43 @@ bool isApprox(Tensor2f &t1, Tensor2f &t2, float precision);
 void norm_tensor_along_dim3(const Tensor3f &T, Tensor2f &norm);
 
 /**
- * Calculates intermediate values of the calibration matrix for the Interacting Maps algorithm.
- * @param x x-Position of the pixel
- * @param y y-Position of the pixel
- * @param N_x width of the image in pixels
- * @param N_y height of the image in pixels
- * @param height height of the image in realworld meters
- * @param width width of the image in realworld meters
- * @param rs
- * @return 3-Vector of pixel coordinates mapped onto sphere
+ * Unnormalised viewing direction of a pixel for a pinhole camera, stored as (y, x, z) with y pointing up.
+ * @param x x-Position of the pixel (column)
+ * @param y y-Position of the pixel (row)
+ * @param fx focal length along x in pixels
+ * @param fy focal length along y in pixels
+ * @param cx principal point x in pixels
+ * @param cy principal point y in pixels
+ * @return 3-Vector (-(y - cy) / fy, (x - cx) / fx, 1)
  */
-autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, int N_x, int N_y, float height, float width, float rs);
+autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, float fx, float fy, float cx, float cy);
 
 /**
- * Maps pixels of image onto a 3d sphere with the camera at the center
- * @param x x-Position of the pixel
- * @param y y-Position of the pixel
- * @param N_x width of the image in pixels
- * @param N_y height of the image in pixels
- * @param height height of the image in real world meters
- * @param width width of the image in real world meters
- * @param rs
- * @return Normed 3-Vector of pixel coordinates mapped onto sphere
+ * Maps pixels of image onto the unit sphere with the camera at the center
+ * @param x x-Position of the pixel (column)
+ * @param y y-Position of the pixel (row)
+ * @param fx focal length along x in pixels
+ * @param fy focal length along y in pixels
+ * @param cx principal point x in pixels
+ * @param cy principal point y in pixels
+ * @return Normed 3-Vector, stored as (y, x, z)
  */
-autodiff::Vector3real C(autodiff::real x, autodiff::real y, int N_x, int N_y, float height, float width, float rs);
+autodiff::Vector3real C(autodiff::real x, autodiff::real y, float fx, float fy, float cx, float cy);
 
 /**
- * Calculates the camera calibration matrix which connects 2D image coordinates (of pixels) to 3D world coordinates
+ * Calculates the unit viewing direction of every pixel and its derivatives along x and y from pinhole intrinsics.
+ * Lens distortion is not modelled.
  * @param N_x width of the image in pixels
  * @param N_y height of the image in pixels
- * @param view_angle_x horizontal viewing angle captured by the camera
- * @param view_angle_y vertical viewing angle captured by the camera
- * @param rs
- * @param CCM resulting camera calibration matrix
- * @param C_x derivative of the CMM in x direction
- * @param C_y derivative of the CMM in x direction
+ * @param fx focal length along x in pixels
+ * @param fy focal length along y in pixels
+ * @param cx principal point x in pixels
+ * @param cy principal point y in pixels
+ * @param CCM resulting viewing directions
+ * @param C_x derivative of CCM in x direction
+ * @param C_y negated derivative of CCM in (downward) row direction, i.e. derivative along y up
  */
-void find_C(int N_x, int N_y, float view_angle_x, float view_angle_y, float rs, Tensor3f &CCM, Tensor3f &C_x, Tensor3f &C_y);
+void find_C(int N_x, int N_y, float fx, float fy, float cx, float cy, Tensor3f &CCM, Tensor3f &C_x, Tensor3f &C_y);
 
 /**
  * Calculates the cross product for two 3-Tensors, where each Tensor describes a collection of Vectors distributed over

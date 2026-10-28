@@ -176,8 +176,9 @@ Calibration_Data get_calibration_data(const std::vector<float> &raw_data, int fr
                                    {0, data.focal_point[1], raw_data[3]},
                                    {0, 0, 1}});
     data.distortion_coefficients = std::vector<float>(raw_data.begin()+4, raw_data.end());
-    data.view_angles = std::vector<float>({2*std::atan(frame_height/(2*data.focal_point[0])),
-                                           2*std::atan(frame_width/(2*data.focal_point[1]))});
+    // {vertical, horizontal}: the vertical angle uses fy, the horizontal one fx
+    data.view_angles = std::vector<float>({2*std::atan(frame_height/(2*data.focal_point[1])),
+                                           2*std::atan(frame_width/(2*data.focal_point[0]))});
     return data;
 }
 
