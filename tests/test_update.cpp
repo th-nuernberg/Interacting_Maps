@@ -170,3 +170,39 @@ TEST_CASE("computeGradient on a 3-tensor differentiates channel 0 along y and ch
     REQUIRE_THAT(g(n - 1, n - 1, 0), WithinAbs(float((n - 2) * (n - 2) - (n - 1) * (n - 1)) / 2.0f, 1e-6));
     REQUIRE_THAT(g(n - 1, n - 1, 1), WithinAbs(float((n - 1) * (n - 1) - (n - 2) * (n - 2)) / 2.0f, 1e-6));
 }
+
+TEST_CASE("G-I residual divergence vanishes when G equals the gradient of I", "[update][gradient]") {
+    // GIDiff starts with garbage; the divergence at (y, x) reads residuals of the neighbours, so
+    // those must be refreshed too, not only the event pixel.
+    const int n = 5;
+    Tensor3f G(n, n, 2), I_gradient(n, n, 2), GIDiff(n, n, 2), GIDiffGradient(n, n, 2);
+    G.setRandom();
+    I_gradient = G;
+    for (int y = 0; y < n; ++y) {
+        for (int x = 0; x < n; ++x) {
+            GIDiff(y, x, 0) = float(3 * y + x);   // stale, non-uniform residuals
+            GIDiff(y, x, 1) = float(x * x - y);
+        }
+    }
+    GIDiffGradient.setZero();
+
+    updateGIDiffGradient(G, I_gradient, GIDiff, GIDiffGradient, 2, 2);
+
+    REQUIRE_THAT(GIDiffGradient(2, 2, 0), WithinAbs(0.0f, 1e-6));
+    REQUIRE_THAT(GIDiffGradient(2, 2, 1), WithinAbs(0.0f, 1e-6));
+}
+
+TEST_CASE("event_step moves G at the event pixel towards the current gradient of I", "[event_step]") {
+    Parameters p = initParameters(0.0f, 1.0f, 0.1f);
+    p.weight_GI = 1.0f;
+    OpticalFlowState s = initOpticalFlowState(6, 6, p, smallCalibration(6, 6));
+    for (int y = 0; y < 6; ++y) {
+        for (int x = 0; x < 6; ++x) {
+            s.MI(y, x) = 100.0f + 2.0f * float(x);   // d/dx = 2 everywhere inside
+        }
+    }
+
+    runEventStep(s, p, {}, 0.0f, 3, 3);
+
+    REQUIRE_THAT(s.G(3, 3, 1), WithinAbs(2.0f, 1e-5));
+}

@@ -68,10 +68,10 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     s.decayTimeSurface.setConstant(parameters.startTime);
 
     s.GIDiff = Tensor3f(height, width, 2);
-    randomInit(s.GIDiff, -1, 1);
+    s.GIDiff.setZero();
 
     s.GIDiffGradient = Tensor3f(height, width, 2);
-    randomInit(s.GIDiffGradient, -1, 1);
+    s.GIDiffGradient.setZero();
 
     s.R = Tensor1f(3);
     randomInit(s.R, -10, 10);
@@ -134,7 +134,7 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
         }
     }
 
-    //computeGradient(MI, delta_I, y, x);
+    computeGradient(MI, delta_I, y, x);
     update_GI(G, delta_I, y, x, parameters.weight_GI, parameters.eps, parameters.gamma);
     updateGIDiffGradient(G, delta_I, GIDiff, GIDiffGradient, y, x);
     update_IG(MI, GIDiffGradient, y, x, parameters.weight_IG);

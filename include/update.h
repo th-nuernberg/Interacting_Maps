@@ -260,8 +260,8 @@ void update_GI(Tensor3f &G, const Tensor3f &I_gradient, int y, int x, float weig
  * the basis of I
  * @param G spatial gradient, calculated based on old I values and V and F
  * @param I_gradient spatial gradient, calculated solely based on I
- * @param GIDiff difference between G and I_gradient
- * @param GIDiffGradient gradient of GIDiff
+ * @param GIDiff difference between G and I_gradient; refreshed at (y, x) and its 4 neighbours
+ * @param GIDiffGradient gradient of GIDiff, written at (y, x)
  * @param y vertical coordinate of the updated pixel
  * @param x horizontal coordinate of the updated pixel
  */

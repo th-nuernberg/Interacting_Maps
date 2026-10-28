@@ -365,8 +365,17 @@ void update_GI(Tensor3f &G, const Tensor3f &I_gradient, int y, int x, float weig
 
 void updateGIDiffGradient(Tensor3f &G, Tensor3f &I_gradient, Tensor3f &GIDiff, Tensor3f &GIDiffGradient, int y, int x){
     PROFILE_FUNCTION();
-    GIDiff(y, x, 0) = G(y, x, 0) - I_gradient(y, x, 0);
-    GIDiff(y, x, 1) = G(y, x, 1) - I_gradient(y, x, 1);
+    // The divergence at (y, x) reads the residual at the pixel and its 4 neighbours, so refresh all of them.
+    const int rows = static_cast<int>(GIDiff.dimension(0));
+    const int cols = static_cast<int>(GIDiff.dimension(1));
+    const int offsets[5][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (const auto &offset : offsets) {
+        const int yy = y + offset[0];
+        const int xx = x + offset[1];
+        if (yy < 0 || yy >= rows || xx < 0 || xx >= cols) continue;
+        GIDiff(yy, xx, 0) = G(yy, xx, 0) - I_gradient(yy, xx, 0);
+        GIDiff(yy, xx, 1) = G(yy, xx, 1) - I_gradient(yy, xx, 1);
+    }
     computeGradient(GIDiff, GIDiffGradient, y, x);
 }
 
