@@ -317,7 +317,7 @@ void update_GF(Tensor3f &G, float V, const Tensor3f &F, int y, int x, const floa
         update_G(0) = G(y, x, 0) - ((F(y, x, 0) / norm) * (V + (G(y, x, 0) * F(y, x, 0) + G(y, x, 1) * F(y, x, 1))));
         update_G(1) = G(y, x, 1) - ((F(y, x, 1) / norm) * (V + (G(y, x, 0) * F(y, x, 0) + G(y, x, 1) * F(y, x, 1))));
         G(y, x, 0) = (1 - weight_GF) * G(y, x, 0) + lr * weight_GF * update_G(0);
-        G(y, x, 1) = (1 - weight_GF) * G(y, x, 0) + lr * weight_GF * update_G(1);
+        G(y, x, 1) = (1 - weight_GF) * G(y, x, 1) + lr * weight_GF * update_G(1);
         if (G(y, x, 0) > gamma){
             G(y, x, 0) = gamma;
         }

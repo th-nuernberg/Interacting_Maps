@@ -55,3 +55,38 @@ TEST_CASE("read_single_line_txt keeps fractional and negative values", "[io]") {
     REQUIRE_THAT(values[3], WithinAbs(110.712660011f, 1e-4));
     REQUIRE_THAT(values[4], WithinAbs(-0.368436311798f, 1e-6));
 }
+
+namespace {
+// Candidate of the flow constraint -V = A . B for A, projected onto the constraint line.
+Vector2f flowConstraintCandidate(const Vector2f &A, const Vector2f &B, float V) {
+    return A - B * (V + A.dot(B)) / B.squaredNorm();
+}
+}
+
+TEST_CASE("update_GF blends each component of G towards its own candidate", "[update][flow]") {
+    Tensor3f G(1, 1, 2), F(1, 1, 2);
+    G.setValues({{{0.3f, -0.7f}}});
+    F.setValues({{{1.5f, 0.5f}}});
+    const float V = 0.4f, w = 0.5f;
+    const Vector2f g0(G(0, 0, 0), G(0, 0, 1)), f(F(0, 0, 0), F(0, 0, 1));
+    const Vector2f expected = (1 - w) * g0 + w * flowConstraintCandidate(g0, f, V);
+
+    update_GF(G, V, F, 0, 0, 1.0f, w, 0.0f, 1e6f);
+
+    REQUIRE_THAT(G(0, 0, 0), WithinAbs(expected(0), 1e-6));
+    REQUIRE_THAT(G(0, 0, 1), WithinAbs(expected(1), 1e-6));
+}
+
+TEST_CASE("update_FG blends each component of F towards its own candidate", "[update][flow]") {
+    Tensor3f F(1, 1, 2), G(1, 1, 2);
+    F.setValues({{{0.3f, -0.7f}}});
+    G.setValues({{{1.5f, 0.5f}}});
+    const float V = 0.4f, w = 0.5f;
+    const Vector2f f0(F(0, 0, 0), F(0, 0, 1)), g(G(0, 0, 0), G(0, 0, 1));
+    const Vector2f expected = (1 - w) * f0 + w * flowConstraintCandidate(f0, g, V);
+
+    update_FG(F, V, G, 0, 0, 1.0f, w, 0.0f, 1e6f);
+
+    REQUIRE_THAT(F(0, 0, 0), WithinAbs(expected(0), 1e-6));
+    REQUIRE_THAT(F(0, 0, 1), WithinAbs(expected(1), 1e-6));
+}
