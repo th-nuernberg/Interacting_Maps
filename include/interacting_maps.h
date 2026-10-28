@@ -25,9 +25,11 @@ using namespace Eigen;
 #define DEBUG_LOG(message) // No-op in release mode
 #endif
 
-void randomInit(Tensor1f &T, float lower, float upper);
+#include <random>
 
-void randomInit(Tensor3f &T, float lower, float upper);
+void randomInit(Tensor1f &T, float lower, float upper, std::mt19937 &rng);
+
+void randomInit(Tensor3f &T, float lower, float upper, std::mt19937 &rng);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  STRING OPERATIONS  /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -76,6 +78,9 @@ struct Parameters
 
     // Decay
     float decayParam = 1e-1f;
+
+    // Reproducibility: random initialisation and the update-order shuffle derive from this seed
+    unsigned seed = 0;
 };
 
 struct OpticalFlowState

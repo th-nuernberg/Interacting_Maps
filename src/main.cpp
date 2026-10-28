@@ -65,6 +65,7 @@ struct ProgramArgs
     std::string resultsDirectory;
     bool fuseR;
     bool fuseI;
+    unsigned seed;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -88,7 +89,8 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .resourceDirectory = vm["resourceDirectory"].as<std::string>(),
         .resultsDirectory  = vm["resultsDirectory"].as<std::string>(),
         .fuseR             = vm["fuseR"].as<bool>(),
-        .fuseI             = vm["fuseI"].as<bool>()
+        .fuseI             = vm["fuseI"].as<bool>(),
+        .seed              = vm["seed"].as<unsigned>()
     };
 }
 
@@ -122,7 +124,8 @@ int main(int argc, char* argv[]) {
             ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
-            ("fuseI,b", po::value<bool>()->default_value(false), "Fuse with images folder?");
+            ("fuseI,b", po::value<bool>()->default_value(false), "Fuse with images folder?")
+            ("seed", po::value<unsigned>()->default_value(0), "Seed for random initialisation and update order");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -164,13 +167,13 @@ int main(int argc, char* argv[]) {
     Resolution res                    = readResolution(settingsPath);
     Calibration_Data calibration_data = readCalibration(calibrationPath, res.height, res.width);
     Parameters parameters = initParameters(args->startTime, args->endTime, args->timeStep);
+    parameters.seed = args->seed;
     OpticalFlowState state = initOpticalFlowState(res.height, res.width, parameters, calibration_data);
 
     // iterations are done after event calculations for a frame are done
     std::vector permutation {0,2,3}; // Which update steps to take; 1 is not needed
-    std::random_device myRandomDevice;
-    unsigned seed = myRandomDevice();
-    std::default_random_engine rng(seed);
+    std::seed_seq order_seed{parameters.seed, 2u};
+    std::mt19937 rng(order_seed);
 
     // For keeping track of the current Event
     // std::vector<int> currentCoordinates = {0,0};

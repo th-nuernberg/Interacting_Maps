@@ -53,7 +53,10 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     s.V_Vis.setZero();
 
     s.F = Tensor3f(height, width, 2);
-    randomInit(s.F, -1, 1);
+    // One stream per randomly initialised map, so adding maps does not shift existing draws.
+    std::seed_seq seed_F{parameters.seed, 0u};
+    std::mt19937 rng_F(seed_F);
+    randomInit(s.F, -1, 1, rng_F);
 
     s.G = Tensor3f(height, width, 2);
     s.G.setZero();
@@ -74,7 +77,9 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     s.GIDiffGradient.setZero();
 
     s.R = Tensor1f(3);
-    randomInit(s.R, -10, 10);
+    std::seed_seq seed_R{parameters.seed, 1u};
+    std::mt19937 rng_R(seed_R);
+    randomInit(s.R, -10, 10, rng_R);
 
     // Camera calibration
     s.CCM  = Tensor3f(height, width, 3);  s.CCM.setZero();
@@ -163,14 +168,11 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
     }
 }
 
-void randomInit(Tensor3f &T, const float lower, const float upper) {
-    const auto &dimensions = T.dimensions();
-    Tensor3f T1(dimensions[0], dimensions[1], dimensions[2]);
-    Tensor3f T2(dimensions[0], dimensions[1], dimensions[2]);
-    T.setRandom();
-    T1.setConstant(lower);
-    T2.setConstant(upper - lower);
-    T = T*T2 + T1;
+void randomInit(Tensor3f &T, const float lower, const float upper, std::mt19937 &rng) {
+    std::uniform_real_distribution<float> uniform(lower, upper);
+    for (Index i = 0; i < T.size(); ++i) {
+        T.data()[i] = uniform(rng);
+    }
 }
 
 void softReset(Tensor3f &T, const float lower, const float upper) {
@@ -184,14 +186,11 @@ void softReset(Tensor3f &T, const float lower, const float upper) {
     T = T + T1*T3 + T2;
 }
 
-void randomInit(Tensor1f &T, const float lower, const float upper) {
-    const auto &dimensions = T.dimensions();
-    Tensor1f T1(dimensions[0]);
-    Tensor1f T2(dimensions[0]);
-    T.setRandom();
-    T1.setConstant(lower);
-    T2.setConstant(upper - lower);
-    T = T*T2 + T1;
+void randomInit(Tensor1f &T, const float lower, const float upper, std::mt19937 &rng) {
+    std::uniform_real_distribution<float> uniform(lower, upper);
+    for (Index i = 0; i < T.size(); ++i) {
+        T.data()[i] = uniform(rng);
+    }
 }
 
 std::vector<float> splitTimeInterval(float startTime, float endTime, float maxIntervalLength)
