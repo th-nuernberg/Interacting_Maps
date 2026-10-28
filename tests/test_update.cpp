@@ -334,3 +334,23 @@ TEST_CASE("initOpticalFlowState is reproducible for a given seed", "[determinism
     }
     REQUIRE(any_difference);
 }
+
+TEST_CASE("clampMaps switches the F/G clamping off", "[event_step][deviations]") {
+    for (const bool clamp : {true, false}) {
+        Parameters p = initParameters(0.0f, 1.0f, 0.1f);
+        p.clampMaps = clamp;
+        p.weight_IV = 0.0f;
+        p.weight_GI = 0.0f;
+        p.weight_IG = 0.0f;
+        p.weight_FG = 1.0f;
+        OpticalFlowState s = initOpticalFlowState(6, 6, p, smallCalibration(6, 6));
+        s.F.setZero();
+        s.G.setZero();
+        s.G(3, 3, 1) = 0.01f;   // flat region: the projected flow candidate is huge
+
+        runEventStep(s, p, {0}, 10.0f, 3, 3);
+
+        // candidate F_x = -V / G_x = -1000
+        REQUIRE_THAT(s.F(3, 3, 1), WithinAbs(clamp ? -p.gamma : -1000.0f, 1e-2));
+    }
+}

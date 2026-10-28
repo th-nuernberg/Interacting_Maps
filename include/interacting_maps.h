@@ -25,6 +25,7 @@ using namespace Eigen;
 #define DEBUG_LOG(message) // No-op in release mode
 #endif
 
+#include <limits>
 #include <random>
 
 void randomInit(Tensor1f &T, float lower, float upper, std::mt19937 &rng);
@@ -72,9 +73,17 @@ struct Parameters
     float neutralPotential  = 128.0f;
     int   vis_counter = -1;
 
+    // Deviations from the paper (docs/cpp-implementation.md). Defaults keep the established behaviour.
+    // V -> I injection is controlled by weight_IV (0 disables it).
+    bool useDecay        = true;    // decay MI towards neutralPotential between events
+    bool clampMaps       = true;    // clip F and G to +-gamma and zero entries below eps
+    bool resetGEachFrame = true;    // IMAGES builds only: zero G after writing each output frame
+
     // Bounds
     float eps   = 0.00001f;
     float gamma = 255.0f;
+    float clampBound() const { return clampMaps ? gamma : std::numeric_limits<float>::infinity(); }
+    float zeroThreshold() const { return clampMaps ? eps : 0.0f; }
 
     // Decay
     float decayParam = 1e-1f;

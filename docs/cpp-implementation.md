@@ -34,12 +34,15 @@ Per event, `event_step` applies V → I, then I → G around the pixel, then G �
 
 ## Deliberate deviations from the paper
 
-These are kept as defaults and are to be made switchable (M0):
+Kept as defaults; each can be switched off (field in `Parameters`, command-line option in brackets):
 
-- **V → I injection with decay.** Each event adds `weight_IV · V` to `MI`, which decays exponentially towards `neutralPotential` with time constant `decayParam`. The paper never observes I directly.
-- **Clamping.** F and G are clipped to ±`gamma` and values below `eps` are zeroed after each update.
-- **Central differences** for ∇I on an H × W grid instead of forward differences on (H+1) × (W+1).
-- **Per-frame G reset** when built with `IMAGES` (visualisation build).
+| Deviation | Switch | Off means |
+| --- | --- | --- |
+| **V → I injection.** Each event adds `weight_IV · V` to `MI`, clipped to [`minPotential`, `maxPotential`]. The paper never observes I directly. | `weight_IV` | `weight_IV = 0` |
+| **Decay.** `MI` decays exponentially towards `neutralPotential` with time constant `decayParam`. | `useDecay` (`--decay`) | no decay |
+| **Clamping.** F and G are clipped to ±`gamma` and entries below `eps` are zeroed after each update. | `clampMaps` (`--clamp`) | no clipping, no zeroing |
+| **Per-frame G reset** when built with `IMAGES`: G is zeroed after each output frame. | `resetGEachFrame` (`--resetG`) | G keeps its state |
+| **Central differences** for ∇I on an H × W grid instead of forward differences on (H+1) × (W+1). | none | — |
 
 ## Known issues
 

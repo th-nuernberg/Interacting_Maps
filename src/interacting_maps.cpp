@@ -124,24 +124,24 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
         PROFILE_SCOPE("GRADIENTS");
         if (y>0){
             computeGradient(MI, delta_I, y-1, x);
-            update_GI(G, delta_I, y-1, x, parameters.weight_GI, parameters.eps, parameters.gamma);
+            update_GI(G, delta_I, y-1, x, parameters.weight_GI, parameters.zeroThreshold(), parameters.clampBound());
         }
         if (x>0){
             computeGradient(MI, delta_I, y, x-1);
-            update_GI(G, delta_I, y, x-1, parameters.weight_GI, parameters.eps, parameters.gamma);
+            update_GI(G, delta_I, y, x-1, parameters.weight_GI, parameters.zeroThreshold(), parameters.clampBound());
         }
         if (y<dimensions[0]-1){
             computeGradient(MI, delta_I, y+1, x);
-            update_GI(G, delta_I, y+1, x, parameters.weight_GI, parameters.eps,parameters.gamma);
+            update_GI(G, delta_I, y+1, x, parameters.weight_GI, parameters.zeroThreshold(), parameters.clampBound());
         }
         if (x<dimensions[1]-1){
             computeGradient(MI, delta_I, y, x+1);
-            update_GI(G, delta_I, y, x+1, parameters.weight_GI, parameters.eps, parameters.gamma);
+            update_GI(G, delta_I, y, x+1, parameters.weight_GI, parameters.zeroThreshold(), parameters.clampBound());
         }
     }
 
     computeGradient(MI, delta_I, y, x);
-    update_GI(G, delta_I, y, x, parameters.weight_GI, parameters.eps, parameters.gamma);
+    update_GI(G, delta_I, y, x, parameters.weight_GI, parameters.zeroThreshold(), parameters.clampBound());
     updateGIDiffGradient(G, delta_I, GIDiff, GIDiffGradient, y, x);
     update_IG(MI, GIDiffGradient, y, x, parameters.weight_IG);
     //computeGradient(MI, delta_I, y, x);
@@ -149,14 +149,14 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
     for (const auto& element : permutation){
         switch( element ){
             case 0:
-                update_FG(F, V, G, y, x, parameters.lr, parameters.weight_FG, parameters.eps, parameters.gamma);
+                update_FG(F, V, G, y, x, parameters.lr, parameters.weight_FG, parameters.zeroThreshold(), parameters.clampBound());
                 break;
             case 1:
                 // Gets called separately because we do not want to do an update of F based on R with every event since this update is global
-                update_FR(F, CCM, dCdx, dCdy, R, parameters.weight_FR, parameters.eps, parameters.gamma);
+                update_FR(F, CCM, dCdx, dCdy, R, parameters.weight_FR, parameters.zeroThreshold(), parameters.clampBound());
                 break;
             case 2:
-                update_GF(G, V, F, y, x, parameters.lr, parameters.weight_GF, parameters.eps, parameters.gamma);
+                update_GF(G, V, F, y, x, parameters.lr, parameters.weight_GF, parameters.zeroThreshold(), parameters.clampBound());
                 break;
             case 3:
                 update_RF(R, F, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_points, parameters.weight_RF, y, x);

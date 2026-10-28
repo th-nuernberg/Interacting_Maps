@@ -20,7 +20,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] Camera frame is left-handed (y up, z forward) while cross products are right-handed; switch to x right, y down, z forward.
 - [x] Seeded, reproducible runs (`--seed`, Eigen `setRandom`).
 - [x] Duplicate short CLI flags (`-f`, `-s`, `-b`).
-- [ ] Paper deviations switchable: decay, clamping, per-frame G reset under `IMAGES`.
+- [x] Paper deviations switchable: decay, clamping, per-frame G reset under `IMAGES`.
 - [ ] IMU fusion: rotate ω into the camera frame and convert units before blending into R (open: R has no physical time unit yet, see `docs/cpp-implementation.md`).
 
 ## M1 – Simulator with ground truth (`python/src/incomaps/sim`)

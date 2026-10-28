@@ -66,6 +66,9 @@ struct ProgramArgs
     bool fuseR;
     bool fuseI;
     unsigned seed;
+    bool decay;
+    bool clamp;
+    bool resetG;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -90,7 +93,10 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .resultsDirectory  = vm["resultsDirectory"].as<std::string>(),
         .fuseR             = vm["fuseR"].as<bool>(),
         .fuseI             = vm["fuseI"].as<bool>(),
-        .seed              = vm["seed"].as<unsigned>()
+        .seed              = vm["seed"].as<unsigned>(),
+        .decay             = vm["decay"].as<bool>(),
+        .clamp             = vm["clamp"].as<bool>(),
+        .resetG            = vm["resetG"].as<bool>()
     };
 }
 
@@ -125,7 +131,10 @@ int main(int argc, char* argv[]) {
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
             ("fuseR", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
             ("fuseI", po::value<bool>()->default_value(false), "Fuse with images folder?")
-            ("seed", po::value<unsigned>()->default_value(0), "Seed for random initialisation and update order");
+            ("seed", po::value<unsigned>()->default_value(0), "Seed for random initialisation and update order")
+            ("decay", po::value<bool>()->default_value(true), "Decay I towards the neutral potential between events (not in the paper)")
+            ("clamp", po::value<bool>()->default_value(true), "Clip F and G to +-gamma and zero tiny values (not in the paper)")
+            ("resetG", po::value<bool>()->default_value(true), "IMAGES builds: zero G after each output frame (not in the paper)");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -168,6 +177,9 @@ int main(int argc, char* argv[]) {
     Calibration_Data calibration_data = readCalibration(calibrationPath, res.height, res.width);
     Parameters parameters = initParameters(args->startTime, args->endTime, args->timeStep);
     parameters.seed = args->seed;
+    parameters.useDecay = args->decay;
+    parameters.clampMaps = args->clamp;
+    parameters.resetGEachFrame = args->resetG;
     OpticalFlowState state = initOpticalFlowState(res.height, res.width, parameters, calibration_data);
 
     // iterations are done after event calculations for a frame are done
@@ -223,7 +235,9 @@ int main(int argc, char* argv[]) {
                 state.V_Vis(cEvent->coordinates[0], cEvent->coordinates[1]) = state.V;
 
                 // Perform an update step for the current event for I G R and F
-                exponentialDecay(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
+                if (parameters.useDecay) {
+                    exponentialDecay(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
+                }
                 for (int i = 0; i < parameters.event_steps; ++i) {
                     event_step(state.V, state.MI, state.delta_I, state.GIDiff, state.GIDiffGradient, state.F, state.G, state.R, state.CCM, state.dCdx, state.dCdy, state.A, state.B,
                                state.Identity_minus_outerProducts, state.old_points, parameters, permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
@@ -232,7 +246,7 @@ int main(int argc, char* argv[]) {
                 if (parameters.startTime + static_cast<float>(parameters.FR_update_counter) * static_cast<float>(1 / parameters.FR_updates_per_second) < event->time) {
                     state.time.setConstant(event->time);
                     for (int i = 0; i < static_cast<int>(parameters.updateIterationsFR); ++i) {
-                        update_FR(state.F, state.CCM, state.dCdx, state.dCdy, state.R, parameters.weight_FR, parameters.eps, parameters.gamma);
+                        update_FR(state.F, state.CCM, state.dCdx, state.dCdy, state.R, parameters.weight_FR, parameters.zeroThreshold(), parameters.clampBound());
                     }
                     // F changed at every pixel; the F -> R running sums must follow.
                     rebuild_R_sums(state.F, state.CCM, state.dCdx, state.dCdy, state.B,
@@ -289,7 +303,9 @@ int main(int argc, char* argv[]) {
                     saveImage(Tensor2Matrix(state.MI), folder_path / ("frame_" + filename.str() + ".png"), true);
                     state.V_Vis.setZero();
                     //randomInit(F, -1, 1);
-                    state.G.setZero();
+                    if (parameters.resetGEachFrame) {
+                        state.G.setZero();
+                    }
 
     #endif
                 //globalDecay(MI, decayTimeSurface, nP, t, dP);
