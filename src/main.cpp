@@ -115,16 +115,16 @@ int main(int argc, char* argv[]) {
     po::options_description desc("Allowed options");
     desc.add_options()
             ("help,h", "Produce help message")
-            ("startTime,f", po::value<float>()->default_value(0), "Where to start with event consideration")
-            ("endTime,f", po::value<float>()->default_value(5), "Where to end with event consideration")
-            ("timeFormat,s", po::value<std::string>()->default_value("uS"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
-            ("timeStep,f", po::value<float>()->default_value(0.01), "Size of the event frames")
-            ("maxIntervalLength,f", po::value<float>()->default_value(1.0), "Load events from time slice of this size at a time")
-            ("resourceDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
-            ("resultsDirectory,s", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
+            ("startTime", po::value<float>()->default_value(0), "Where to start with event consideration")
+            ("endTime", po::value<float>()->default_value(5), "Where to end with event consideration")
+            ("timeFormat", po::value<std::string>()->default_value("uS"), "What format are the times: seconds, milliseconds, microseconds (s,ms,mus)")
+            ("timeStep", po::value<float>()->default_value(0.01), "Size of the event frames")
+            ("maxIntervalLength", po::value<float>()->default_value(1.0), "Load events from time slice of this size at a time")
+            ("resourceDirectory", po::value<std::string>()->default_value("shapes_rotation"), "Which dataset to use, searches in res directory")
+            ("resultsDirectory", po::value<std::string>()->default_value("shapes_rotation"), "Where to store the results, located in output directory")
             ("startIndex,i", po::value<int>()->default_value(0), "With what index to start for the images")
-            ("fuseR,b", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
-            ("fuseI,b", po::value<bool>()->default_value(false), "Fuse with images folder?")
+            ("fuseR", po::value<bool>()->default_value(false), "Fuse with imu.txt?")
+            ("fuseI", po::value<bool>()->default_value(false), "Fuse with images folder?")
             ("seed", po::value<unsigned>()->default_value(0), "Seed for random initialisation and update order");
 
     auto args = parseArgs(argc, argv, desc);
