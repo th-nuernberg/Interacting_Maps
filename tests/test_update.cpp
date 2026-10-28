@@ -123,3 +123,11 @@ TEST_CASE("event_step ignores unknown update ids instead of running update_FG", 
         REQUIRE(s.F.data()[i] == F_before.data()[i]);
     }
 }
+
+TEST_CASE("Vector2Tensor keeps every element of the vector", "[conversions]") {
+    VectorXf v(3);
+    v << 1.0f, 2.0f, 3.0f;
+    const Tensor1f t = Vector2Tensor(v);
+    REQUIRE(t.dimension(0) == 3);
+    REQUIRE(t(2) == 3.0f);
+}

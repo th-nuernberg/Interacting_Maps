@@ -11,7 +11,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] `update_GF`: y component computed from the x component.
 - [x] Main loop reads `intervals[i+1]` past the end.
 - [x] `switch` over update order falls through from `default`.
-- [ ] `Vector2Tensor` uses `cols()` (= 1) instead of `size()`.
+- [x] `Vector2Tensor` uses `cols()` (= 1) instead of `size()`.
 - [ ] `computeGradient` border cases (wrong rows/columns and factor ½ on one-sided differences).
 - [ ] G→I residual (`GIDiff`) random-initialised and only refreshed at the event pixel.
 - [ ] F→R least squares: right-hand side `B` only contains pixels that saw an event, and goes stale after global F←R updates.

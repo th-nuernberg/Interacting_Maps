@@ -21,9 +21,9 @@ VectorXf Tensor2Vector(const Tensor1f& input) {
  * @return Eigen 1Tensor
  */
 Tensor1f Vector2Tensor(const VectorXf& input) {
-    const int cols = input.cols();
+    const Index size = input.size();
     const float* data_ptr = input.data();
-    TensorMap<const Tensor1f> result(data_ptr, cols);
+    TensorMap<const Tensor1f> result(data_ptr, size);
     return result;
 }
 /**
