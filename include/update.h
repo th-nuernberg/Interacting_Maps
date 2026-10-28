@@ -352,6 +352,34 @@ void exponentialDecay(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, cons
 void decayNeighbourhood(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, const int x, const float time, const float neutralPotential, const float decayParam);
 
 /**
+ * Integrate what the paper applies at a pixel without events over its silent time (no event since
+ * GTimeSurface(y, x), i.e. V = 0): G <- I pulls G towards grad I, G <- F with V = 0 removes G's component along F.
+ * Closed form, exact for grad I and F constant over the silent time.
+ * @param G spatial gradient, shape NxMx2
+ * @param F optical flow, shape NxMx2
+ * @param I_gradient current gradient of I, shape NxMx2; read at (y, x)
+ * @param GTimeSurface time up to which G is relaxed, per pixel; set to time
+ * @param y vertical coordinate of the pixel
+ * @param x horizontal coordinate of the pixel
+ * @param time current time
+ * @param rate_GI relaxation rate of G <- I in 1/s, see Parameters::rate_GI_silent
+ * @param rate_GF relaxation rate of G <- F (V = 0) in 1/s, see Parameters::rate_GF_silent
+ */
+void relaxSilentG(Tensor3f &G, const Tensor3f &F, const Tensor3f &I_gradient, Tensor2f &GTimeSurface, const int y, const int x, const float time, const float rate_GI, const float rate_GF);
+
+/**
+ * relaxSilentG at (y, x) and its 4 neighbours, the pixels whose G event_step reads and writes. Computes grad I there
+ * first, so I must already be decayed to time.
+ */
+void relaxSilentNeighbourhood(Tensor3f &G, const Tensor3f &F, const Tensor2f &I, Tensor3f &I_gradient, Tensor2f &GTimeSurface, const int y, const int x, const float time, const float rate_GI, const float rate_GF);
+
+/**
+ * Copy of G with every pixel relaxed to the given time against grad I (I already decayed to time); for display and
+ * costs only
+ */
+Tensor3f relaxedSilentCopy(const Tensor3f &G, const Tensor3f &F, const Tensor2f &I, const Tensor2f &GTimeSurface, const float time, const float rate_GI, const float rate_GF);
+
+/**
  * Copy of the image intensity with every pixel decayed to the given time; for display and costs only
  * @param I image intensity
  * @param decayTimeSurface time of the last decay for each pixel

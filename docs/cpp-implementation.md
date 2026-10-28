@@ -41,8 +41,21 @@ Kept as defaults; each can be switched off (field in `Parameters`, command-line 
 | **V → I injection.** Each event adds `weight_IV · V` to `MI`, clipped to [`minPotential`, `maxPotential`]. The paper never observes I directly. | `weight_IV` | `weight_IV = 0` |
 | **Decay.** `MI` decays exponentially towards `neutralPotential` with time constant `decayParam`. | `useDecay` (`--decay`) | no decay |
 | **Clamping.** F and G are clipped to ±`gamma` and entries below `eps` are zeroed after each update. | `clampMaps` (`--clamp`) | no clipping, no zeroing |
-| **Per-frame G reset** when built with `IMAGES`: G is zeroed after each output frame. | `resetGEachFrame` (`--resetG`) | G keeps its state |
+| **Per-frame G reset** when built with `IMAGES`: G is zeroed after each output frame. Old workaround for stale G, superseded by silent-time relaxation below; **off by default**. | `resetGEachFrame` (`--resetG`) | G keeps its state |
 | **Central differences** for ∇I on an H × W grid instead of forward differences on (H+1) × (W+1). | none | — |
+
+## Pixels without events (asynchronous V = 0)
+
+In the paper every pixel is updated every iteration, and a pixel without events has V = 0: an observation ("brightness did not change"), not missing data. Event-driven updates alone never touch such pixels, so G stayed wherever the last edge left it.
+
+Instead of a per-bin sweep, each pixel stores `GTimeSurface`, the time up to which its G is current. Before `event_step` reads G at the event pixel and its 4 neighbours, `relaxSilentNeighbourhood` integrates the two relations the paper applies at a silent pixel over the elapsed time, in closed form:
+
+- G ← I: G relaxes towards g = ∇I (from the freshly decayed stencil) at rate `rate_GI_silent`.
+- G ← F with V = 0: G's component along F decays at rate `rate_GF_silent`.
+
+Split along F, the perpendicular part goes to g⊥ with rate `rate_GI_silent`, and the parallel part goes to `rate_GI / (rate_GI + rate_GF) · g∥` with rate `rate_GI + rate_GF`. The solution is exact for g and F constant over the silent time; both are approximations (an event two pixels away can change ∇I, and global F ← R updates change F). Output frames show `relaxedSilentCopy(G)`, every pixel relaxed to the frame time, without changing the state.
+
+The rates default to `-ln(1 - weight) / time_step`, which reproduces one paper update per time step (tested). They are open parameters, to be determined by the M2 sweeps. Switch: `silentRelaxation` (`--silentG`). F is not relaxed over silent time; it is regularised globally by F ← R.
 
 ## Known issues
 

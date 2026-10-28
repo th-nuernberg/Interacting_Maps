@@ -417,3 +417,85 @@ TEST_CASE("decayedCopy decays every pixel and leaves the state untouched", "[upd
     REQUIRE_THAT(s.MI(3, 3), WithinAbs(200.0f, 1e-6));
     REQUIRE_THAT(s.decayTimeSurface(3, 3), WithinAbs(0.0f, 1e-9));
 }
+
+TEST_CASE("relaxSilentG without G <- I equals repeated V = 0 update_GF steps, one per time step", "[update][silent]") {
+    // The asynchronous closed form must reproduce what the paper's synchronous update does at a pixel
+    // without events: n time steps of update_GF with V = 0.
+    Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    Tensor3f F(1, 1, 2), G_steps(1, 1, 2), G_lazy(1, 1, 2), g(1, 1, 2);
+    F.setValues({{{0.6f, 0.8f}}});
+    G_steps.setValues({{{2.0f, -1.0f}}});
+    G_lazy = G_steps;
+    g.setZero();
+    const int n = 7;
+    for (int i = 0; i < n; ++i) {
+        update_GF(G_steps, 0.0f, F, 0, 0, p.lr, p.weight_GF, 0.0f, std::numeric_limits<float>::infinity());
+    }
+    Tensor2f GTime(1, 1);
+    GTime.setConstant(0.0f);
+
+    relaxSilentG(G_lazy, F, g, GTime, 0, 0, n * p.time_step, 0.0f, p.rate_GF_silent);
+
+    REQUIRE_THAT(G_lazy(0, 0, 0), WithinAbs(G_steps(0, 0, 0), 1e-5));
+    REQUIRE_THAT(G_lazy(0, 0, 1), WithinAbs(G_steps(0, 0, 1), 1e-5));
+    REQUIRE_THAT(GTime(0, 0), WithinAbs(n * p.time_step, 1e-7));
+}
+
+TEST_CASE("relaxSilentG without G <- F equals repeated update_GI steps, one per time step", "[update][silent]") {
+    Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    Tensor3f F(1, 1, 2), G_steps(1, 1, 2), G_lazy(1, 1, 2), g(1, 1, 2);
+    F.setValues({{{0.6f, 0.8f}}});
+    G_steps.setValues({{{2.0f, -1.0f}}});
+    G_lazy = G_steps;
+    g.setValues({{{0.5f, 0.25f}}});
+    const int n = 7;
+    for (int i = 0; i < n; ++i) {
+        update_GI(G_steps, g, 0, 0, p.weight_GI, 0.0f, std::numeric_limits<float>::infinity());
+    }
+    Tensor2f GTime(1, 1);
+    GTime.setConstant(0.0f);
+
+    relaxSilentG(G_lazy, F, g, GTime, 0, 0, n * p.time_step, p.rate_GI_silent, 0.0f);
+
+    REQUIRE_THAT(G_lazy(0, 0, 0), WithinAbs(G_steps(0, 0, 0), 1e-5));
+    REQUIRE_THAT(G_lazy(0, 0, 1), WithinAbs(G_steps(0, 0, 1), 1e-5));
+}
+
+TEST_CASE("relaxSilentG: V = 0 removes only G's component along F", "[update][silent]") {
+    Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    Tensor3f F(1, 1, 2), G(1, 1, 2), g(1, 1, 2);
+    F.setValues({{{0.0f, 3.0f}}});    // flow along x
+    G.setValues({{{1.5f, 2.0f}}});
+    g.setZero();
+    Tensor2f GTime(1, 1);
+    GTime.setConstant(0.0f);
+
+    relaxSilentG(G, F, g, GTime, 0, 0, 1.0f, 0.0f, p.rate_GF_silent);   // 100 silent time steps
+
+    REQUIRE_THAT(G(0, 0, 0), WithinAbs(1.5f, 1e-6));                           // perpendicular: untouched
+    REQUIRE_THAT(G(0, 0, 1), WithinAbs(2.0f * std::pow(0.8f, 100.0f), 1e-6));  // parallel: (1 - w)^100
+}
+
+TEST_CASE("relaxSilentG: stale G at a pixel an edge has left goes to zero", "[update][silent]") {
+    // An edge passed, left G behind, and the pixel is now flat (grad I = 0) and silent.
+    Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    Tensor3f F(1, 1, 2), G(1, 1, 2), g(1, 1, 2);
+    F.setValues({{{0.6f, 0.8f}}});
+    G.setValues({{{-3.0f, 4.0f}}});
+    g.setZero();
+    Tensor2f GTime(1, 1);
+    GTime.setConstant(0.0f);
+
+    relaxSilentG(G, F, g, GTime, 0, 0, 1.0f, p.rate_GI_silent, p.rate_GF_silent);
+
+    REQUIRE_THAT(G(0, 0, 0), WithinAbs(0.0f, 1e-6));
+    REQUIRE_THAT(G(0, 0, 1), WithinAbs(0.0f, 1e-6));
+}
+
+TEST_CASE("G reset is off and silent relaxation on by default", "[deviations][silent]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    REQUIRE_FALSE(p.resetGEachFrame);
+    REQUIRE(p.silentRelaxation);
+    REQUIRE_THAT(p.rate_GI_silent, WithinAbs(-std::log(0.8f) / 0.01f, 1e-3));
+    REQUIRE_THAT(p.rate_GF_silent, WithinAbs(-std::log(0.8f) / 0.01f, 1e-3));
+}

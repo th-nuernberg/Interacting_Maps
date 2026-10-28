@@ -445,6 +445,66 @@ void decayNeighbourhood(Tensor2f &I, Tensor2f &decayTimeSurface, const int y, co
     }
 }
 
+void relaxSilentG(Tensor3f &G, const Tensor3f &F, const Tensor3f &I_gradient, Tensor2f &GTimeSurface, const int y, const int x, const float time, const float rate_GI, const float rate_GF){
+    PROFILE_FUNCTION();
+    // No event at (y, x) since GTimeSurface(y, x) is evidence V = 0 for that whole time. At such a pixel the paper
+    // keeps applying G <- I (pull towards g = grad I) and G <- F with V = 0 (remove G's component along F).
+    // As continuous-time relaxation with g taken constant over the silent time, split along F:
+    //   perpendicular: G' = -rate_GI (G - g)                    -> g + (G - g) exp(-rate_GI dt)
+    //   parallel:      G' = -rate_GI (G - g) - rate_GF G        -> G* + (G - G*) exp(-(rate_GI + rate_GF) dt)
+    // with G* = rate_GI / (rate_GI + rate_GF) g. F is taken as constant over the silent time.
+    const float dt = time - GTimeSurface(y, x);
+    GTimeSurface(y, x) = time;
+    if (dt <= 0.0f) return;
+    const Vector2f g(I_gradient(y, x, 0), I_gradient(y, x, 1));
+    const Vector2f G_old(G(y, x, 0), G(y, x, 1));
+    const Vector2f f(F(y, x, 0), F(y, x, 1));
+    const float norm = f.squaredNorm();
+    const Vector2f f_hat = norm > 0.0f ? Vector2f(f / std::sqrt(norm)) : Vector2f::Zero();
+
+    const float G_par = G_old.dot(f_hat);
+    const float g_par = g.dot(f_hat);
+    const Vector2f G_perp = G_old - G_par * f_hat;
+    const Vector2f g_perp = g - g_par * f_hat;
+
+    const float rate_par = rate_GI + rate_GF;
+    const float G_par_fixed = rate_par > 0.0f ? rate_GI / rate_par * g_par : G_par;
+    const Vector2f G_perp_new = g_perp + (G_perp - g_perp) * expf(-rate_GI * dt);
+    const float G_par_new = G_par_fixed + (G_par - G_par_fixed) * expf(-rate_par * dt);
+    G(y, x, 0) = G_perp_new(0) + G_par_new * f_hat(0);
+    G(y, x, 1) = G_perp_new(1) + G_par_new * f_hat(1);
+}
+
+void relaxSilentNeighbourhood(Tensor3f &G, const Tensor3f &F, const Tensor2f &I, Tensor3f &I_gradient, Tensor2f &GTimeSurface, const int y, const int x, const float time, const float rate_GI, const float rate_GF){
+    PROFILE_FUNCTION();
+    // event_step reads and writes G at (y, x) and its 4 neighbours. I must already be decayed to time
+    // (decayNeighbourhood) so that grad I is current.
+    const int rows = static_cast<int>(G.dimension(0));
+    const int cols = static_cast<int>(G.dimension(1));
+    const int offsets[5][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (const auto &offset : offsets) {
+        const int yy = y + offset[0];
+        const int xx = x + offset[1];
+        if (yy < 0 || yy >= rows || xx < 0 || xx >= cols) continue;
+        computeGradient(I, I_gradient, yy, xx);
+        relaxSilentG(G, F, I_gradient, GTimeSurface, yy, xx, time, rate_GI, rate_GF);
+    }
+}
+
+Tensor3f relaxedSilentCopy(const Tensor3f &G, const Tensor3f &F, const Tensor2f &I, const Tensor2f &GTimeSurface, const float time, const float rate_GI, const float rate_GF){
+    PROFILE_FUNCTION();
+    Tensor3f relaxed = G;
+    Tensor2f times = GTimeSurface;
+    Tensor3f I_gradient(G.dimensions());
+    for (int y = 0; y < G.dimension(0); ++y) {
+        for (int x = 0; x < G.dimension(1); ++x) {
+            computeGradient(I, I_gradient, y, x);
+            relaxSilentG(relaxed, F, I_gradient, times, y, x, time, rate_GI, rate_GF);
+        }
+    }
+    return relaxed;
+}
+
 Tensor2f decayedCopy(const Tensor2f &I, const Tensor2f &decayTimeSurface, const float time, const float neutralPotential, const float decayParam){
     PROFILE_FUNCTION();
     // Exponential decay composes exactly, so decaying a copy for display does not change the dynamics.

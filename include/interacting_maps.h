@@ -79,7 +79,14 @@ struct Parameters
     // V -> I injection is controlled by weight_IV (0 disables it).
     bool useDecay        = true;    // decay MI towards neutralPotential between events
     bool clampMaps       = true;    // clip F and G to +-gamma and zero entries below eps
-    bool resetGEachFrame = true;    // IMAGES builds only: zero G after writing each output frame
+    bool resetGEachFrame = false;   // IMAGES builds only: zero G after writing each output frame (old hack)
+
+    // Pixels without events carry V = 0 (paper: every pixel is updated every iteration). G <- I and G <- F (V = 0)
+    // are integrated lazily per pixel over its silent time instead of per time bin. The rates [1/s] are set in
+    // initParameters to -ln(1 - weight) / time_step, i.e. one paper update per time step; open, to be swept (M2).
+    bool  silentRelaxation = true;
+    float rate_GI_silent   = 0.0f;
+    float rate_GF_silent   = 0.0f;
 
     // Bounds
     float eps   = 0.00001f;
@@ -102,6 +109,7 @@ struct OpticalFlowState
 
     Tensor3f F;               // Optical flow
     Tensor3f G;               // Spatial gradient
+    Tensor2f GTimeSurface;    // time up to which G's silent-time relaxation has been applied
     Tensor3f delta_I;
 
     Tensor2f I;               // Intensity image

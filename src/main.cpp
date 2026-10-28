@@ -69,6 +69,7 @@ struct ProgramArgs
     bool decay;
     bool clamp;
     bool resetG;
+    bool silentG;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -96,7 +97,8 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .seed              = vm["seed"].as<unsigned>(),
         .decay             = vm["decay"].as<bool>(),
         .clamp             = vm["clamp"].as<bool>(),
-        .resetG            = vm["resetG"].as<bool>()
+        .resetG            = vm["resetG"].as<bool>(),
+        .silentG           = vm["silentG"].as<bool>()
     };
 }
 
@@ -134,7 +136,8 @@ int main(int argc, char* argv[]) {
             ("seed", po::value<unsigned>()->default_value(0), "Seed for random initialisation and update order")
             ("decay", po::value<bool>()->default_value(true), "Decay I towards the neutral potential between events (not in the paper)")
             ("clamp", po::value<bool>()->default_value(true), "Clip F and G to +-gamma and zero tiny values (not in the paper)")
-            ("resetG", po::value<bool>()->default_value(true), "IMAGES builds: zero G after each output frame (not in the paper)");
+            ("resetG", po::value<bool>()->default_value(false), "IMAGES builds: zero G after each output frame (old hack, not in the paper)")
+            ("silentG", po::value<bool>()->default_value(true), "Treat time without events at a pixel as V = 0 for the G <- F relation");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -180,6 +183,7 @@ int main(int argc, char* argv[]) {
     parameters.useDecay = args->decay;
     parameters.clampMaps = args->clamp;
     parameters.resetGEachFrame = args->resetG;
+    parameters.silentRelaxation = args->silentG;
     OpticalFlowState state = initOpticalFlowState(res.height, res.width, parameters, calibration_data);
 
     // iterations are done after event calculations for a frame are done
@@ -238,6 +242,9 @@ int main(int argc, char* argv[]) {
                 if (parameters.useDecay) {
                     decayNeighbourhood(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
                 }
+                if (parameters.silentRelaxation) {
+                    relaxSilentNeighbourhood(state.G, state.F, state.MI, state.delta_I, state.GTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_GI_silent, parameters.rate_GF_silent);
+                }
                 for (int i = 0; i < parameters.event_steps; ++i) {
                     event_step(state.V, state.MI, state.delta_I, state.GIDiff, state.GIDiffGradient, state.F, state.G, state.R, state.CCM, state.dCdx, state.dCdy, state.A, state.B,
                                state.Identity_minus_outerProducts, state.old_points, parameters, permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
@@ -287,7 +294,10 @@ int main(int argc, char* argv[]) {
                     const Tensor2f MI_now = parameters.useDecay
                         ? decayedCopy(state.MI, state.decayTimeSurface, event->time, parameters.neutralPotential, parameters.decayParam)
                         : state.MI;
-                    float loss = VFG_check(state.V_Vis, state.F, state.G);
+                    const Tensor3f G_now = parameters.silentRelaxation
+                        ? relaxedSilentCopy(state.G, state.F, MI_now, state.GTimeSurface, event->time, parameters.rate_GI_silent, parameters.rate_GF_silent)
+                        : state.G;
+                    float loss = VFG_check(state.V_Vis, state.F, G_now);
                     //std::cout << "VFG Check: " << loss << std::endl;
                     writeToFile(event->time, loss, VLossPath);
 
@@ -298,11 +308,11 @@ int main(int argc, char* argv[]) {
 
                     std::string image_name = "VIGF_" + filename.str() + ".png";
                     fs::path image_path = folder_path / image_name;
-                    create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), state.G, state.F, image_path, true, 0.1);
+                    create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, state.F, image_path, true, 0.1);
                     float cost1, cost2, cost3;
                     cost1 = costFR(state.F, state.CCM, state.dCdx, state.dCdy, state.R);
-                    cost2 = costFG(state.F, state.V_Vis, state.G);
-                    cost3 = costGI(state.G, state.delta_I);
+                    cost2 = costFG(state.F, state.V_Vis, G_now);
+                    cost3 = costGI(G_now, state.delta_I);
                     std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
                     saveImage(Tensor2Matrix(MI_now), folder_path / ("frame_" + filename.str() + ".png"), true);
                     state.V_Vis.setZero();
