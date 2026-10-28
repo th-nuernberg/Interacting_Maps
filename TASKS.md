@@ -12,7 +12,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] Main loop reads `intervals[i+1]` past the end.
 - [x] `switch` over update order falls through from `default`.
 - [x] `Vector2Tensor` uses `cols()` (= 1) instead of `size()`.
-- [ ] `computeGradient` border cases (wrong rows/columns and factor ½ on one-sided differences).
+- [x] `computeGradient` border cases: last row/column read the wrong cells (replicate-border intent kept).
 - [ ] G→I residual (`GIDiff`) random-initialised and only refreshed at the event pixel.
 - [ ] F→R least squares: right-hand side `B` only contains pixels that saw an event, and goes stale after global F←R updates.
 - [x] `read_single_line_txt` parses floats with `std::stoi` (focal lengths truncated, distortion lost).

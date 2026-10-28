@@ -198,7 +198,7 @@ void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     if (y == 0) {
         gradients(y, x, 0) = (data(y, x) - data(y + 1, x)) / 2.0f; // Central difference with replicate border
     } else if (y == rows - 1) {
-        gradients(y, x, 0) = (data(y - 2, x) - data(y - 1, x)) / 2.0f; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y - 1, x) - data(y, x)) / 2.0f; // Central difference with replicate border
     } else {
         gradients(y, x, 0) = (data(y - 1, x) - data(y + 1, x)) / 2.0f;
     }
@@ -206,7 +206,7 @@ void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     if (x == 0) {
         gradients(y, x, 1) = (data(y, x + 1) - data(y, x)) / 2.0f; // Central difference with replicate border
     } else if (x == cols - 1) {
-        gradients(y, x, 1) = (data(y, x - 1) - data(y, x - 2)) / 2.0f; // Central difference with replicate border
+        gradients(y, x, 1) = (data(y, x) - data(y, x - 1)) / 2.0f; // Central difference with replicate border
     } else {
         gradients(y, x, 1) = (data(y, x + 1) - data(y, x - 1)) / 2.0f;
     }
@@ -224,7 +224,7 @@ void computeGradient(const Tensor3f &data, Tensor3f &gradients, int y, int x) {
     if (y == 0) {
         gradients(y, x, 0) = (data(y, x, 0) - data(y + 1, x, 0)) / 2.0f; // Central difference with replicate border
     } else if (y == rows - 1) {
-        gradients(y, x, 0) = (data(y - 2, x, 0) - data(y - 1, x, 0)) / 2.0f; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y - 1, x, 0) - data(y, x, 0)) / 2.0f; // Central difference with replicate border
     } else {
         gradients(y, x, 0) = (data(y - 1, x, 0) - data(y + 1, x, 0)) / 2.0f;
     }
@@ -232,7 +232,7 @@ void computeGradient(const Tensor3f &data, Tensor3f &gradients, int y, int x) {
     if (x == 0) {
         gradients(y, x, 1) = (data(y, x + 1, 1) - data(y, x, 1)) / 2.0f; // Central difference with replicate border
     } else if (x == cols - 1) {
-        gradients(y, x, 1) = (data(y, x - 1, 1) - data(y, x - 2, 1)) / 2.0f; // Central difference with replicate border
+        gradients(y, x, 1) = (data(y, x, 1) - data(y, x - 1, 1)) / 2.0f; // Central difference with replicate border
     } else {
         gradients(y, x, 1) = (data(y, x + 1, 1) - data(y, x - 1, 1)) / 2.0f;
     }

@@ -131,3 +131,42 @@ TEST_CASE("Vector2Tensor keeps every element of the vector", "[conversions]") {
     REQUIRE(t.dimension(0) == 3);
     REQUIRE(t(2) == 3.0f);
 }
+
+TEST_CASE("computeGradient uses replicate borders on all four sides", "[update][gradient]") {
+    // Channel 0 is d/d(up) = I(y-1) - I(y+1) over 2, channel 1 is d/dx. Replicate border: the
+    // missing neighbour is replaced by the border pixel itself.
+    const int n = 5;
+    Tensor2f Iy(n, n), Ix(n, n);
+    Tensor3f gy(n, n, 2), gx(n, n, 2);
+    for (int y = 0; y < n; ++y) {
+        for (int x = 0; x < n; ++x) {
+            Iy(y, x) = float(y * y);
+            Ix(y, x) = float(x * x);
+        }
+    }
+    for (int i = 0; i < n; ++i) {
+        computeGradient(Iy, gy, i, 2);
+        computeGradient(Ix, gx, 2, i);
+    }
+    auto sq = [](int v) { return float(v * v); };
+    REQUIRE_THAT(gy(0, 2, 0), WithinAbs((sq(0) - sq(1)) / 2.0f, 1e-6));
+    REQUIRE_THAT(gy(2, 2, 0), WithinAbs((sq(1) - sq(3)) / 2.0f, 1e-6));
+    REQUIRE_THAT(gy(n - 1, 2, 0), WithinAbs((sq(n - 2) - sq(n - 1)) / 2.0f, 1e-6));
+    REQUIRE_THAT(gx(2, 0, 1), WithinAbs((sq(1) - sq(0)) / 2.0f, 1e-6));
+    REQUIRE_THAT(gx(2, 2, 1), WithinAbs((sq(3) - sq(1)) / 2.0f, 1e-6));
+    REQUIRE_THAT(gx(2, n - 1, 1), WithinAbs((sq(n - 1) - sq(n - 2)) / 2.0f, 1e-6));
+}
+
+TEST_CASE("computeGradient on a 3-tensor differentiates channel 0 along y and channel 1 along x", "[update][gradient]") {
+    const int n = 5;
+    Tensor3f D(n, n, 2), g(n, n, 2);
+    for (int y = 0; y < n; ++y) {
+        for (int x = 0; x < n; ++x) {
+            D(y, x, 0) = float(y * y);
+            D(y, x, 1) = float(x * x);
+        }
+    }
+    computeGradient(D, g, n - 1, n - 1);
+    REQUIRE_THAT(g(n - 1, n - 1, 0), WithinAbs(float((n - 2) * (n - 2) - (n - 1) * (n - 1)) / 2.0f, 1e-6));
+    REQUIRE_THAT(g(n - 1, n - 1, 1), WithinAbs(float((n - 1) * (n - 1) - (n - 2) * (n - 2)) / 2.0f, 1e-6));
+}
