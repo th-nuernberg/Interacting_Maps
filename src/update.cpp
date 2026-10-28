@@ -531,10 +531,13 @@ void update_RF(Tensor1f &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f
     R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
 }
 
-void update_RIMU(Tensor1f &R, const std::vector<float> &rotVelIMU, const float weight_RIMU) {
-    R(0) = (1 - weight_RIMU)*R(0) + weight_RIMU*rotVelIMU[0];
-    R(1) = (1 - weight_RIMU)*R(1) + weight_RIMU*rotVelIMU[1];
-    R(2) = (1 - weight_RIMU)*R(2) + weight_RIMU*rotVelIMU[2];
+void update_RIMU(Tensor1f &R, const std::vector<float> &rotVelIMU, const float weight_RIMU, const Matrix3f &R_cam_imu, const float imuScale) {
+    const Vector3f omega_cam = R_cam_imu * Vector3f(rotVelIMU[0], rotVelIMU[1], rotVelIMU[2]);   // (x, y, z)
+    // R = -(camera rotation), stored as (y, x, z)
+    const Vector3f candidate = -imuScale * Vector3f(omega_cam.y(), omega_cam.x(), omega_cam.z());
+    R(0) = (1 - weight_RIMU)*R(0) + weight_RIMU*candidate(0);
+    R(1) = (1 - weight_RIMU)*R(1) + weight_RIMU*candidate(1);
+    R(2) = (1 - weight_RIMU)*R(2) + weight_RIMU*candidate(2);
 }
 
 

@@ -62,6 +62,8 @@ struct Parameters
     float weight_IV    = 1.0f;
     float weight_RF    = 0.8f;
     float weight_RIMU = 0.0f;
+    Matrix3f R_cam_imu = Matrix3f::Identity();   // IMU frame -> camera frame
+    float imuScale     = 1.0f;                   // gyro rad/s -> R units; open, see docs/cpp-implementation.md
     float weight_Ifusion = 0.0f;
     float lr           = 1.0f;
     int   FR_update_counter = 100;

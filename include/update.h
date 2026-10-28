@@ -391,12 +391,15 @@ void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tenso
 void update_RF(Tensor1f &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, float weight_RF, int y, int x);
 
 /**
- * Update rotational velocity based on IMU velocity data
- * @param R rotational velocity approximated by Interacting maps net
- * @param rotVelIMU rotational velocity measured by IMU
- * @param weight_RIMU weighting between both values; 1.0 = 100% rotVelIMU, 0.0 = 100% R
+ * Update R from a gyro reading. The reading (x, y, z, IMU frame) is rotated into the camera frame, scaled to R's units,
+ * negated (R is minus the camera rotation, see docs/cpp-implementation.md) and stored as (y, x, z).
+ * @param R rotation estimated by the Interacting Maps network, stored as (y, x, z)
+ * @param rotVelIMU angular velocity measured by the gyro, (x, y, z) in the IMU frame
+ * @param weight_RIMU weighting between both values; 1.0 = 100% gyro, 0.0 = 100% R
+ * @param R_cam_imu rotation from the IMU frame to the camera frame
+ * @param imuScale factor from the gyro's angular velocity to R's units (e.g. seconds per bin)
  */
-void update_RIMU(Tensor1f &R, const std::vector<float> &rotVelIMU, float weight_RIMU);
+void update_RIMU(Tensor1f &R, const std::vector<float> &rotVelIMU, float weight_RIMU, const Matrix3f &R_cam_imu, float imuScale);
 
 /**
  * Fuse a real image from a camera with the approximation of the Network

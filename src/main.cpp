@@ -255,7 +255,7 @@ int main(int argc, char* argv[]) {
                 }
 
             } else if (auto* imuEvent = dynamic_cast<IMUEvent*>(event.get()))  {
-                update_RIMU(state.R, imuEvent->ang_velocity, parameters.weight_RIMU);
+                update_RIMU(state.R, imuEvent->ang_velocity, parameters.weight_RIMU, parameters.R_cam_imu, parameters.imuScale);
             }
 
             else if (auto* imageEvent = dynamic_cast<ImageEvent*>(event.get()))  {

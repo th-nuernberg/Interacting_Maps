@@ -354,3 +354,28 @@ TEST_CASE("clampMaps switches the F/G clamping off", "[event_step][deviations]")
         REQUIRE_THAT(s.F(3, 3, 1), WithinAbs(clamp ? -p.gamma : -1000.0f, 1e-2));
     }
 }
+
+TEST_CASE("update_RIMU turns a gyro reading into the R that reproduces the projected flow", "[conventions][imu]") {
+    const int W = 21, H = 15;
+    const float fx = 20.0f, fy = 18.0f, cx = 10.0f, cy = 7.0f;
+    const float dt = 1e-3f;                                      // R is rotation per dt in this test
+    Tensor3f C(H, W, 3), Cx(H, W, 3), Cy(H, W, 3), F(H, W, 2), RxC(H, W, 3);
+    find_C(W, H, fx, fy, cx, cy, C, Cx, Cy);
+
+    const Matrix3f R_cam_imu = AngleAxisf(0.5f * float(M_PI), Vector3f::UnitZ()).toRotationMatrix();
+    const Vector3f omega_cam(0.3f, -0.6f, 0.9f);                 // rad/s, camera frame (x, y, z)
+    const Vector3f omega_imu = R_cam_imu.transpose() * omega_cam;  // what the gyro reports
+
+    Tensor1f R(3);
+    R.setZero();
+    update_RIMU(R, {omega_imu.x(), omega_imu.y(), omega_imu.z()}, 1.0f, R_cam_imu, dt);
+
+    crossProduct1x3(R, C, RxC);
+    m32(RxC, Cx, Cy, F);
+    const float angle = omega_cam.norm() * dt;
+    for (const auto &pixel : std::vector<std::array<int, 2>>{{7, 10}, {2, 3}, {12, 18}}) {
+        const Vector2f expected = projectedPixelMotion(float(pixel[0]), float(pixel[1]), omega_cam, angle, fx, fy, cx, cy);
+        REQUIRE_THAT(F(pixel[0], pixel[1], 0), WithinAbs(expected(0), 2e-4));
+        REQUIRE_THAT(F(pixel[0], pixel[1], 1), WithinAbs(expected(1), 2e-4));
+    }
+}

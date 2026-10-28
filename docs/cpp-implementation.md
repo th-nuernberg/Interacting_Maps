@@ -46,4 +46,4 @@ Kept as defaults; each can be switched off (field in `Parameters`, command-line 
 
 ## Known issues
 
-See M0 in `TASKS.md` for the full list and status. Open design question: R has no physical time unit. V is a per-event contribution, not a temporal derivative per bin, so F (and R) are "pixels per event contribution". Fusing a gyro (rad/s) into R therefore needs an explicit scale that the current model does not define.
+See M0 in `TASKS.md` for the full list and status. Open design question: R has no physical time unit. V is a per-event contribution, not a temporal derivative per bin, so F (and R) are "pixels per event contribution". Fusing a gyro (rad/s) into R therefore needs an explicit scale that the current model does not define. `update_RIMU` takes it as `Parameters::imuScale` (default 1, i.e. unscaled) together with the camera–IMU rotation `R_cam_imu` (default identity); both must be set before `weight_RIMU > 0` gives meaningful results.

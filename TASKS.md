@@ -21,7 +21,8 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] Seeded, reproducible runs (`--seed`, Eigen `setRandom`).
 - [x] Duplicate short CLI flags (`-f`, `-s`, `-b`).
 - [x] Paper deviations switchable: decay, clamping, per-frame G reset under `IMAGES`.
-- [ ] IMU fusion: rotate ω into the camera frame and convert units before blending into R (open: R has no physical time unit yet, see `docs/cpp-implementation.md`).
+- [x] IMU fusion: gyro (x, y, z) was written into R's (y, x, z) slots unrotated and with the wrong sign; now rotated by `R_cam_imu`, reordered and negated.
+- [ ] IMU fusion units: choose `imuScale` (rad/s → R units). Open: R has no physical time unit yet, see `docs/cpp-implementation.md`. Needs V per time bin (paper) or a calibrated event contribution.
 
 ## M1 – Simulator with ground truth (`python/src/incomaps/sim`)
 
