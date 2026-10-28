@@ -98,3 +98,28 @@ TEST_CASE("splitTimeInterval returns slice boundaries including both ends", "[io
     const std::vector<float> split = splitTimeInterval(0.0f, 2.5f, 1.0f);
     REQUIRE(split == std::vector<float>{0.0f, 1.0f, 2.0f, 2.5f});
 }
+
+namespace {
+Calibration_Data smallCalibration(int height, int width, float f = 10.0f) {
+    const std::vector<float> raw = {f, f, (width - 1) / 2.0f, (height - 1) / 2.0f, 0, 0, 0, 0, 0};
+    return get_calibration_data(raw, height, width);
+}
+
+void runEventStep(OpticalFlowState &s, Parameters &p, std::vector<int> order, float V, int y, int x) {
+    event_step(V, s.MI, s.delta_I, s.GIDiff, s.GIDiffGradient, s.F, s.G, s.R, s.CCM, s.dCdx, s.dCdy, s.A, s.B,
+               s.Identity_minus_outerProducts, s.old_points, p, order, y, x);
+}
+}
+
+TEST_CASE("event_step ignores unknown update ids instead of running update_FG", "[event_step]") {
+    Parameters p = initParameters(0.0f, 1.0f, 0.1f);
+    OpticalFlowState s = initOpticalFlowState(6, 6, p, smallCalibration(6, 6));
+    s.G.setConstant(1.0f);
+    const Tensor3f F_before = s.F;
+
+    runEventStep(s, p, {7}, 10.0f, 3, 3);
+
+    for (int i = 0; i < s.F.size(); ++i) {
+        REQUIRE(s.F.data()[i] == F_before.data()[i]);
+    }
+}

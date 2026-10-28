@@ -142,8 +142,6 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
 
     for (const auto& element : permutation){
         switch( element ){
-            default:
-                std::cout << "Unknown number in permutation" << std::endl;
             case 0:
                 update_FG(F, V, G, y, x, parameters.lr, parameters.weight_FG, parameters.eps, parameters.gamma);
                 break;
@@ -156,6 +154,9 @@ void event_step(const float V, Tensor2f &MI, Tensor3f &delta_I, Tensor3f &GIDiff
                 break;
             case 3:
                 update_RF(R, F, CCM, dCdx, dCdy, A, B, Identity_minus_outerProducts, old_points, parameters.weight_RF, y, x);
+                break;
+            default:
+                std::cout << "Unknown number in permutation" << std::endl;
                 break;
         }
     }
