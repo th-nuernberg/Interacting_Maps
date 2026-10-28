@@ -9,7 +9,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] Build from a fresh clone; Catch2 tests wired into CTest.
 - [x] Results folder creation must not edit `.gitignore`.
 - [x] `update_GF`: y component computed from the x component.
-- [ ] Main loop reads `intervals[i+1]` past the end.
+- [x] Main loop reads `intervals[i+1]` past the end.
 - [ ] `switch` over update order falls through from `default`.
 - [ ] `Vector2Tensor` uses `cols()` (= 1) instead of `size()`.
 - [ ] `computeGradient` border cases (wrong rows/columns and factor ½ on one-sided differences).

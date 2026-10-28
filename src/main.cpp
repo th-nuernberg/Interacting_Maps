@@ -181,7 +181,8 @@ int main(int argc, char* argv[]) {
 
     auto start_realtime = std::chrono::high_resolution_clock::now();
 
-    for (int currentInterval = 0; currentInterval<intervals.size(); ++currentInterval) {
+    // intervals holds n+1 boundaries for n slices
+    for (size_t currentInterval = 0; currentInterval + 1 < intervals.size(); ++currentInterval) {
         //##################################################################################################################
         // Read events file
 

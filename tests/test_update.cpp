@@ -90,3 +90,11 @@ TEST_CASE("update_FG blends each component of F towards its own candidate", "[up
     REQUIRE_THAT(F(0, 0, 0), WithinAbs(expected(0), 1e-6));
     REQUIRE_THAT(F(0, 0, 1), WithinAbs(expected(1), 1e-6));
 }
+
+TEST_CASE("splitTimeInterval returns slice boundaries including both ends", "[io]") {
+    const std::vector<float> single = splitTimeInterval(0.0f, 0.5f, 1.0f);
+    REQUIRE(single == std::vector<float>{0.0f, 0.5f});
+
+    const std::vector<float> split = splitTimeInterval(0.0f, 2.5f, 1.0f);
+    REQUIRE(split == std::vector<float>{0.0f, 1.0f, 2.0f, 2.5f});
+}
