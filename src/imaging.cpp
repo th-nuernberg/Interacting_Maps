@@ -197,7 +197,7 @@ cv::Mat vector_field2image(const Tensor3f &vector_field) {
 Tensor3f create_outward_vector_field(int grid_size) {
     // Create a 2D grid of points using linspace equivalent
     VectorXf x = VectorXf::LinSpaced(grid_size, -1.0, 1.0);
-    VectorXf y = VectorXf::LinSpaced(grid_size, 1.0, -1.0);
+    VectorXf y = VectorXf::LinSpaced(grid_size, -1.0, 1.0);   // y points down, like image rows
 
     // Initialize matrices for meshgrid-like behavior (xv, yv)
     MatrixXfRowMajor xv(grid_size, grid_size);

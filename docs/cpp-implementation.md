@@ -13,7 +13,7 @@ The C++ code in `src/` and `include/` predates the specs in this folder. It runs
 | C | `CCM`, with tangents `dCdx`, `dCdy` | H × W × 3 | 3-vectors stored as (y, x, z); pinhole from fx, fy, cx, cy, no distortion |
 | R | `R` | 3 | stored as (y, x, z) |
 
-3-vectors are stored in the order (y, x, z). `crossProduct3x3` and `crossProduct1x3` permute indices so that they compute the right-handed cross product of the underlying (x, y, z) vectors.
+Camera frame: x right, y down, z forward (right-handed), as in `CLAUDE.md`. 3-vectors are stored in the order (y, x, z); `crossProduct3x3` and `crossProduct1x3` permute indices so that they compute the right-handed cross product of the underlying (x, y, z) vectors. F and G channel 0 point down (increasing row). R is the paper's R, i.e. minus the camera rotation; the test "F = m32(R x C) with R = -(camera rotation) reproduces projected pixel motion" pins this down against explicit pinhole projection.
 
 ## Update functions
 

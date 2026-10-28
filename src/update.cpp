@@ -26,7 +26,8 @@ void norm_tensor_along_dim3(const Tensor3f &T, Tensor2f &norm){
 
 autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, float fx, float fy, float cx, float cy) {
     autodiff::Vector3real result;
-    result << -(y - cy) / fy,
+    // Camera frame: x right, y down, z forward (right-handed). Stored as (y, x, z).
+    result << (y - cy) / fy,
               (x - cx) / fx,
               1;
     return result;
@@ -71,10 +72,10 @@ void find_C(int N_x, int N_y, float fx, float fy, float cx, float cy, Tensor3f &
             C_x(i,j,1) = (float) dCdx(1); // x
             C_x(i,j,2) = (float) dCdx(2); // z
 
-            // C_y = -dCdy
-            C_y(i,j,0) = (float) -dCdy(0); // y
-            C_y(i,j,1) = (float) -dCdy(1); // x
-            C_y(i,j,2) = (float) -dCdy(2); // z
+            // C_y = dCdy (y and rows both point down)
+            C_y(i,j,0) = (float) dCdy(0); // y
+            C_y(i,j,1) = (float) dCdy(1); // x
+            C_y(i,j,2) = (float) dCdy(2); // z
         }
     }
 }
@@ -192,13 +193,13 @@ void computeGradient(const Tensor2f &data, Tensor3f &gradients, int y, int x) {
     assert(y < rows);
     assert(x < cols);
 
-    // Compute gradient along columns (down-up, y-direction)
+    // Compute gradient along columns (y-direction, pointing down)
     if (y == 0) {
-        gradients(y, x, 0) = (data(y, x) - data(y + 1, x)) / 2.0f; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y + 1, x) - data(y, x)) / 2.0f; // Central difference with replicate border
     } else if (y == rows - 1) {
-        gradients(y, x, 0) = (data(y - 1, x) - data(y, x)) / 2.0f; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y, x) - data(y - 1, x)) / 2.0f; // Central difference with replicate border
     } else {
-        gradients(y, x, 0) = (data(y - 1, x) - data(y + 1, x)) / 2.0f;
+        gradients(y, x, 0) = (data(y + 1, x) - data(y - 1, x)) / 2.0f;
     }
     // Compute gradient along rows (left-right, x-direction)
     if (x == 0) {
@@ -218,13 +219,13 @@ void computeGradient(const Tensor3f &data, Tensor3f &gradients, int y, int x) {
     assert(y < rows);
     assert(x < cols);
     assert(static_cast<int>(dimensions[2]) == 2);
-    // Compute gradient along columns (down-up, y-direction)
+    // Compute gradient along columns (y-direction, pointing down)
     if (y == 0) {
-        gradients(y, x, 0) = (data(y, x, 0) - data(y + 1, x, 0)) / 2.0f; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y + 1, x, 0) - data(y, x, 0)) / 2.0f; // Central difference with replicate border
     } else if (y == rows - 1) {
-        gradients(y, x, 0) = (data(y - 1, x, 0) - data(y, x, 0)) / 2.0f; // Central difference with replicate border
+        gradients(y, x, 0) = (data(y, x, 0) - data(y - 1, x, 0)) / 2.0f; // Central difference with replicate border
     } else {
-        gradients(y, x, 0) = (data(y - 1, x, 0) - data(y + 1, x, 0)) / 2.0f;
+        gradients(y, x, 0) = (data(y + 1, x, 0) - data(y - 1, x, 0)) / 2.0f;
     }
     // Compute gradient along rows (left-right, x-direction)
     if (x == 0) {

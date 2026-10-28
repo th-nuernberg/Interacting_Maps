@@ -54,14 +54,15 @@ bool isApprox(Tensor2f &t1, Tensor2f &t2, float precision);
 void norm_tensor_along_dim3(const Tensor3f &T, Tensor2f &norm);
 
 /**
- * Unnormalised viewing direction of a pixel for a pinhole camera, stored as (y, x, z) with y pointing up.
+ * Unnormalised viewing direction of a pixel for a pinhole camera. Camera frame x right, y down, z forward
+ * (right-handed), stored as (y, x, z).
  * @param x x-Position of the pixel (column)
  * @param y y-Position of the pixel (row)
  * @param fx focal length along x in pixels
  * @param fy focal length along y in pixels
  * @param cx principal point x in pixels
  * @param cy principal point y in pixels
- * @return 3-Vector (-(y - cy) / fy, (x - cx) / fx, 1)
+ * @return 3-Vector ((y - cy) / fy, (x - cx) / fx, 1)
  */
 autodiff::Vector3real C_star(autodiff::real x, autodiff::real y, float fx, float fy, float cx, float cy);
 
@@ -88,7 +89,7 @@ autodiff::Vector3real C(autodiff::real x, autodiff::real y, float fx, float fy, 
  * @param cy principal point y in pixels
  * @param CCM resulting viewing directions
  * @param C_x derivative of CCM in x direction
- * @param C_y negated derivative of CCM in (downward) row direction, i.e. derivative along y up
+ * @param C_y derivative of CCM in y (row, downward) direction
  */
 void find_C(int N_x, int N_y, float fx, float fy, float cx, float cy, Tensor3f &CCM, Tensor3f &C_x, Tensor3f &C_y);
 
@@ -219,7 +220,7 @@ void setup_R_update(const Tensor3f &CCM, Matrix3f &A, Vector3f &B, std::vector<s
  * @param F optical flow
  * @param C viewing directions
  * @param Cx derivative of C along x
- * @param Cy derivative of C along y (negated, see find_C)
+ * @param Cy derivative of C along y (down)
  * @param B Righthand side vector, overwritten
  * @param Identity_minus_outerProducts I - C C^T per pixel, from setup_R_update
  * @param points per-pixel points C x m23(F), overwritten

@@ -133,7 +133,7 @@ TEST_CASE("Vector2Tensor keeps every element of the vector", "[conversions]") {
 }
 
 TEST_CASE("computeGradient uses replicate borders on all four sides", "[update][gradient]") {
-    // Channel 0 is d/d(up) = I(y-1) - I(y+1) over 2, channel 1 is d/dx. Replicate border: the
+    // Channel 0 is d/dy (down) = I(y+1) - I(y-1) over 2, channel 1 is d/dx. Replicate border: the
     // missing neighbour is replaced by the border pixel itself.
     const int n = 5;
     Tensor2f Iy(n, n), Ix(n, n);
@@ -149,9 +149,9 @@ TEST_CASE("computeGradient uses replicate borders on all four sides", "[update][
         computeGradient(Ix, gx, 2, i);
     }
     auto sq = [](int v) { return float(v * v); };
-    REQUIRE_THAT(gy(0, 2, 0), WithinAbs((sq(0) - sq(1)) / 2.0f, 1e-6));
-    REQUIRE_THAT(gy(2, 2, 0), WithinAbs((sq(1) - sq(3)) / 2.0f, 1e-6));
-    REQUIRE_THAT(gy(n - 1, 2, 0), WithinAbs((sq(n - 2) - sq(n - 1)) / 2.0f, 1e-6));
+    REQUIRE_THAT(gy(0, 2, 0), WithinAbs((sq(1) - sq(0)) / 2.0f, 1e-6));
+    REQUIRE_THAT(gy(2, 2, 0), WithinAbs((sq(3) - sq(1)) / 2.0f, 1e-6));
+    REQUIRE_THAT(gy(n - 1, 2, 0), WithinAbs((sq(n - 1) - sq(n - 2)) / 2.0f, 1e-6));
     REQUIRE_THAT(gx(2, 0, 1), WithinAbs((sq(1) - sq(0)) / 2.0f, 1e-6));
     REQUIRE_THAT(gx(2, 2, 1), WithinAbs((sq(3) - sq(1)) / 2.0f, 1e-6));
     REQUIRE_THAT(gx(2, n - 1, 1), WithinAbs((sq(n - 1) - sq(n - 2)) / 2.0f, 1e-6));
@@ -167,7 +167,7 @@ TEST_CASE("computeGradient on a 3-tensor differentiates channel 0 along y and ch
         }
     }
     computeGradient(D, g, n - 1, n - 1);
-    REQUIRE_THAT(g(n - 1, n - 1, 0), WithinAbs(float((n - 2) * (n - 2) - (n - 1) * (n - 1)) / 2.0f, 1e-6));
+    REQUIRE_THAT(g(n - 1, n - 1, 0), WithinAbs(float((n - 1) * (n - 1) - (n - 2) * (n - 2)) / 2.0f, 1e-6));
     REQUIRE_THAT(g(n - 1, n - 1, 1), WithinAbs(float((n - 1) * (n - 1) - (n - 2) * (n - 2)) / 2.0f, 1e-6));
 }
 
@@ -263,8 +263,8 @@ TEST_CASE("find_C uses the principal point and per-axis focal lengths", "[calibr
     // fx pixels to the right of it: 45 degrees in x.
     REQUIRE_THAT(C(2, 7, 1), WithinAbs(C(2, 7, 2), 1e-6));
     REQUIRE_THAT(C(2, 7, 0), WithinAbs(0.0f, 1e-6));
-    // fy rows below it: 45 degrees in y (stored y points up, so negative).
-    REQUIRE_THAT(C(5, 3, 0), WithinAbs(-C(5, 3, 2), 1e-6));
+    // fy rows below it: 45 degrees in y (y points down).
+    REQUIRE_THAT(C(5, 3, 0), WithinAbs(C(5, 3, 2), 1e-6));
     REQUIRE_THAT(C(5, 3, 1), WithinAbs(0.0f, 1e-6));
 }
 
@@ -272,4 +272,44 @@ TEST_CASE("get_calibration_data pairs the vertical view angle with fy", "[calibr
     const Calibration_Data d = get_calibration_data({100.0f, 50.0f, 0, 0, 0, 0, 0, 0, 0}, 100, 200);
     REQUIRE_THAT(d.view_angles[0], WithinAbs(2.0f * std::atan(100.0f / (2.0f * 50.0f)), 1e-6));
     REQUIRE_THAT(d.view_angles[1], WithinAbs(2.0f * std::atan(200.0f / (2.0f * 100.0f)), 1e-6));
+}
+
+#include <Eigen/Geometry>
+
+namespace {
+// Pixel motion of the static scene point seen at pixel (row, col) when the camera rotates by angle about
+// axis (camera frame x right, y down, z forward), from explicit pinhole projection.
+Vector2f projectedPixelMotion(float row, float col, const Vector3f &axis, float angle,
+                              float fx, float fy, float cx, float cy) {
+    const Vector3f P((col - cx) / fx, (row - cy) / fy, 1.0f);   // (x, y, z)
+    // The camera rotates by +angle, so the point rotates by -angle in camera coordinates.
+    const Vector3f P2 = AngleAxisf(-angle, axis.normalized()) * P;
+    const float col2 = fx * P2.x() / P2.z() + cx;
+    const float row2 = fy * P2.y() / P2.z() + cy;
+    return {row2 - row, col2 - col};   // (dy, dx), matching F's channel order
+}
+}
+
+TEST_CASE("F = m32(R x C) with R = -(camera rotation) reproduces projected pixel motion", "[conventions]") {
+    const int W = 21, H = 15;
+    const float fx = 20.0f, fy = 18.0f, cx = 10.0f, cy = 7.0f, angle = 1e-3f;
+    Tensor3f C(H, W, 3), Cx(H, W, 3), Cy(H, W, 3), F(H, W, 2), RxC(H, W, 3);
+    find_C(W, H, fx, fy, cx, cy, C, Cx, Cy);
+
+    const std::vector<Vector3f> axes = {Vector3f::UnitX(), Vector3f::UnitY(), Vector3f::UnitZ(), Vector3f(1, -2, 0.5f)};
+    for (const Vector3f &axis_xyz : axes) {
+        const Vector3f rot = -angle * axis_xyz.normalized();
+        Tensor1f R(3);
+        R.setValues({rot.y(), rot.x(), rot.z()});   // (y, x, z) storage
+        crossProduct1x3(R, C, RxC);
+        m32(RxC, Cx, Cy, F);
+
+        for (const auto &pixel : std::vector<std::array<int, 2>>{{7, 10}, {2, 3}, {12, 18}}) {
+            const int row = pixel[0], col = pixel[1];
+            const Vector2f expected = projectedPixelMotion(float(row), float(col), axis_xyz, angle, fx, fy, cx, cy);
+            INFO("axis " << axis_xyz.transpose() << " pixel " << row << "," << col);
+            REQUIRE_THAT(F(row, col, 0), WithinAbs(expected(0), 2e-4));
+            REQUIRE_THAT(F(row, col, 1), WithinAbs(expected(1), 2e-4));
+        }
+    }
 }
