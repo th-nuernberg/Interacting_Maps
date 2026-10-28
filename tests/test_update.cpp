@@ -16,3 +16,25 @@ TEST_CASE("crossProduct3x3 matches the right-handed cross product in (y, x, z) s
     REQUIRE_THAT(C(0, 0, 1), WithinAbs(0.f, 1e-6));
     REQUIRE_THAT(C(0, 0, 2), WithinAbs(1.f, 1e-6));
 }
+
+#include <file_operations.h>
+#include <filesystem>
+
+TEST_CASE("create_results_folder creates output/<name> without touching .gitignore", "[io]") {
+    namespace fs = std::filesystem;
+    const fs::path previous = fs::current_path();
+    const fs::path sandbox = fs::temp_directory_path() / "im_tests_results_folder";
+    fs::remove_all(sandbox);
+    fs::create_directories(sandbox);
+    fs::current_path(sandbox);
+
+    const fs::path folder = create_results_folder("run_a/nested");
+
+    const bool created = fs::is_directory(folder);
+    const bool gitignore_written = fs::exists(sandbox / ".gitignore");
+    fs::current_path(previous);
+    fs::remove_all(sandbox);
+
+    REQUIRE(created);
+    REQUIRE_FALSE(gitignore_written);
+}

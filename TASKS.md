@@ -7,7 +7,7 @@ Work top to bottom. Each milestone ends with its acceptance criteria passing in 
 Fix implementational flaws in `src/` one commit at a time, each with a Catch2 regression test in `tests/`. Behaviour that deviates from the paper on purpose (V injected into I with decay, clamping, central differences) is kept as the default but made switchable and documented in `docs/cpp-implementation.md`.
 
 - [x] Build from a fresh clone; Catch2 tests wired into CTest.
-- [ ] Results folder creation must not edit `.gitignore`.
+- [x] Results folder creation must not edit `.gitignore`.
 - [ ] `update_GF`: y component computed from the x component.
 - [ ] Main loop reads `intervals[i+1]` past the end.
 - [ ] `switch` over update order falls through from `default`.
@@ -15,6 +15,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [ ] `computeGradient` border cases (wrong rows/columns and factor ½ on one-sided differences).
 - [ ] G→I residual (`GIDiff`) random-initialised and only refreshed at the event pixel.
 - [ ] F→R least squares: right-hand side `B` only contains pixels that saw an event, and goes stale after global F←R updates.
+- [ ] `read_single_line_txt` parses floats with `std::stoi` (focal lengths truncated, distortion lost).
 - [ ] Calibration: fx/fy swapped in view angles; principal point ignored in C.
 - [ ] Camera frame is left-handed (y up, z forward) while cross products are right-handed; switch to x right, y down, z forward.
 - [ ] Seeded, reproducible runs (`--seed`, Eigen `setRandom`).

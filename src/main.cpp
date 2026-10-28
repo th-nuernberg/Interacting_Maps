@@ -139,7 +139,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Parsed resultsDirectory: " << args->resultsDirectory << "\n";
 
     // Create results_folder
-    fs::path folder_path = create_folder_and_update_gitignore(args->resultsDirectory);
+    fs::path folder_path = create_results_folder(args->resultsDirectory);
     std::cout << "Created Folder " << args->resultsDirectory << std::endl;
 
     // Setup Profiling

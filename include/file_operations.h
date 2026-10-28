@@ -33,7 +33,7 @@ void writeToFile(const std::string &s, const std::string &fileName);
 
 void writeToFile(float V, const std::string &fileName);
 
-fs::path create_folder_and_update_gitignore(const std::string &folder_name);
+fs::path create_results_folder(const std::string &folder_name);
 
 void read_single_line_txt(const std::string &file_path, std::vector<float> &calibration_data);
 

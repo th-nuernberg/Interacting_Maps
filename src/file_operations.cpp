@@ -136,50 +136,14 @@ void writeToFile(float V, const std::string &fileName) {
 }
 
 /**
- * Creates a results at current directory/output/name and ads the path to .gitignore to contain git bloat
- * @param folder_name path to folder which is to be created
+ * Creates the results folder at <current directory>/output/<folder_name>, including parents.
+ * output/ is ignored as a whole in .gitignore, so no per-run entries are needed.
+ * @param folder_name name of the results folder inside output/
  * @return path to created folder
  */
-fs::path create_folder_and_update_gitignore(const std::string &folder_name) {
-    // Get the absolute path of the current working directory
-    fs::path current_directory = fs::current_path();
-
-    // Create the output folder if it does not exist
-    fs::path output_folder_path = current_directory / "output";
-    // Create the directory if it does not exist
-    if (!fs::exists(output_folder_path)) {
-        fs::create_directory(output_folder_path);
-    }
-
-    // Same for the actual folder
-    fs::path folder_path = output_folder_path / folder_name;
-    if (!fs::exists(folder_path)) {
-        fs::create_directory(folder_path);
-    }
-
-    // Path to the .gitignore file
-    fs::path gitignore_path = current_directory/ ".gitignore";
-
-    // Check if the folder is already in .gitignore
-    bool folder_in_gitignore = false;
-    if (fs::exists(gitignore_path)) {
-        std::ifstream gitignore_file(gitignore_path);
-        std::string line;
-        while (std::getline(gitignore_file, line)) {
-            if (line == folder_name || line == "/" + folder_name) {
-                folder_in_gitignore = true;
-                break;
-            }
-        }
-    }
-
-    // Add the folder to .gitignore if it's not already there
-    if (!folder_in_gitignore) {
-        std::ofstream gitignore_file(gitignore_path, std::ios_base::app);
-        gitignore_file << "\n" << folder_name << "\n";
-    }
-
-    // Return the absolute path of the new folder
+fs::path create_results_folder(const std::string &folder_name) {
+    fs::path folder_path = fs::current_path() / "output" / folder_name;
+    fs::create_directories(folder_path);
     return folder_path;
 }
 /**
