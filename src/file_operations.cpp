@@ -156,9 +156,9 @@ void read_single_line_txt(const std::string &file_path, std::vector<float> &cali
     std::string path = current_directory / file_path;
     if (fs::exists(path)) {
         std::ifstream calibration_file(path);
-        std::string::size_type size;
-        for (std::string line; std::getline(calibration_file, line, ' ');) {
-            calibration_data.push_back(std::stoi(line, &size));
+        // Whitespace-separated floats; stream extraction also copes with newlines and repeated spaces.
+        for (float value; calibration_file >> value;) {
+            calibration_data.push_back(value);
         }
     }
 }

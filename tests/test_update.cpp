@@ -38,3 +38,20 @@ TEST_CASE("create_results_folder creates output/<name> without touching .gitigno
     REQUIRE(created);
     REQUIRE_FALSE(gitignore_written);
 }
+
+TEST_CASE("read_single_line_txt keeps fractional and negative values", "[io]") {
+    namespace fs = std::filesystem;
+    const fs::path file = fs::temp_directory_path() / "im_tests_calib.txt";
+    {
+        std::ofstream out(file);
+        out << "199.092366542 198.82882047 132.192071378 110.712660011 -0.368436311798 0.0\n";
+    }
+    std::vector<float> values;
+    read_single_line_txt(file.string(), values);
+    fs::remove(file);
+
+    REQUIRE(values.size() == 6);
+    REQUIRE_THAT(values[0], WithinAbs(199.092366542f, 1e-4));
+    REQUIRE_THAT(values[3], WithinAbs(110.712660011f, 1e-4));
+    REQUIRE_THAT(values[4], WithinAbs(-0.368436311798f, 1e-6));
+}
