@@ -13,6 +13,7 @@
 #include <boost/program_options.hpp>
 #include "file_operations.h"
 #include "imaging.h"
+#include <opencv2/highgui.hpp>
 
 namespace po = boost::program_options;
 
@@ -70,6 +71,9 @@ struct ProgramArgs
     bool clamp;
     bool resetG;
     bool silentG;
+    float fps;
+    bool show;
+    bool writeFrames;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -98,7 +102,10 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .decay             = vm["decay"].as<bool>(),
         .clamp             = vm["clamp"].as<bool>(),
         .resetG            = vm["resetG"].as<bool>(),
-        .silentG           = vm["silentG"].as<bool>()
+        .silentG           = vm["silentG"].as<bool>(),
+        .fps               = vm["fps"].as<float>(),
+        .show              = vm["show"].as<bool>(),
+        .writeFrames       = vm["writeFrames"].as<bool>()
     };
 }
 
@@ -137,7 +144,10 @@ int main(int argc, char* argv[]) {
             ("decay", po::value<bool>()->default_value(true), "Decay I towards the neutral potential between events (not in the paper)")
             ("clamp", po::value<bool>()->default_value(true), "Clip F and G to +-gamma and zero tiny values (not in the paper)")
             ("resetG", po::value<bool>()->default_value(false), "IMAGES builds: zero G after each output frame (old hack, not in the paper)")
-            ("silentG", po::value<bool>()->default_value(true), "Treat time without events at a pixel as V = 0 for the G <- F relation");
+            ("silentG", po::value<bool>()->default_value(true), "Treat time without events at a pixel as V = 0 for the G <- F relation")
+            ("fps", po::value<float>()->default_value(60), "Rate of output frames, live display and R.txt samples")
+            ("show", po::value<bool>()->default_value(false), "IMAGES builds: stream the V/I/G/F frames to a live window")
+            ("writeFrames", po::value<bool>()->default_value(true), "IMAGES builds: write the V/I/G/F frames as PNG files");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -184,6 +194,7 @@ int main(int argc, char* argv[]) {
     parameters.clampMaps = args->clamp;
     parameters.resetGEachFrame = args->resetG;
     parameters.silentRelaxation = args->silentG;
+    parameters.fps = args->fps;
     OpticalFlowState state = initOpticalFlowState(res.height, res.width, parameters, calibration_data);
 
     // iterations are done after event calculations for a frame are done
@@ -207,6 +218,17 @@ int main(int argc, char* argv[]) {
     }
     std::chrono::duration<float> elapsed_loading = std::chrono::high_resolution_clock::now() - start_loading;
     std::cout << "Loaded " << allCameraEvents.size() << " events from " << eventPath << " in " << elapsed_loading.count() << " s" << std::endl;
+
+#ifdef IMAGES
+    if (args->show) {
+        cv::namedWindow("Interacting Maps", cv::WINDOW_NORMAL);
+        cv::resizeWindow("Interacting Maps", 1260, 760);
+    }
+#else
+    if (args->show || !args->writeFrames) {
+        std::cout << "--show and --writeFrames only apply to IMAGES builds" << std::endl;
+    }
+#endif
 
     auto start_realtime = std::chrono::high_resolution_clock::now();
 
@@ -319,13 +341,19 @@ int main(int argc, char* argv[]) {
 
                     std::string image_name = "VIGF_" + filename.str() + ".png";
                     fs::path image_path = folder_path / image_name;
-                    create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, state.F, image_path, true, 0.1);
+                    const cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, state.F, image_path, args->writeFrames, 0.1);
+                    if (args->show) {
+                        cv::imshow("Interacting Maps", vigf);
+                        cv::waitKey(1);
+                    }
                     float cost1, cost2, cost3;
                     cost1 = costFR(state.F, state.CCM, state.dCdx, state.dCdy, state.R);
                     cost2 = costFG(state.F, state.V_Vis, G_now);
                     cost3 = costGI(G_now, state.delta_I);
                     std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
-                    saveImage(Tensor2Matrix(MI_now), folder_path / ("frame_" + filename.str() + ".png"), true);
+                    if (args->writeFrames) {
+                        saveImage(Tensor2Matrix(MI_now), folder_path / ("frame_" + filename.str() + ".png"), true);
+                    }
                     state.V_Vis.setZero();
                     //randomInit(F, -1, 1);
                     if (parameters.resetGEachFrame) {
