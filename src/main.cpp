@@ -14,6 +14,9 @@
 #include "file_operations.h"
 #include "imaging.h"
 #include <opencv2/highgui.hpp>
+#include <atomic>
+#include <mutex>
+#include <thread>
 
 namespace po = boost::program_options;
 
@@ -74,6 +77,7 @@ struct ProgramArgs
     bool asyncFR;
     float fps;
     bool show;
+    bool pace;
     bool writeFrames;
 };
 
@@ -107,6 +111,7 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .asyncFR           = vm["asyncFR"].as<bool>(),
         .fps               = vm["fps"].as<float>(),
         .show              = vm["show"].as<bool>(),
+        .pace              = vm["pace"].as<bool>(),
         .writeFrames       = vm["writeFrames"].as<bool>()
     };
 }
@@ -150,6 +155,7 @@ int main(int argc, char* argv[]) {
             ("asyncFR", po::value<bool>()->default_value(true), "Event-driven F <- R (closed-form relaxation) instead of global passes every timeStep")
             ("fps", po::value<float>()->default_value(60), "Rate of output frames, live display and R.txt samples")
             ("show", po::value<bool>()->default_value(false), "IMAGES builds: stream the V/I/G/F frames to a live window")
+            ("pace", po::value<bool>()->default_value(true), "With --show: play back in real time instead of as fast as possible")
             ("writeFrames", po::value<bool>()->default_value(true), "IMAGES builds: write the V/I/G/F frames as PNG files");
 
     auto args = parseArgs(argc, argv, desc);
@@ -235,163 +241,205 @@ int main(int argc, char* argv[]) {
 #endif
 
     auto start_realtime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float> maxPaceLag{0.0f};   // how far the paced display fell behind the data clock
 
-    // intervals holds n+1 boundaries for n slices
-    for (size_t currentInterval = 0; currentInterval + 1 < intervals.size(); ++currentInterval) {
-        //##################################################################################################################
-        // Read events file
+    // With --show the algorithm runs on a worker thread: on macOS the window must be serviced from the main
+    // thread, and each event pump (waitKey / pollKey) takes ~12 ms, which would otherwise stall the algorithm.
+    std::mutex frameMutex;
+    cv::Mat latestFrame;
+    std::atomic<bool> finished{false};
+    auto runAlgorithm = [&]() {
+        // intervals holds n+1 boundaries for n slices
+        for (size_t currentInterval = 0; currentInterval + 1 < intervals.size(); ++currentInterval) {
+            //##################################################################################################################
+            // Read events file
 
-        const auto start_interval = std::chrono::high_resolution_clock::now();
-        std::vector<std::shared_ptr<Event>> cameraEventData;
-        slice_events(allCameraEvents, intervals[currentInterval], intervals[currentInterval+1], cameraEventData);
-        std::cout << "Events for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
-        std::cout << "Read " << cameraEventData.size() << " events." << std::endl;
-        std::vector<std::shared_ptr<Event>> event_data;
+            const auto start_interval = std::chrono::high_resolution_clock::now();
+            std::vector<std::shared_ptr<Event>> cameraEventData;
+            slice_events(allCameraEvents, intervals[currentInterval], intervals[currentInterval+1], cameraEventData);
+            std::cout << "Events for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
+            std::cout << "Read " << cameraEventData.size() << " events." << std::endl;
+            std::vector<std::shared_ptr<Event>> event_data;
 
-        if (args->fuseR) {
-            std::vector<std::shared_ptr<Event>> imuEventData;
-            read_imu(imuPath, imuEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
-            std::cout << "Readout IMU data at " << imuPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
-            mergeTimeCollections(cameraEventData, imuEventData, event_data);
-        }
-        else if (args->fuseI) {
-            std::vector<std::shared_ptr<Event>> imageEventData;
-            readImage(imagesPath, imageEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
-            std::cout << "Readout Image data at " << imuPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
-            mergeTimeCollections(cameraEventData, imageEventData, event_data);
-        }
-        else {
-            event_data = cameraEventData;
-        }
-
-        for (const auto& event : event_data) {
-            // Shuffle the order of operations for the interacting maps operations
-            std::shuffle(std::begin(permutation), std::end(permutation), rng);
-
-            if (auto* cEvent = dynamic_cast<CameraEvent*>(event.get())) {
-                PROFILE_SCOPE("CAMERA_EVENT");
-                state.V = static_cast<float>(cEvent->polarity) * parameters.eventContribution;
-
-                // For Showing the events as an image increase the intensity
-                state.V_Vis(cEvent->coordinates[0], cEvent->coordinates[1]) = state.V;
-
-                // Perform an update step for the current event for I G R and F
-                if (parameters.useDecay) {
-                    decayNeighbourhood(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
-                }
-                if (parameters.asyncFR) {
-                    // F <- R since the last event: B in closed form, F where this event reads it.
-                    relaxB(state.B, state.BTime, state.A, state.R, event->time, parameters.rate_FR);
-                    relaxFRNeighbourhood(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, state.old_points,
-                                         cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_FR);
-                }
-                if (parameters.silentRelaxation) {
-                    relaxSilentNeighbourhood(state.G, state.F, state.MI, state.delta_I, state.GTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_GI_silent, parameters.rate_GF_silent);
-                }
-                for (int i = 0; i < parameters.event_steps; ++i) {
-                    event_step(state.V, state.MI, state.delta_I, state.GIDiff, state.GIDiffGradient, state.F, state.G, state.R, state.CCM, state.dCdx, state.dCdy, state.A, state.B,
-                               state.Identity_minus_outerProducts, state.old_points, parameters, permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
-                }
-                if (parameters.asyncFR) {
-                    // F <- G and G <- F may have run after F -> R in this step; B must see the final F.
-                    register_R_point(state.F, state.CCM, state.dCdx, state.dCdy, state.B, state.Identity_minus_outerProducts, state.old_points,
-                                     cEvent->coordinates[0], cEvent->coordinates[1]);
-                }
-
-                if (!parameters.asyncFR && parameters.startTime + static_cast<float>(parameters.FR_update_counter) * static_cast<float>(1 / parameters.FR_updates_per_second) < event->time) {
-                    state.time.setConstant(event->time);
-                    for (int i = 0; i < static_cast<int>(parameters.updateIterationsFR); ++i) {
-                        update_FR(state.F, state.CCM, state.dCdx, state.dCdy, state.R, parameters.weight_FR, parameters.zeroThreshold(), parameters.clampBound());
-                    }
-                    // F changed at every pixel; the F -> R running sums must follow.
-                    rebuild_R_sums(state.F, state.CCM, state.dCdx, state.dCdy, state.B,
-                                   state.Identity_minus_outerProducts, state.old_points);
-
-                }
-
-            } else if (auto* imuEvent = dynamic_cast<IMUEvent*>(event.get()))  {
-                update_RIMU(state.R, imuEvent->ang_velocity, parameters.weight_RIMU, parameters.R_cam_imu, parameters.imuScale);
+            if (args->fuseR) {
+                std::vector<std::shared_ptr<Event>> imuEventData;
+                read_imu(imuPath, imuEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
+                std::cout << "Readout IMU data at " << imuPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
+                mergeTimeCollections(cameraEventData, imuEventData, event_data);
+            }
+            else if (args->fuseI) {
+                std::vector<std::shared_ptr<Event>> imageEventData;
+                readImage(imagesPath, imageEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX);
+                std::cout << "Readout Image data at " << imuPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
+                mergeTimeCollections(cameraEventData, imageEventData, event_data);
+            }
+            else {
+                event_data = cameraEventData;
             }
 
-            else if (auto* imageEvent = dynamic_cast<ImageEvent*>(event.get()))  {
-                std::cout << "Fused image at time " << imageEvent->time << std::endl;
-                update_Ifusion(state.MI, imageEvent->image, parameters.weight_Ifusion);
-                state.decayTimeSurface.setConstant(imageEvent->time);
-            }
+            for (const auto& event : event_data) {
+                // Shuffle the order of operations for the interacting maps operations
+                std::shuffle(std::begin(permutation), std::end(permutation), rng);
 
-            // Starting from the start time we count up. If the current time (event->time)
-            // reaches the time of the next "frame" we want to save to disk
-            if (parameters.startTime + static_cast<float>(parameters.vis_counter) * (1 / parameters.fps) < event->time) {
-                parameters.vis_counter++;
-                std::cout << "Frame " << args->startIndex+parameters.vis_counter << "/"
-                          << static_cast<int>((parameters.endTime - parameters.startTime) * parameters.fps) << std::endl;
-                {
-                    PROFILE_SCOPE("BETWEEN FRAMES");
-                    //writeToFile(CCM, folder_path / ("C" + std::to_string(counter) + ".txt"));
-                    //writeToFile(V_Vis, folder_path / ("V" + std::to_string(counter) + ".txt"));
-                    //writeToFile(MI, folder_path / ("MI" + std::to_string(counter)  + ".txt"));
-                    //writeToFile(I, folder_path / ("I" + std::to_string(counter)  + ".txt"));
-                    //writeToFile(delta_I, folder_path / ("I_gradient" + std::to_string(counter)  + ".txt"));
-                    //writeToFile(F, folder_path / ("F" + std::to_string(counter)  + ".txt"));
-                    //writeToFile(G, folder_path / ("G" + std::to_string(counter)  + ".txt"));
-                    writeToFile(event->time, state.R, R_path, true);
+                if (auto* cEvent = dynamic_cast<CameraEvent*>(event.get())) {
+                    PROFILE_SCOPE("CAMERA_EVENT");
+                    state.V = static_cast<float>(cEvent->polarity) * parameters.eventContribution;
+
+                    // For Showing the events as an image increase the intensity
+                    state.V_Vis(cEvent->coordinates[0], cEvent->coordinates[1]) = state.V;
+
+                    // Perform an update step for the current event for I G R and F
+                    if (parameters.useDecay) {
+                        decayNeighbourhood(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
+                    }
+                    if (parameters.asyncFR) {
+                        // F <- R since the last event: B in closed form, F where this event reads it.
+                        relaxB(state.B, state.BTime, state.A, state.R, event->time, parameters.rate_FR);
+                        relaxFRNeighbourhood(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, state.old_points,
+                                             cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_FR);
+                    }
+                    if (parameters.silentRelaxation) {
+                        relaxSilentNeighbourhood(state.G, state.F, state.MI, state.delta_I, state.GTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_GI_silent, parameters.rate_GF_silent);
+                    }
+                    for (int i = 0; i < parameters.event_steps; ++i) {
+                        event_step(state.V, state.MI, state.delta_I, state.GIDiff, state.GIDiffGradient, state.F, state.G, state.R, state.CCM, state.dCdx, state.dCdy, state.A, state.B,
+                                   state.Identity_minus_outerProducts, state.old_points, parameters, permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
+                    }
+                    if (parameters.asyncFR) {
+                        // F <- G and G <- F may have run after F -> R in this step; B must see the final F.
+                        register_R_point(state.F, state.CCM, state.dCdx, state.dCdy, state.B, state.Identity_minus_outerProducts, state.old_points,
+                                         cEvent->coordinates[0], cEvent->coordinates[1]);
+                    }
+
+                    if (!parameters.asyncFR && parameters.startTime + static_cast<float>(parameters.FR_update_counter) * static_cast<float>(1 / parameters.FR_updates_per_second) < event->time) {
+                        state.time.setConstant(event->time);
+                        for (int i = 0; i < static_cast<int>(parameters.updateIterationsFR); ++i) {
+                            update_FR(state.F, state.CCM, state.dCdx, state.dCdy, state.R, parameters.weight_FR, parameters.zeroThreshold(), parameters.clampBound());
+                        }
+                        // F changed at every pixel; the F -> R running sums must follow.
+                        rebuild_R_sums(state.F, state.CCM, state.dCdx, state.dCdy, state.B,
+                                       state.Identity_minus_outerProducts, state.old_points);
+
+                    }
+
+                } else if (auto* imuEvent = dynamic_cast<IMUEvent*>(event.get()))  {
+                    update_RIMU(state.R, imuEvent->ang_velocity, parameters.weight_RIMU, parameters.R_cam_imu, parameters.imuScale);
                 }
 
-    #ifdef IMAGES
-                    // Decay is lazy: show every pixel at the frame time, without touching the state.
-                    const Tensor2f MI_now = parameters.useDecay
-                        ? decayedCopy(state.MI, state.decayTimeSurface, event->time, parameters.neutralPotential, parameters.decayParam)
-                        : state.MI;
-                    const Tensor3f F_now = parameters.asyncFR
-                        ? relaxedFRCopy(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, event->time, parameters.rate_FR)
-                        : state.F;
-                    const Tensor3f G_now = parameters.silentRelaxation
-                        ? relaxedSilentCopy(state.G, F_now, MI_now, state.GTimeSurface, event->time, parameters.rate_GI_silent, parameters.rate_GF_silent)
-                        : state.G;
-                    float loss = VFG_check(state.V_Vis, F_now, G_now);
-                    //std::cout << "VFG Check: " << loss << std::endl;
-                    writeToFile(event->time, loss, VLossPath);
+                else if (auto* imageEvent = dynamic_cast<ImageEvent*>(event.get()))  {
+                    std::cout << "Fused image at time " << imageEvent->time << std::endl;
+                    update_Ifusion(state.MI, imageEvent->image, parameters.weight_Ifusion);
+                    state.decayTimeSurface.setConstant(imageEvent->time);
+                }
 
-                    std::stringstream filename;
-                    filename.fill('0');
-                    filename.width(8);
-                    filename<<std::to_string(static_cast<int>((args->startIndex + parameters.vis_counter)));
-
-                    std::string image_name = "VIGF_" + filename.str() + ".png";
-                    fs::path image_path = folder_path / image_name;
-                    const cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, F_now, image_path, args->writeFrames, 0.1);
-                    if (args->show) {
-                        cv::imshow("Interacting Maps", vigf);
-                        cv::waitKey(1);
-                    }
-                    float cost1, cost2, cost3;
-                    cost1 = costFR(F_now, state.CCM, state.dCdx, state.dCdy, state.R);
-                    cost2 = costFG(F_now, state.V_Vis, G_now);
-                    cost3 = costGI(G_now, state.delta_I);
-                    std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
-                    if (args->writeFrames) {
-                        saveImage(Tensor2Matrix(MI_now), folder_path / ("frame_" + filename.str() + ".png"), true);
-                    }
-                    state.V_Vis.setZero();
-                    //randomInit(F, -1, 1);
-                    if (parameters.resetGEachFrame) {
-                        state.G.setZero();
+                // Starting from the start time we count up. If the current time (event->time)
+                // reaches the time of the next "frame" we want to save to disk
+                if (parameters.startTime + static_cast<float>(parameters.vis_counter) * (1 / parameters.fps) < event->time) {
+                    parameters.vis_counter++;
+                    std::cout << "Frame " << args->startIndex+parameters.vis_counter << "/"
+                              << static_cast<int>((parameters.endTime - parameters.startTime) * parameters.fps) << std::endl;
+                    {
+                        PROFILE_SCOPE("BETWEEN FRAMES");
+                        //writeToFile(CCM, folder_path / ("C" + std::to_string(counter) + ".txt"));
+                        //writeToFile(V_Vis, folder_path / ("V" + std::to_string(counter) + ".txt"));
+                        //writeToFile(MI, folder_path / ("MI" + std::to_string(counter)  + ".txt"));
+                        //writeToFile(I, folder_path / ("I" + std::to_string(counter)  + ".txt"));
+                        //writeToFile(delta_I, folder_path / ("I_gradient" + std::to_string(counter)  + ".txt"));
+                        //writeToFile(F, folder_path / ("F" + std::to_string(counter)  + ".txt"));
+                        //writeToFile(G, folder_path / ("G" + std::to_string(counter)  + ".txt"));
+                        writeToFile(event->time, state.R, R_path, true);
                     }
 
-    #endif
-                //globalDecay(MI, decayTimeSurface, nP, t, dP);
+        #ifdef IMAGES
+                        // Decay is lazy: show every pixel at the frame time, without touching the state.
+                        const Tensor2f MI_now = parameters.useDecay
+                            ? decayedCopy(state.MI, state.decayTimeSurface, event->time, parameters.neutralPotential, parameters.decayParam)
+                            : state.MI;
+                        const Tensor3f F_now = parameters.asyncFR
+                            ? relaxedFRCopy(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, event->time, parameters.rate_FR)
+                            : state.F;
+                        const Tensor3f G_now = parameters.silentRelaxation
+                            ? relaxedSilentCopy(state.G, F_now, MI_now, state.GTimeSurface, event->time, parameters.rate_GI_silent, parameters.rate_GF_silent)
+                            : state.G;
+                        float loss = VFG_check(state.V_Vis, F_now, G_now);
+                        //std::cout << "VFG Check: " << loss << std::endl;
+                        writeToFile(event->time, loss, VLossPath);
+
+                        std::stringstream filename;
+                        filename.fill('0');
+                        filename.width(8);
+                        filename<<std::to_string(static_cast<int>((args->startIndex + parameters.vis_counter)));
+
+                        std::string image_name = "VIGF_" + filename.str() + ".png";
+                        fs::path image_path = folder_path / image_name;
+                        const cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, F_now, image_path, args->writeFrames, 0.1);
+                        if (args->show) {
+                            if (args->pace) {
+                                const auto due = start_realtime + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(
+                                    std::chrono::duration<float>(event->time - parameters.startTime));
+                                const auto now = std::chrono::high_resolution_clock::now();
+                                if (now < due) {
+                                    std::this_thread::sleep_until(due);
+                                } else {
+                                    maxPaceLag = std::max(maxPaceLag, std::chrono::duration<float>(now - due));
+                                }
+                            }
+                            // The main thread shows it; servicing the window takes ~12 ms per call on macOS.
+                            std::lock_guard<std::mutex> lock(frameMutex);
+                            latestFrame = vigf.clone();
+                        }
+                        float cost1, cost2, cost3;
+                        cost1 = costFR(F_now, state.CCM, state.dCdx, state.dCdy, state.R);
+                        cost2 = costFG(F_now, state.V_Vis, G_now);
+                        cost3 = costGI(G_now, state.delta_I);
+                        std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
+                        if (args->writeFrames) {
+                            saveImage(Tensor2Matrix(MI_now), folder_path / ("frame_" + filename.str() + ".png"), true);
+                        }
+                        state.V_Vis.setZero();
+                        //randomInit(F, -1, 1);
+                        if (parameters.resetGEachFrame) {
+                            state.G.setZero();
+                        }
+
+        #endif
+                    //globalDecay(MI, decayTimeSurface, nP, t, dP);
+                }
+
+                if (parameters.startTime+ static_cast<float>(parameters.FR_update_counter) * (1 / parameters.FR_updates_per_second) <event->time) {
+                    parameters.FR_update_counter++;
+                }
             }
-
-            if (parameters.startTime+ static_cast<float>(parameters.FR_update_counter) * (1 / parameters.FR_updates_per_second) <event->time) {
-                parameters.FR_update_counter++;
-            }
+            const std::chrono::duration<float> elapsed_interval = std::chrono::high_resolution_clock::now() - start_interval;
+            const float intervalSpan = intervals[currentInterval + 1] - intervals[currentInterval];
+            std::cout << "Interval " << intervals[currentInterval] << "-" << intervals[currentInterval + 1] << " s: "
+                      << cameraEventData.size() << " events, " << elapsed_interval.count() << " s, RTF = "
+                      << elapsed_interval.count() / intervalSpan << std::endl;
         }
-        const std::chrono::duration<float> elapsed_interval = std::chrono::high_resolution_clock::now() - start_interval;
-        const float intervalSpan = intervals[currentInterval + 1] - intervals[currentInterval];
-        std::cout << "Interval " << intervals[currentInterval] << "-" << intervals[currentInterval + 1] << " s: "
-                  << cameraEventData.size() << " events, " << elapsed_interval.count() << " s, RTF = "
-                  << elapsed_interval.count() / intervalSpan << std::endl;
+        finished = true;
+    };
+
+#ifdef IMAGES
+    if (args->show) {
+        std::thread worker(runAlgorithm);
+        while (!finished) {
+            cv::Mat frame;
+            {
+                std::lock_guard<std::mutex> lock(frameMutex);
+                std::swap(frame, latestFrame);
+            }
+            if (!frame.empty()) {
+                cv::imshow("Interacting Maps", frame);
+            }
+            cv::pollKey();
+        }
+        worker.join();
+    } else {
+        runAlgorithm();
     }
+#else
+    runAlgorithm();
+#endif
 
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<float> elapsed_realtime = end - start_realtime;
@@ -405,6 +453,10 @@ int main(int argc, char* argv[]) {
     ssTime << "Data span: " << dataSpan << " seconds" << std::endl;
     ssTime << "RTF: " << rtf << std::endl;
     writeToFile(ssTime.str(), folder_path / "time_realtime.txt");
+    if (args->show && args->pace) {
+        std::cout << "Paced to real time; the RTF below includes the waiting. Largest lag behind real time: "
+                  << maxPaceLag.count() * 1000.0f << " ms" << std::endl;
+    }
     std::cout << "Algorithm took: " << elapsed_realtime.count() << " s for " << dataSpan << " s of data, RTF = " << rtf << " (event loading: " << elapsed_loading.count() << " s, excluded)" << std::endl;
 
     std::string outputFile = "output.mp4";
