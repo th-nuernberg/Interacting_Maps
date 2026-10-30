@@ -4,6 +4,10 @@
 #include "file_operations.h"
 #include <iostream>
 #include <memory>
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+#include <iterator>
 
 // Helper function to check if a string ends with a given suffix
 bool endsWith(const std::string &str, const std::string &suffix) {
@@ -264,6 +268,44 @@ void read_events(const std::string &file_path, std::vector<std::shared_ptr<Event
  * @param event_factor allows scaling the event intensity with an factor
  * @param max_events upper limit on the amount of events to save if end_time is not reached before
  */
+bool load_events_txt(const std::string &file_path, std::vector<RawCameraEvent> &events){
+    std::ifstream file(fs::current_path() / file_path, std::ios::binary);
+    if (!file) return false;
+    std::string buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+    const char *p = buffer.c_str();
+    const char *end = p + buffer.size();
+    // Skip a header line such as "time x y p"
+    while (p < end && std::isspace(static_cast<unsigned char>(*p))) ++p;
+    if (p < end && !std::isdigit(static_cast<unsigned char>(*p)) && *p != '-' && *p != '.') {
+        while (p < end && *p != '\n') ++p;
+    }
+    events.reserve(buffer.size() / 24);
+    while (p < end) {
+        char *next;
+        const float time = std::strtof(p, &next);
+        if (next == p) break;
+        const long x = std::strtol(next, &next, 10);
+        const long y = std::strtol(next, &next, 10);
+        const long polarity = std::strtol(next, &next, 10);
+        events.push_back({time, static_cast<int16_t>(y), static_cast<int16_t>(x), static_cast<int8_t>(polarity * 2 - 1)});
+        p = next;
+    }
+    return true;
+}
+
+void slice_events(const std::vector<RawCameraEvent> &all, float start_time, float end_time, std::vector<std::shared_ptr<Event>> &events){
+    auto first = std::lower_bound(all.begin(), all.end(), start_time,
+                                  [](const RawCameraEvent &e, float t) { return e.time < t; });
+    auto last = std::upper_bound(first, all.end(), end_time,
+                                 [](float t, const RawCameraEvent &e) { return t < e.time; });
+    events.reserve(events.size() + static_cast<size_t>(last - first));
+    for (auto it = first; it != last; ++it) {
+        std::vector<int> coords = {it->y, it->x};
+        events.emplace_back(std::make_shared<CameraEvent>(it->time, coords, it->polarity));
+    }
+}
+
 void read_imu(const std::string &file_path, std::vector<std::shared_ptr<Event>> &events, float start_time, float end_time, int max_events = INT32_MAX){
     fs::path current_directory = fs::current_path();
     std::string path = current_directory / file_path;

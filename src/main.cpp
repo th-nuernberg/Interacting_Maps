@@ -198,6 +198,16 @@ int main(int argc, char* argv[]) {
     // std::vector<float> lin_acceleration = {0,0,0};
     // IMUEvent currentImuEvent = IMUEvent(args->startTime, lin_acceleration, ang_velocity);
 
+    // Load the whole event file once; the interval loop below only slices it. Not counted in the RTF.
+    auto start_loading = std::chrono::high_resolution_clock::now();
+    std::vector<RawCameraEvent> allCameraEvents;
+    if (!load_events_txt(eventPath, allCameraEvents)) {
+        std::cerr << "Could not open " << eventPath << std::endl;
+        return 1;
+    }
+    std::chrono::duration<float> elapsed_loading = std::chrono::high_resolution_clock::now() - start_loading;
+    std::cout << "Loaded " << allCameraEvents.size() << " events from " << eventPath << " in " << elapsed_loading.count() << " s" << std::endl;
+
     auto start_realtime = std::chrono::high_resolution_clock::now();
 
     // intervals holds n+1 boundaries for n slices
@@ -205,9 +215,10 @@ int main(int argc, char* argv[]) {
         //##################################################################################################################
         // Read events file
 
+        const auto start_interval = std::chrono::high_resolution_clock::now();
         std::vector<std::shared_ptr<Event>> cameraEventData;
-        read_events(eventPath, cameraEventData, intervals[currentInterval], intervals[currentInterval+1], INT32_MAX, args->timeFormat);
-        std::cout << "Readout events at " << eventPath << " for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
+        slice_events(allCameraEvents, intervals[currentInterval], intervals[currentInterval+1], cameraEventData);
+        std::cout << "Events for time " << intervals[currentInterval] << " to " << intervals[currentInterval + 1] << std::endl;
         std::cout << "Read " << cameraEventData.size() << " events." << std::endl;
         std::vector<std::shared_ptr<Event>> event_data;
 
@@ -329,14 +340,26 @@ int main(int argc, char* argv[]) {
                 parameters.FR_update_counter++;
             }
         }
+        const std::chrono::duration<float> elapsed_interval = std::chrono::high_resolution_clock::now() - start_interval;
+        const float intervalSpan = intervals[currentInterval + 1] - intervals[currentInterval];
+        std::cout << "Interval " << intervals[currentInterval] << "-" << intervals[currentInterval + 1] << " s: "
+                  << cameraEventData.size() << " events, " << elapsed_interval.count() << " s, RTF = "
+                  << elapsed_interval.count() / intervalSpan << std::endl;
     }
 
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<float> elapsed_realtime = end - start_realtime;
     std::stringstream ssTime;
+    // Real-time factor: processing time per second of recording (< 1 is faster than real time). The span ends at the
+    // last event if the recording is shorter than endTime; loading the event file is excluded.
+    const float lastEventTime = allCameraEvents.empty() ? parameters.startTime : allCameraEvents.back().time;
+    const float dataSpan = std::min(parameters.endTime, lastEventTime) - parameters.startTime;
+    const float rtf = elapsed_realtime.count() / dataSpan;
     ssTime << "Time elapsed: " << elapsed_realtime.count() << " seconds" << std::endl;
+    ssTime << "Data span: " << dataSpan << " seconds" << std::endl;
+    ssTime << "RTF: " << rtf << std::endl;
     writeToFile(ssTime.str(), folder_path / "time_realtime.txt");
-    std::cout << "Algorithm took: " << elapsed_realtime.count() << "seconds/ Real elapsed time: " << parameters.endTime - parameters.startTime << std::endl;
+    std::cout << "Algorithm took: " << elapsed_realtime.count() << " s for " << dataSpan << " s of data, RTF = " << rtf << " (event loading: " << elapsed_loading.count() << " s, excluded)" << std::endl;
 
     std::string outputFile = "output.mp4";
 

@@ -499,3 +499,35 @@ TEST_CASE("G reset is off and silent relaxation on by default", "[deviations][si
     REQUIRE_THAT(p.rate_GI_silent, WithinAbs(-std::log(0.8f) / 0.01f, 1e-3));
     REQUIRE_THAT(p.rate_GF_silent, WithinAbs(-std::log(0.8f) / 0.01f, 1e-3));
 }
+
+TEST_CASE("load_events_txt skips a header and slice_events keeps read_events' inclusive bounds", "[io]") {
+    namespace fs = std::filesystem;
+    const fs::path previous = fs::current_path();
+    const fs::path sandbox = fs::temp_directory_path() / "im_tests_load_events";
+    fs::remove_all(sandbox);
+    fs::create_directories(sandbox);
+    fs::current_path(sandbox);
+    {
+        std::ofstream f("events.txt");
+        f << "time x y p\n0.000000000 33 39 1\n0.5 7 3 0\n1.0 5 6 1\n1.25 2 1 0\n";
+    }
+    std::vector<RawCameraEvent> all;
+    const bool loaded = load_events_txt("events.txt", all);
+    fs::current_path(previous);
+    fs::remove_all(sandbox);
+
+    REQUIRE(loaded);
+    REQUIRE(all.size() == 4);
+    REQUIRE(all[0].x == 33);
+    REQUIRE(all[0].y == 39);
+    REQUIRE(all[0].polarity == 1);
+    REQUIRE(all[1].polarity == -1);
+
+    std::vector<std::shared_ptr<Event>> slice;
+    slice_events(all, 0.5f, 1.0f, slice);
+    REQUIRE(slice.size() == 2);   // both boundaries included, as in read_events
+    const auto *first = dynamic_cast<CameraEvent *>(slice[0].get());
+    REQUIRE(first != nullptr);
+    REQUIRE(first->coordinates == std::vector<int>{3, 7});   // (y, x)
+    REQUIRE(first->polarity == -1);
+}

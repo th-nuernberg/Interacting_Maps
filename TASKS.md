@@ -25,6 +25,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] Lazy decay: gradients mixed decayed and stale potentials (only the event pixel was decayed); now the whole stencil (Manhattan distance 2) is decayed, and output frames show I decayed to the frame time.
 - [x] Pixels without events never updated (G stale wherever an edge passed; per-frame G reset was a workaround): G ← I and G ← F with V = 0 integrated lazily over each pixel's silent time; G reset off by default.
 - [ ] Silent-time rates `rate_GI_silent`, `rate_GF_silent`: defaults reproduce one paper update per time step; determine by sweep (M2).
+- [x] Event file loaded once into memory (was re-read from the start for every interval); RTF reported per run and per interval.
 - [ ] IMU fusion units: choose `imuScale` (rad/s → R units). Open: R has no physical time unit yet, see `docs/cpp-implementation.md`. Needs V per time bin (paper) or a calibrated event contribution.
 
 ## M1 – Simulator with ground truth (`python/src/incomaps/sim`)
