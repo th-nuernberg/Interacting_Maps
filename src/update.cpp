@@ -620,6 +620,92 @@ void update_RF(Tensor1f &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f
     R(2) = (1 - weight_RF) * R(2) + weight_RF * solution(2);
 }
 
+void register_R_point(const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, int y, int x) {
+    PROFILE_FUNCTION();
+    // Replace this pixel's contribution to the F -> R right-hand side B by its current flow
+    Vector3f transformed_F;
+    Vector3f point;
+    m23(F, Cx, Cy, transformed_F, y, x);
+    crossProduct3x3(C, transformed_F, point, y, x);
+    B += Identity_minus_outerProducts[y][x] * (point - old_points[y][x]);
+    old_points[y][x] = point;
+}
+
+Vector2f m32_pixel(const Vector3f &v, const Tensor3f &Cx, const Tensor3f &Cy, int y, int x) {
+    // Coefficients (channel 0 on Cy, channel 1 on Cx) of v in the tangent plane spanned by Cx and Cy. For v
+    // in that plane (e.g. R x C, as |C| = 1) this equals m32 at the pixel.
+    Matrix<float, 3, 2> M;
+    M << Cy(y, x, 0), Cx(y, x, 0),
+         Cy(y, x, 1), Cx(y, x, 1),
+         Cy(y, x, 2), Cx(y, x, 2);
+    // Normal equations, 2 x 2
+    const Matrix2f N = M.transpose() * M;
+    const Vector2f r = M.transpose() * v;
+    const float det = N(0, 0) * N(1, 1) - N(0, 1) * N(1, 0);
+    return Vector2f(N(1, 1) * r(0) - N(0, 1) * r(1), N(0, 0) * r(1) - N(1, 0) * r(0)) / det;
+}
+
+void relaxB(Vector3f &B, float &BTime, const Matrix3f &A, const Tensor1f &R, const float time, const float rate_FR) {
+    PROFILE_FUNCTION();
+    // Every pixel's F relaxes towards m32(R x C) at rate_FR, and a relaxed pixel contributes (I - C C^T) R to B,
+    // so B relaxes towards A R at the same rate. Exact while R is constant, and R only changes at events.
+    const float dt = time - BTime;
+    BTime = time;
+    if (dt <= 0.0f) return;
+    const Vector3f AR = A * Vector3f(R(0), R(1), R(2));
+    B = AR + (B - AR) * expf(-rate_FR * dt);
+}
+
+void relaxFR(Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor1f &R, Tensor2f &FTimeSurface, std::vector<std::vector<Vector3f>> &old_points, const int y, const int x, const float time, const float rate_FR) {
+    PROFILE_FUNCTION();
+    // Lazy form of update_FR at one pixel: F relaxes towards m32(R x C) over the time since it was last brought
+    // up to date, with R taken as its current value. B already contains this relaxation (relaxB), so only the
+    // stored point is refreshed, not B.
+    const float dt = time - FTimeSurface(y, x);
+    FTimeSurface(y, x) = time;
+    if (dt <= 0.0f) return;
+    Vector3f RxC;
+    const Vector3f c(C(y, x, 0), C(y, x, 1), C(y, x, 2));
+    // (y, x, z) storage: cross product of the underlying (x, y, z) vectors, as in crossProduct1x3
+    RxC(0) = R(2) * c(1) - R(1) * c(2);
+    RxC(1) = R(0) * c(2) - R(2) * c(0);
+    RxC(2) = R(1) * c(0) - R(0) * c(1);
+    const Vector2f target = m32_pixel(RxC, Cx, Cy, y, x);
+    const float keep = expf(-rate_FR * dt);
+    F(y, x, 0) = target(0) + (F(y, x, 0) - target(0)) * keep;
+    F(y, x, 1) = target(1) + (F(y, x, 1) - target(1)) * keep;
+    Vector3f transformed_F;
+    m23(F, Cx, Cy, transformed_F, y, x);
+    crossProduct3x3(C, transformed_F, old_points[y][x], y, x);
+}
+
+void relaxFRNeighbourhood(Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor1f &R, Tensor2f &FTimeSurface, std::vector<std::vector<Vector3f>> &old_points, const int y, const int x, const float time, const float rate_FR) {
+    PROFILE_FUNCTION();
+    // The event step and the silent G relaxation read F at (y, x) and its 4 neighbours.
+    const int rows = static_cast<int>(F.dimension(0));
+    const int cols = static_cast<int>(F.dimension(1));
+    const int offsets[5][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (const auto &offset : offsets) {
+        const int yy = y + offset[0];
+        const int xx = x + offset[1];
+        if (yy < 0 || yy >= rows || xx < 0 || xx >= cols) continue;
+        relaxFR(F, C, Cx, Cy, R, FTimeSurface, old_points, yy, xx, time, rate_FR);
+    }
+}
+
+Tensor3f relaxedFRCopy(const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor1f &R, const Tensor2f &FTimeSurface, const float time, const float rate_FR) {
+    PROFILE_FUNCTION();
+    Tensor3f relaxed = F;
+    Tensor2f times = FTimeSurface;
+    std::vector<std::vector<Vector3f>> points(F.dimension(0), std::vector<Vector3f>(F.dimension(1)));
+    for (int y = 0; y < F.dimension(0); ++y) {
+        for (int x = 0; x < F.dimension(1); ++x) {
+            relaxFR(relaxed, C, Cx, Cy, R, times, points, y, x, time, rate_FR);
+        }
+    }
+    return relaxed;
+}
+
 void update_RIMU(Tensor1f &R, const std::vector<float> &rotVelIMU, const float weight_RIMU, const Matrix3f &R_cam_imu, const float imuScale) {
     const Vector3f omega_cam = R_cam_imu * Vector3f(rotVelIMU[0], rotVelIMU[1], rotVelIMU[2]);   // (x, y, z)
     // R = -(camera rotation), stored as (y, x, z)

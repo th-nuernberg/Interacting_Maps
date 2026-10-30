@@ -42,6 +42,7 @@ Parameters initParameters(float startTime, float endTime, float timeStep)
     p.FR_updates_per_second = 1.0f / timeStep;
     p.rate_GI_silent        = -std::log(1.0f - p.weight_GI) / timeStep;
     p.rate_GF_silent        = -std::log(1.0f - p.weight_GF) / timeStep;
+    p.rate_FR               = -static_cast<float>(p.updateIterationsFR) * std::log(1.0f - p.weight_FR) * p.FR_updates_per_second;
 
     return p;
 }
@@ -64,6 +65,9 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     s.G.setZero();
     s.GTimeSurface = Tensor2f(height, width);
     s.GTimeSurface.setConstant(parameters.startTime);
+    s.FTimeSurface = Tensor2f(height, width);
+    s.FTimeSurface.setConstant(parameters.startTime);
+    s.BTime = parameters.startTime;
 
     s.delta_I = Tensor3f(height, width, 2);
     s.delta_I.setZero();

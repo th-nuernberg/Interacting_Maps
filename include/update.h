@@ -443,6 +443,45 @@ void update_FR(Tensor3f &F, const Tensor3f &CCM, const Tensor3f &Cx, const Tenso
 void update_RF(Tensor1f &R, const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Matrix3f &A, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, float weight_RF, int y, int x);
 
 /**
+ * Replace the contribution of pixel (y, x) to the F -> R right-hand side B with its current flow (B += (I - C C^T)
+ * (new point - old point)). Used after an event step so that every change of F reaches B.
+ */
+void register_R_point(const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, Vector3f &B, const std::vector<std::vector<Matrix3f>> &Identity_minus_outerProducts, std::vector<std::vector<Vector3f>> &old_points, int y, int x);
+
+/**
+ * m32 at a single pixel: coefficients (channel 0 on Cy, channel 1 on Cx) of a tangent-plane vector v
+ */
+Vector2f m32_pixel(const Vector3f &v, const Tensor3f &Cx, const Tensor3f &Cy, int y, int x);
+
+/**
+ * Event-driven F <- R, global part: B relaxes towards A R at rate_FR over the time since BTime, as the sum of all
+ * pixels relaxing their F towards m32(R x C). O(1) instead of a pass over all pixels.
+ * @param B F -> R right-hand side, sum over pixels of (I - C C^T)(C x m23(F))
+ * @param BTime time up to which B is relaxed; set to time
+ * @param A sum over pixels of (I - C C^T)
+ * @param R rotation, (y, x, z) storage
+ * @param time current time
+ * @param rate_FR relaxation rate in 1/s, see Parameters::rate_FR
+ */
+void relaxB(Vector3f &B, float &BTime, const Matrix3f &A, const Tensor1f &R, const float time, const float rate_FR);
+
+/**
+ * Event-driven F <- R, local part: F at (y, x) relaxes towards m32(R x C) over its time since FTimeSurface(y, x),
+ * with the current R. Refreshes old_points(y, x) without touching B (relaxB already accounts for it).
+ */
+void relaxFR(Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor1f &R, Tensor2f &FTimeSurface, std::vector<std::vector<Vector3f>> &old_points, const int y, const int x, const float time, const float rate_FR);
+
+/**
+ * relaxFR at (y, x) and its 4 neighbours, the pixels whose F the event step and the silent G relaxation read
+ */
+void relaxFRNeighbourhood(Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor1f &R, Tensor2f &FTimeSurface, std::vector<std::vector<Vector3f>> &old_points, const int y, const int x, const float time, const float rate_FR);
+
+/**
+ * Copy of F with every pixel relaxed to the given time; for display and costs only
+ */
+Tensor3f relaxedFRCopy(const Tensor3f &F, const Tensor3f &C, const Tensor3f &Cx, const Tensor3f &Cy, const Tensor1f &R, const Tensor2f &FTimeSurface, const float time, const float rate_FR);
+
+/**
  * Update R from a gyro reading. The reading (x, y, z, IMU frame) is rotated into the camera frame, scaled to R's units,
  * negated (R is minus the camera rotation, see docs/cpp-implementation.md) and stored as (y, x, z).
  * @param R rotation estimated by the Interacting Maps network, stored as (y, x, z)

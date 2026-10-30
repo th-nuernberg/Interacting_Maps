@@ -25,7 +25,7 @@ Names read "target from source": `update_FG` updates F from G. This is the rever
 | F, V → G | `update_GF` | event pixel |
 | I → G | `update_GI` | event pixel and its 4 neighbours |
 | G → I | `updateGIDiffGradient` + `update_IG` | event pixel |
-| R → F | `update_FR` | all pixels, `updateIterationsFR` times per `timeStep` |
+| R → F | `relaxB` + `relaxFR` (default, `--asyncFR`) or `update_FR` | event-driven closed form (see below); synchronous: all pixels, `updateIterationsFR` times per `timeStep` |
 | F → R | `update_RF` | incremental least squares (running sums `A`, `B`) |
 | gyro → R | `update_RIMU` | per IMU sample |
 | frame → I | `update_Ifusion` | per image |
@@ -57,6 +57,18 @@ Split along F, the perpendicular part goes to g⊥ with rate `rate_GI_silent`, a
 
 The rates default to `-ln(1 - weight) / time_step`, which reproduces one paper update per time step (tested). They are open parameters, to be determined by the M2 sweeps. Switch: `silentRelaxation` (`--silentG`). F is not relaxed over silent time; it is regularised globally by F ← R.
 
+## Event-driven F ← R
+
+The synchronous version applies `update_FR` `updateIterationsFR` times to every pixel each `timeStep` and then rebuilds the F → R sums, O(pixels) at 100 Hz, which dominated the run time. In the event-driven version (`asyncFR`, default):
+
+- F at a pixel relaxes towards m32(R × C) at rate `rate_FR = -updateIterationsFR · ln(1 - weight_FR) / timeStep` (one time step reproduces the synchronous passes; tested). `relaxFR` applies this lazily, with the current R, where an event reads F (event pixel and its 4 neighbours) and for display (`relaxedFRCopy`).
+- B = Σ (I − CCᵀ)(C × m23(F)) is linear in F, and a relaxed pixel contributes (I − CCᵀ)R. So B relaxes in closed form, B ← A R + (B − A R) e^(−rate_FR dt), in O(1) per event (`relaxB`). This is exact because R only changes at events. `relaxFR` refreshes `old_points` without touching B.
+- After each event step, `register_R_point` puts the final F of the event pixel into B (F ← G may run after F → R within the step).
+
+Approximation: `relaxFR` uses the current R for a pixel's whole silent time, while B integrated the actual R history. The two differ only through R changes within the last few 1/rate_FR (≈ 1.6 ms).
+
+Output frames, the live window (`--show`) and `R.txt` samples run at `--fps` (default 60), independent of `timeStep`.
+
 ## Known issues
 
-See M0 in `TASKS.md` for the full list and status. Open design question: R has no physical time unit. V is a per-event contribution, not a temporal derivative per bin, so F (and R) are "pixels per event contribution". Fusing a gyro (rad/s) into R therefore needs an explicit scale that the current model does not define. `update_RIMU` takes it as `Parameters::imuScale` (default 1, i.e. unscaled) together with the camera–IMU rotation `R_cam_imu` (default identity); both must be set before `weight_RIMU > 0` gives meaningful results.
+See M0 in `TASKS.md` for the full list and status. R does not yet track the camera rotation: on shapes_rotation, the correlation of R with the gyro is below 0.25 in both the synchronous and the event-driven version (2026-10-30). Open design question: R has no physical time unit. V is a per-event contribution, not a temporal derivative per bin, so F (and R) are "pixels per event contribution". Fusing a gyro (rad/s) into R therefore needs an explicit scale that the current model does not define. `update_RIMU` takes it as `Parameters::imuScale` (default 1, i.e. unscaled) together with the camera–IMU rotation `R_cam_imu` (default identity); both must be set before `weight_RIMU > 0` gives meaningful results.

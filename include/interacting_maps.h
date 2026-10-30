@@ -88,6 +88,12 @@ struct Parameters
     float rate_GI_silent   = 0.0f;
     float rate_GF_silent   = 0.0f;
 
+    // Event-driven F <- R: instead of updateIterationsFR global passes per time step, B relaxes in closed form at
+    // every event and F is relaxed lazily where it is read. rate_FR [1/s] = -updateIterationsFR ln(1 - weight_FR)
+    // * FR_updates_per_second reproduces the synchronous passes.
+    bool  asyncFR = true;
+    float rate_FR = 0.0f;
+
     // Bounds
     float eps   = 0.00001f;
     float gamma = 255.0f;
@@ -110,6 +116,8 @@ struct OpticalFlowState
     Tensor3f F;               // Optical flow
     Tensor3f G;               // Spatial gradient
     Tensor2f GTimeSurface;    // time up to which G's silent-time relaxation has been applied
+    Tensor2f FTimeSurface;    // time up to which F's relaxation towards m32(R x C) has been applied
+    float    BTime = 0.0f;    // time up to which B's relaxation towards A R has been applied
     Tensor3f delta_I;
 
     Tensor2f I;               // Intensity image

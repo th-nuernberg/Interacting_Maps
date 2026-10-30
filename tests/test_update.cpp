@@ -531,3 +531,73 @@ TEST_CASE("load_events_txt skips a header and slice_events keeps read_events' in
     REQUIRE(first->coordinates == std::vector<int>{3, 7});   // (y, x)
     REQUIRE(first->polarity == -1);
 }
+
+TEST_CASE("m32_pixel equals m32 for R x C", "[update][rotation][async]") {
+    Parameters p = initParameters(0.0f, 1.0f, 0.1f);
+    OpticalFlowState s = initOpticalFlowState(8, 8, p, smallCalibration(8, 8));
+    Tensor1f R(3);
+    R.setValues({0.01f, -0.02f, 0.03f});
+    Tensor3f RxC(s.CCM.dimensions()), F(s.F.dimensions());
+    crossProduct1x3(R, s.CCM, RxC);
+    m32(RxC, s.dCdx, s.dCdy, F);
+    for (const auto &px : std::vector<std::array<int, 2>>{{0, 0}, {3, 5}, {7, 7}}) {
+        const Vector3f v(RxC(px[0], px[1], 0), RxC(px[0], px[1], 1), RxC(px[0], px[1], 2));
+        const Vector2f f = m32_pixel(v, s.dCdx, s.dCdy, px[0], px[1]);
+        REQUIRE_THAT(f(0), WithinAbs(F(px[0], px[1], 0), 1e-5));
+        REQUIRE_THAT(f(1), WithinAbs(F(px[0], px[1], 1), 1e-5));
+    }
+}
+
+TEST_CASE("Event-driven F <- R over one time step equals the synchronous passes", "[update][rotation][async]") {
+    Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    OpticalFlowState s = initOpticalFlowState(8, 8, p, smallCalibration(8, 8));
+    s.R.setValues({0.01f, -0.02f, 0.03f});
+    Tensor3f F_sync = s.F;
+    for (int i = 0; i < p.updateIterationsFR; ++i) {
+        update_FR(F_sync, s.CCM, s.dCdx, s.dCdy, s.R, p.weight_FR, 0.0f, std::numeric_limits<float>::infinity());
+    }
+
+    const Tensor3f F_async = relaxedFRCopy(s.F, s.CCM, s.dCdx, s.dCdy, s.R, s.FTimeSurface, p.time_step, p.rate_FR);
+
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            REQUIRE_THAT(F_async(y, x, 0), WithinAbs(F_sync(y, x, 0), 1e-5));
+            REQUIRE_THAT(F_async(y, x, 1), WithinAbs(F_sync(y, x, 1), 1e-5));
+        }
+    }
+}
+
+TEST_CASE("relaxB matches the running sum of every pixel relaxed with relaxFR", "[update][rotation][async]") {
+    // The global closed form for B and the lazy per-pixel F relaxation must describe the same state.
+    Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    OpticalFlowState s = initOpticalFlowState(8, 8, p, smallCalibration(8, 8));
+    s.R.setValues({0.01f, -0.02f, 0.03f});
+    const float t = 0.002f;   // partially relaxed, so both the transient and the target matter
+
+    relaxB(s.B, s.BTime, s.A, s.R, t, p.rate_FR);
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            relaxFR(s.F, s.CCM, s.dCdx, s.dCdy, s.R, s.FTimeSurface, s.old_points, y, x, t, p.rate_FR);
+        }
+    }
+
+    REQUIRE(s.B.isApprox(expectedRSum(s), 1e-4f));
+    REQUIRE_THAT(s.BTime, WithinAbs(t, 1e-9));
+}
+
+TEST_CASE("register_R_point brings B up to date with a changed F", "[update][rotation][async]") {
+    Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    OpticalFlowState s = initOpticalFlowState(8, 8, p, smallCalibration(8, 8));
+    s.F(3, 4, 0) += 0.5f;
+    s.F(3, 4, 1) -= 0.25f;
+
+    register_R_point(s.F, s.CCM, s.dCdx, s.dCdy, s.B, s.Identity_minus_outerProducts, s.old_points, 3, 4);
+
+    REQUIRE(s.B.isApprox(expectedRSum(s), 1e-4f));
+}
+
+TEST_CASE("Event-driven F <- R is on by default", "[deviations][async]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    REQUIRE(p.asyncFR);
+    REQUIRE_THAT(p.rate_FR, WithinAbs(-4.0f * std::log(0.2f) / 0.01f, 1e-2));
+}

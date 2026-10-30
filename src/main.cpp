@@ -71,6 +71,7 @@ struct ProgramArgs
     bool clamp;
     bool resetG;
     bool silentG;
+    bool asyncFR;
     float fps;
     bool show;
     bool writeFrames;
@@ -103,6 +104,7 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .clamp             = vm["clamp"].as<bool>(),
         .resetG            = vm["resetG"].as<bool>(),
         .silentG           = vm["silentG"].as<bool>(),
+        .asyncFR           = vm["asyncFR"].as<bool>(),
         .fps               = vm["fps"].as<float>(),
         .show              = vm["show"].as<bool>(),
         .writeFrames       = vm["writeFrames"].as<bool>()
@@ -145,6 +147,7 @@ int main(int argc, char* argv[]) {
             ("clamp", po::value<bool>()->default_value(true), "Clip F and G to +-gamma and zero tiny values (not in the paper)")
             ("resetG", po::value<bool>()->default_value(false), "IMAGES builds: zero G after each output frame (old hack, not in the paper)")
             ("silentG", po::value<bool>()->default_value(true), "Treat time without events at a pixel as V = 0 for the G <- F relation")
+            ("asyncFR", po::value<bool>()->default_value(true), "Event-driven F <- R (closed-form relaxation) instead of global passes every timeStep")
             ("fps", po::value<float>()->default_value(60), "Rate of output frames, live display and R.txt samples")
             ("show", po::value<bool>()->default_value(false), "IMAGES builds: stream the V/I/G/F frames to a live window")
             ("writeFrames", po::value<bool>()->default_value(true), "IMAGES builds: write the V/I/G/F frames as PNG files");
@@ -194,6 +197,7 @@ int main(int argc, char* argv[]) {
     parameters.clampMaps = args->clamp;
     parameters.resetGEachFrame = args->resetG;
     parameters.silentRelaxation = args->silentG;
+    parameters.asyncFR = args->asyncFR;
     parameters.fps = args->fps;
     OpticalFlowState state = initOpticalFlowState(res.height, res.width, parameters, calibration_data);
 
@@ -275,6 +279,12 @@ int main(int argc, char* argv[]) {
                 if (parameters.useDecay) {
                     decayNeighbourhood(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
                 }
+                if (parameters.asyncFR) {
+                    // F <- R since the last event: B in closed form, F where this event reads it.
+                    relaxB(state.B, state.BTime, state.A, state.R, event->time, parameters.rate_FR);
+                    relaxFRNeighbourhood(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, state.old_points,
+                                         cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_FR);
+                }
                 if (parameters.silentRelaxation) {
                     relaxSilentNeighbourhood(state.G, state.F, state.MI, state.delta_I, state.GTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_GI_silent, parameters.rate_GF_silent);
                 }
@@ -282,8 +292,13 @@ int main(int argc, char* argv[]) {
                     event_step(state.V, state.MI, state.delta_I, state.GIDiff, state.GIDiffGradient, state.F, state.G, state.R, state.CCM, state.dCdx, state.dCdy, state.A, state.B,
                                state.Identity_minus_outerProducts, state.old_points, parameters, permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
                 }
+                if (parameters.asyncFR) {
+                    // F <- G and G <- F may have run after F -> R in this step; B must see the final F.
+                    register_R_point(state.F, state.CCM, state.dCdx, state.dCdy, state.B, state.Identity_minus_outerProducts, state.old_points,
+                                     cEvent->coordinates[0], cEvent->coordinates[1]);
+                }
 
-                if (parameters.startTime + static_cast<float>(parameters.FR_update_counter) * static_cast<float>(1 / parameters.FR_updates_per_second) < event->time) {
+                if (!parameters.asyncFR && parameters.startTime + static_cast<float>(parameters.FR_update_counter) * static_cast<float>(1 / parameters.FR_updates_per_second) < event->time) {
                     state.time.setConstant(event->time);
                     for (int i = 0; i < static_cast<int>(parameters.updateIterationsFR); ++i) {
                         update_FR(state.F, state.CCM, state.dCdx, state.dCdy, state.R, parameters.weight_FR, parameters.zeroThreshold(), parameters.clampBound());
@@ -327,10 +342,13 @@ int main(int argc, char* argv[]) {
                     const Tensor2f MI_now = parameters.useDecay
                         ? decayedCopy(state.MI, state.decayTimeSurface, event->time, parameters.neutralPotential, parameters.decayParam)
                         : state.MI;
+                    const Tensor3f F_now = parameters.asyncFR
+                        ? relaxedFRCopy(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, event->time, parameters.rate_FR)
+                        : state.F;
                     const Tensor3f G_now = parameters.silentRelaxation
-                        ? relaxedSilentCopy(state.G, state.F, MI_now, state.GTimeSurface, event->time, parameters.rate_GI_silent, parameters.rate_GF_silent)
+                        ? relaxedSilentCopy(state.G, F_now, MI_now, state.GTimeSurface, event->time, parameters.rate_GI_silent, parameters.rate_GF_silent)
                         : state.G;
-                    float loss = VFG_check(state.V_Vis, state.F, G_now);
+                    float loss = VFG_check(state.V_Vis, F_now, G_now);
                     //std::cout << "VFG Check: " << loss << std::endl;
                     writeToFile(event->time, loss, VLossPath);
 
@@ -341,14 +359,14 @@ int main(int argc, char* argv[]) {
 
                     std::string image_name = "VIGF_" + filename.str() + ".png";
                     fs::path image_path = folder_path / image_name;
-                    const cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, state.F, image_path, args->writeFrames, 0.1);
+                    const cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, F_now, image_path, args->writeFrames, 0.1);
                     if (args->show) {
                         cv::imshow("Interacting Maps", vigf);
                         cv::waitKey(1);
                     }
                     float cost1, cost2, cost3;
-                    cost1 = costFR(state.F, state.CCM, state.dCdx, state.dCdy, state.R);
-                    cost2 = costFG(state.F, state.V_Vis, G_now);
+                    cost1 = costFR(F_now, state.CCM, state.dCdx, state.dCdy, state.R);
+                    cost2 = costFG(F_now, state.V_Vis, G_now);
                     cost3 = costGI(G_now, state.delta_I);
                     std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
                     if (args->writeFrames) {
