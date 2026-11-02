@@ -30,6 +30,8 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] All relation weights default to 1 (no undocumented damping); continuous-time rates decoupled from the weights and kept as open parameters.
 - [ ] Continuous-time rates `rate_GI_silent`, `rate_GF_silent`, `rate_FR`: no neutral value exists; determine by sweep (M2).
 - [ ] R does not track the gyro (|corr| < 0.25, synchronous and event-driven). Diagnose against the NumPy reference / simulator ground truth.
+- [x] V-unit experiment, stage A (`experiments/v_units.py`, report `experiments/reports/v-units.md`): per-pixel event rates carry almost no speed on shapes_rotation; burst-onset time surfaces give normal flow in px/s.
+- [ ] Decide how event timing enters the network (time-surface normal flow as a relation) and sweep its parameters on the simulator (M1).
 - [ ] IMU fusion units: choose `imuScale` (rad/s → R units). Open: R has no physical time unit yet, see `docs/cpp-implementation.md`. Needs V per time bin (paper) or a calibrated event contribution.
 
 ## M1 – Simulator with ground truth (`python/src/incomaps/sim`)
