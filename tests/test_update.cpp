@@ -428,13 +428,14 @@ TEST_CASE("relaxSilentG without G <- I equals repeated V = 0 update_GF steps, on
     G_lazy = G_steps;
     g.setZero();
     const int n = 7;
+    const float w = 0.2f;
     for (int i = 0; i < n; ++i) {
-        update_GF(G_steps, 0.0f, F, 0, 0, p.lr, p.weight_GF, 0.0f, std::numeric_limits<float>::infinity());
+        update_GF(G_steps, 0.0f, F, 0, 0, p.lr, w, 0.0f, std::numeric_limits<float>::infinity());
     }
     Tensor2f GTime(1, 1);
     GTime.setConstant(0.0f);
 
-    relaxSilentG(G_lazy, F, g, GTime, 0, 0, n * p.time_step, 0.0f, p.rate_GF_silent);
+    relaxSilentG(G_lazy, F, g, GTime, 0, 0, n * p.time_step, 0.0f, -std::log(1.0f - w) / p.time_step);
 
     REQUIRE_THAT(G_lazy(0, 0, 0), WithinAbs(G_steps(0, 0, 0), 1e-5));
     REQUIRE_THAT(G_lazy(0, 0, 1), WithinAbs(G_steps(0, 0, 1), 1e-5));
@@ -449,13 +450,14 @@ TEST_CASE("relaxSilentG without G <- F equals repeated update_GI steps, one per 
     G_lazy = G_steps;
     g.setValues({{{0.5f, 0.25f}}});
     const int n = 7;
+    const float w = 0.2f;
     for (int i = 0; i < n; ++i) {
-        update_GI(G_steps, g, 0, 0, p.weight_GI, 0.0f, std::numeric_limits<float>::infinity());
+        update_GI(G_steps, g, 0, 0, w, 0.0f, std::numeric_limits<float>::infinity());
     }
     Tensor2f GTime(1, 1);
     GTime.setConstant(0.0f);
 
-    relaxSilentG(G_lazy, F, g, GTime, 0, 0, n * p.time_step, p.rate_GI_silent, 0.0f);
+    relaxSilentG(G_lazy, F, g, GTime, 0, 0, n * p.time_step, -std::log(1.0f - w) / p.time_step, 0.0f);
 
     REQUIRE_THAT(G_lazy(0, 0, 0), WithinAbs(G_steps(0, 0, 0), 1e-5));
     REQUIRE_THAT(G_lazy(0, 0, 1), WithinAbs(G_steps(0, 0, 1), 1e-5));
@@ -470,10 +472,10 @@ TEST_CASE("relaxSilentG: V = 0 removes only G's component along F", "[update][si
     Tensor2f GTime(1, 1);
     GTime.setConstant(0.0f);
 
-    relaxSilentG(G, F, g, GTime, 0, 0, 1.0f, 0.0f, p.rate_GF_silent);   // 100 silent time steps
+    relaxSilentG(G, F, g, GTime, 0, 0, 1.0f, 0.0f, p.rate_GF_silent);
 
-    REQUIRE_THAT(G(0, 0, 0), WithinAbs(1.5f, 1e-6));                           // perpendicular: untouched
-    REQUIRE_THAT(G(0, 0, 1), WithinAbs(2.0f * std::pow(0.8f, 100.0f), 1e-6));  // parallel: (1 - w)^100
+    REQUIRE_THAT(G(0, 0, 0), WithinAbs(1.5f, 1e-6));                                     // perpendicular: untouched
+    REQUIRE_THAT(G(0, 0, 1), WithinAbs(2.0f * std::exp(-p.rate_GF_silent * 1.0f), 1e-6));  // parallel: decays
 }
 
 TEST_CASE("relaxSilentG: stale G at a pixel an edge has left goes to zero", "[update][silent]") {
@@ -496,7 +498,7 @@ TEST_CASE("G reset is off and silent relaxation on by default", "[deviations][si
     const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
     REQUIRE_FALSE(p.resetGEachFrame);
     REQUIRE(p.silentRelaxation);
-    REQUIRE_THAT(p.rate_GI_silent, WithinAbs(-std::log(0.8f) / 0.01f, 1e-3));
+    REQUIRE_THAT(p.rate_GI_silent, WithinAbs(-std::log(0.8f) / 0.01f, 1e-3));   // former values, open (M2)
     REQUIRE_THAT(p.rate_GF_silent, WithinAbs(-std::log(0.8f) / 0.01f, 1e-3));
 }
 
@@ -553,11 +555,13 @@ TEST_CASE("Event-driven F <- R over one time step equals the synchronous passes"
     OpticalFlowState s = initOpticalFlowState(8, 8, p, smallCalibration(8, 8));
     s.R.setValues({0.01f, -0.02f, 0.03f});
     Tensor3f F_sync = s.F;
+    const float w = 0.8f;
     for (int i = 0; i < p.updateIterationsFR; ++i) {
-        update_FR(F_sync, s.CCM, s.dCdx, s.dCdy, s.R, p.weight_FR, 0.0f, std::numeric_limits<float>::infinity());
+        update_FR(F_sync, s.CCM, s.dCdx, s.dCdy, s.R, w, 0.0f, std::numeric_limits<float>::infinity());
     }
+    const float rate = -static_cast<float>(p.updateIterationsFR) * std::log(1.0f - w) / p.time_step;
 
-    const Tensor3f F_async = relaxedFRCopy(s.F, s.CCM, s.dCdx, s.dCdy, s.R, s.FTimeSurface, p.time_step, p.rate_FR);
+    const Tensor3f F_async = relaxedFRCopy(s.F, s.CCM, s.dCdx, s.dCdy, s.R, s.FTimeSurface, p.time_step, rate);
 
     for (int y = 0; y < 8; ++y) {
         for (int x = 0; x < 8; ++x) {
@@ -599,5 +603,14 @@ TEST_CASE("register_R_point brings B up to date with a changed F", "[update][rot
 TEST_CASE("Event-driven F <- R is on by default", "[deviations][async]") {
     const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
     REQUIRE(p.asyncFR);
-    REQUIRE_THAT(p.rate_FR, WithinAbs(-4.0f * std::log(0.2f) / 0.01f, 1e-2));
+    REQUIRE_THAT(p.rate_FR, WithinAbs(-4.0f * std::log(0.2f) / 0.01f, 1e-2));   // former value, open (M2)
+}
+
+TEST_CASE("All relation weights default to 1, inputs stay off", "[deviations]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    for (const float w : {p.weight_FG, p.weight_FR, p.weight_GF, p.weight_GI, p.weight_IG, p.weight_IV, p.weight_RF}) {
+        REQUIRE(w == 1.0f);
+    }
+    REQUIRE(p.weight_RIMU == 0.0f);
+    REQUIRE(p.weight_Ifusion == 0.0f);
 }

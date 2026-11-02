@@ -44,6 +44,12 @@ Kept as defaults; each can be switched off (field in `Parameters`, command-line 
 | **Per-frame G reset** when built with `IMAGES`: G is zeroed after each output frame. Old workaround for stale G, superseded by silent-time relaxation below; **off by default**. | `resetGEachFrame` (`--resetG`) | G keeps its state |
 | **Central differences** for ∇I on an H × W grid instead of forward differences on (H+1) × (W+1). | none | — |
 
+## Weights and rates
+
+All relation weights default to 1 (2026-11-02): each update solves its relation's local constraint exactly, with no damping, until there is a reason for another value. The earlier values (0.2, 0.8) had no documented justification. The inputs `weight_RIMU` and `weight_Ifusion` stay 0 (off); 1 would clamp R to the gyro or I to the frame (rule 5).
+
+The continuous-time rates (`rate_GI_silent`, `rate_GF_silent`, `rate_FR`, in 1/s) are independent parameters. They have no neutral value: a weight of 1 per step corresponds to an infinite rate, i.e. a hard constraint, and two competing hard constraints at a silent pixel (G ← I and G ← F) are ill-defined. They keep their former values (−ln(1 − 0.2)/10 ms and −4 ln(1 − 0.8)/10 ms) and are open (M2).
+
 ## Pixels without events (asynchronous V = 0)
 
 In the paper every pixel is updated every iteration, and a pixel without events has V = 0: an observation ("brightness did not change"), not missing data. Event-driven updates alone never touch such pixels, so G stayed wherever the last edge left it.

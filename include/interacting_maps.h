@@ -53,14 +53,16 @@ struct Parameters
     int   updateIterationsFR = 4;
     int   event_steps = 1;
 
-    // Weights [0-1]
-    float weight_FG    = 0.2f;
-    float weight_FR    = 0.8f;
-    float weight_GF    = 0.2f;
-    float weight_GI    = 0.2f;
-    float weight_IG    = 0.2f;
+    // Weights [0-1] of the per-update convex combination old -> candidate. 1 solves the relation's local
+    // constraint exactly (no damping); kept at 1 until there is a reason for another value (sweep, M2).
+    float weight_FG    = 1.0f;
+    float weight_FR    = 1.0f;   // synchronous F <- R only (asyncFR = false); the event-driven path uses rate_FR
+    float weight_GF    = 1.0f;
+    float weight_GI    = 1.0f;
+    float weight_IG    = 1.0f;
     float weight_IV    = 1.0f;
-    float weight_RF    = 0.8f;
+    float weight_RF    = 1.0f;
+    // Inputs, 0 = off. Not set to 1: that would clamp R to the gyro / I to the frame (rule 5, weak inputs).
     float weight_RIMU = 0.0f;
     Matrix3f R_cam_imu = Matrix3f::Identity();   // IMU frame -> camera frame
     float imuScale     = 1.0f;                   // gyro rad/s -> R units; open, see docs/cpp-implementation.md
@@ -82,17 +84,18 @@ struct Parameters
     bool resetGEachFrame = false;   // IMAGES builds only: zero G after writing each output frame (old hack)
 
     // Pixels without events carry V = 0 (paper: every pixel is updated every iteration). G <- I and G <- F (V = 0)
-    // are integrated lazily per pixel over its silent time instead of per time bin. The rates [1/s] are set in
-    // initParameters to -ln(1 - weight) / time_step, i.e. one paper update per time step; open, to be swept (M2).
+    // are integrated lazily per pixel over its silent time instead of per time bin. Rates in 1/s. Continuous-time
+    // rates have no neutral value (weight 1 per step would be an infinite rate, i.e. a hard constraint); these are
+    // the former -ln(1 - 0.2) / 10 ms and are open, to be swept (M2).
     bool  silentRelaxation = true;
-    float rate_GI_silent   = 0.0f;
-    float rate_GF_silent   = 0.0f;
+    float rate_GI_silent   = 22.314355f;
+    float rate_GF_silent   = 22.314355f;
 
     // Event-driven F <- R: instead of updateIterationsFR global passes per time step, B relaxes in closed form at
-    // every event and F is relaxed lazily where it is read. rate_FR [1/s] = -updateIterationsFR ln(1 - weight_FR)
-    // * FR_updates_per_second reproduces the synchronous passes.
+    // every event and F is relaxed lazily where it is read. rate_FR [1/s] = -n ln(1 - w) / dt reproduces n synchronous
+    // passes of weight w per dt; the value is the former 4 x 0.8 per 10 ms and is open (M2).
     bool  asyncFR = true;
-    float rate_FR = 0.0f;
+    float rate_FR = 643.775165f;
 
     // Bounds
     float eps   = 0.00001f;

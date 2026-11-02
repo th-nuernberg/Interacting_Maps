@@ -40,9 +40,6 @@ Parameters initParameters(float startTime, float endTime, float timeStep)
     p.time_step             = timeStep;
     p.fps                   = 1.0f / timeStep;
     p.FR_updates_per_second = 1.0f / timeStep;
-    p.rate_GI_silent        = -std::log(1.0f - p.weight_GI) / timeStep;
-    p.rate_GF_silent        = -std::log(1.0f - p.weight_GF) / timeStep;
-    p.rate_FR               = -static_cast<float>(p.updateIterationsFR) * std::log(1.0f - p.weight_FR) * p.FR_updates_per_second;
 
     return p;
 }
