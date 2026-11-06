@@ -614,3 +614,26 @@ TEST_CASE("All relation weights default to 1, inputs stay off", "[deviations]") 
     REQUIRE(p.weight_RIMU == 0.0f);
     REQUIRE(p.weight_Ifusion == 0.0f);
 }
+
+TEST_CASE("read_imu keeps the file's (x, y, z) axis order", "[io][imu]") {
+    namespace fs = std::filesystem;
+    const fs::path previous = fs::current_path();
+    const fs::path sandbox = fs::temp_directory_path() / "im_tests_read_imu";
+    fs::remove_all(sandbox);
+    fs::create_directories(sandbox);
+    fs::current_path(sandbox);
+    {
+        std::ofstream f("imu.txt");
+        f << "0.5 1 2 3 0.1 0.2 0.3\n";
+    }
+    std::vector<std::shared_ptr<Event>> events;
+    read_imu("imu.txt", events, 0.0f, 1.0f, INT32_MAX);
+    fs::current_path(previous);
+    fs::remove_all(sandbox);
+
+    REQUIRE(events.size() == 1);
+    const auto *imu = dynamic_cast<IMUEvent *>(events[0].get());
+    REQUIRE(imu != nullptr);
+    REQUIRE(imu->lin_acceleration == std::vector<float>{1.0f, 2.0f, 3.0f});
+    REQUIRE(imu->ang_velocity == std::vector<float>{0.1f, 0.2f, 0.3f});
+}

@@ -319,8 +319,9 @@ void read_imu(const std::string &file_path, std::vector<std::shared_ptr<Event>> 
             if (time < start_time) continue;
             if (time > end_time) break;
             if (counter > max_events) break;
-            accel = {a2, a1, a3};
-            angVel = {g2, g1, g3};
+            // (x, y, z) in the IMU frame, as update_RIMU expects
+            accel = {a1, a2, a3};
+            angVel = {g1, g2, g3};
             events.emplace_back(std::make_shared<IMUEvent>(time, accel, angVel));
             counter++;
         }
