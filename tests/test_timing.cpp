@@ -5,6 +5,7 @@
 #include <random>
 
 #include <file_operations.h>
+#include <interacting_maps.h>
 #include <timing.h>
 #include <update.h>
 
@@ -273,4 +274,32 @@ TEST_CASE("readFlow gives R's prediction without evidence and follows strong evi
     const Eigen::Vector2f measured = readFlow(evidence, model, R, kappa, 4, 5, 1.0, F);
     REQUIRE_THAT(measured(1), WithinAbs(300.0, 0.1));
     REQUIRE_THAT(measured(0), WithinRel(static_cast<float>(expected(0)), 1e-4f));   // along the edge: R's prediction
+}
+
+TEST_CASE("directionProbability: polarity and G confirm or contradict a normal flow's direction", "[timing][polarity]") {
+    const Eigen::Vector2f n(0.0f, 1.0f);                  // moving along +x
+    const Eigen::Vector2f bright_left(0.0f, -2.0f);       // brighter on the left
+    // Moving along +x brings the brighter side over the pixel: V = -G . n > 0, so an ON event agrees, an OFF event
+    // contradicts
+    const double agree = timing::directionProbability(bright_left, n, +1, 0.5, 0.1);
+    const double contradict = timing::directionProbability(bright_left, n, -1, 0.5, 0.1);
+    REQUIRE(agree > 0.99);
+    REQUIRE(contradict < 0.01);
+    // G = 0 says nothing: the prior
+    REQUIRE_THAT(timing::directionProbability(Eigen::Vector2f::Zero(), n, -1, 0.5, 0.1), WithinAbs(0.9, 1e-9));
+    // G across n says nothing either
+    REQUIRE_THAT(timing::directionProbability(Eigen::Vector2f(3.0f, 0.0f), n, -1, 0.5, 0.1), WithinAbs(0.9, 1e-6));
+    // weak G (one sigma): between prior and certainty; q = Phi(1) = 0.8413
+    const double q = 0.841344746;
+    REQUIRE_THAT(timing::directionProbability(Eigen::Vector2f(0.0f, -0.5f), n, +1, 0.5, 0.1),
+                 WithinAbs(q * 0.9 / (q * 0.9 + (1 - q) * 0.1), 1e-6));
+    REQUIRE_THAT(timing::directionProbability(Eigen::Vector2f(0.0f, -0.5f), n, -1, 0.5, 0.1),
+                 WithinAbs((1 - q) * 0.9 / ((1 - q) * 0.9 + q * 0.1), 1e-6));
+}
+
+TEST_CASE("Normal flow is weighted by its polarity check by default", "[deviations][polarity]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    REQUIRE(p.polaritySign == "weight");
+    REQUIRE_THAT(p.gradientSigma, WithinAbs(0.5, 1e-12));
+    REQUIRE_THAT(p.flipPrior, WithinAbs(0.1, 1e-12));
 }

@@ -95,6 +95,8 @@ This pipeline is **legacy**: V has no time unit, so F and R have none, and R doe
 | T10 | M per pixel by numerical derivative through the lens model. | step 1e-6 rad | convention | Tested against the analytic pinhole result. |
 | T11 | R is solved only when the evidence is well conditioned. | min eig > 1e-9 · max eig | convention | |
 | T12 | The gyro, used as an input (`--fuseR`), is a measurement of R with σ. | 0.05 rad/s | open, a guess | Off by default. |
+| T13 | **Brightness constancy in sign:** an event's polarity is the sign of V = −G·F, so a normal flow that contradicts polarity and G is down-weighted by the probability that its direction is right (`--polaritySign weight`). | σ_G = 0.5 steps/px, π = 0.1 | **derived / measured** | σ_G = √(σ²·rate·τ/4) from the forgetting analysis; below it G carries no information (measured). π: 9.5 % of measured directions are flipped. Small gain for R: mean cos 0.938 → 0.940 ([polarity-sign](../experiments/reports/polarity-sign.md)). |
+| T14 | **R describes the motion now.** | — | **violated**, measured | R is 14 ms late: shifted by 14 ms its mean cos rises from 0.940 to 0.982. Most likely the 10 ms evidence lifetime plus the onset and fit windows. The spikes (cos < 0.9) occur at high angular acceleration and slow speed ([polarity-sign](../experiments/reports/polarity-sign.md)). |
 
 ## 7. Implementation details that behave like assumptions
 

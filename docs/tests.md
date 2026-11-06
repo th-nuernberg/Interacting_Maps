@@ -6,7 +6,7 @@ There are three layers:
 
 | Layer | Checks | Ground truth | Where |
 |---|---|---|---|
-| **Unit tests** (63 Catch2 cases, 737 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
+| **Unit tests** (66 Catch2 cases, 747 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
 | **Method experiments** (Python) | does an idea work on real data before it is ported? | gyro, DAVIS frames | `experiments/`, reports in `experiments/reports/` |
 | **End-to-end runs** (C++ binary) | does the whole network track the camera, how fast, and did a change break anything? | gyro (display/scoring only), earlier outputs | `output/<run>/`, `experiments/plot_r_vs_gyro.py` |
 
@@ -104,6 +104,8 @@ The pipeline per event: onset map O → normal flow N → flow evidence (Λ, η)
 | R is solved only when new evidence arrived and R is read | "unchanged R is not recalculated" |
 | Gyro-like measurements of R alone determine R | the `--fuseR` input path |
 | readFlow gives R's prediction without evidence and follows strong evidence along n | the stored F: prior where unmeasured, data along n where measured |
+| directionProbability: polarity and G confirm or contradict a normal flow's direction | G → F in sign, Bayes with σ_G and π |
+| Normal flow is weighted by its polarity check by default | default `weight` |
 
 ### Defaults, deviations and determinism `[deviations]` `[determinism]`
 
@@ -150,6 +152,7 @@ Each answers one question on `shapes_rotation` before anything is ported. Refere
 | [contrast-steps.md](../experiments/reports/contrast-steps.md) | Do separate ON/OFF steps make the I decay unnecessary? | They remove the drift of the mean (−73 → −0.5 steps), but I still spreads like a random walk without forgetting (agreement 0.53). The decay forgets accumulated per-event error. With decay: 0.836 → 0.839. |
 | [forgetting.md](../experiments/reports/forgetting.md) | How much error does each event add to I, and how fast must I forget? | σ² = 1.9 steps² per event; per-pixel steps remove the quadratic drift. τ* = 1/(σ²·rate) = 0.06 s is the optimum of a sweep (0.850, was 0.836 at 0.1 s); now the default. |
 | [silent-bound.md](../experiments/reports/silent-bound.md) | What should a silent pixel do to G? | G = ∇I when read equals the inherited rate relaxation (0.850) and is now the default. The bound from silence is falsified at edge fronts (0.752). Refractory time measured: 1.2 ms. |
+| [polarity-sign.md](../experiments/reports/polarity-sign.md) | Does G → F in sign (polarity = sign(−G·F)) improve F and R? | Measurements that contradict polarity and G are wrong 53 % of the time (vs 15 %). Weighting by P(direction right) is the default: R mean cos 0.938 → 0.940. R's spikes are latency: R is 14 ms late (0.982 when shifted). |
 
 ## 3. End-to-end runs (C++)
 
@@ -158,7 +161,7 @@ Each answers one question on `shapes_rotation` before anything is ported. Refere
 | **Accuracy vs gyro**, events only (timing mode) | `experiments/plot_r_vs_gyro.py output/<run>/R.txt`; live in the rotation plot | 60 s: cos median 0.992, mean 0.938; \|ω\| ratio 0.995 [0.86, 1.14]; per-axis corr 0.956 / 0.963 / 0.954 |
 | Variants | same, with `--fuseR`, `--evidenceAccumulate`, `--onsetRule gap` | mean cos 0.941 / 0.918 / 0.933 |
 | **Regression when the new mode is off** | compare R.txt with the run before the change | bit-identical |
-| **Speed** | `Algorithm took … RTF` line, events loaded into memory first | timing mode RTF 0.26 (unpaced) |
+| **Speed** | `Algorithm took … RTF` line, events loaded into memory first | timing mode RTF 0.25 (unpaced) |
 | **Real-time display** | `--show --pace`, max lag line | 44 ms max lag with the rotation plot (27 ms without) |
 | **Video** | `--writeFrames` + ffmpeg | `output/timing_video_plot/shapes_rotation_timing_plot.mp4` |
 

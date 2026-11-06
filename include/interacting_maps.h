@@ -136,6 +136,14 @@ struct Parameters
     bool        evidenceAccumulate  = false;          // false: a new measurement replaces the pixel's evidence
     double      flowPriorSigma      = 27.0;           // px/s: how closely F follows R where evidence is weak
     double      gyroSigma           = 0.05;           // rad/s: gyro as a measurement of R (with fuseR)
+    // G, polarity -> F evidence (timing::directionProbability): "off", "gate" (drop a measurement whose direction
+    // disagrees with polarity and G where |G . n| > gradientSigma) or "weight" (scale its information by the
+    // probability that its direction is right). gradientSigma: noise of G, sqrt(sigma^2 rate tau / 4) = 0.5 steps/px
+    // with sigma^2 = 1.9 steps^2 per event, 8.8 events/s and tau = 0.06 s (experiments/reports/forgetting.md).
+    // flipPrior: share of flipped directions among all measurements (9.5 % on shapes_rotation).
+    std::string polaritySign        = "weight";   // experiments/reports/polarity-sign.md
+    double      gradientSigma       = 0.5;            // steps/px
+    double      flipPrior           = 0.1;
 
     // Bounds
     float eps   = 0.00001f;

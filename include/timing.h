@@ -153,6 +153,17 @@ struct RotationFromFlow {
 };
 
 // ------------------------------------------------------------------------------------------------------------------
+// G, polarity -> F evidence: brightness constancy in sign. V's size is unknown, but its sign is the event's polarity,
+// and V = -G . F. A normal flow whose direction n gives sign(-G . n) != polarity is therefore suspicious, if G is
+// clearly non-zero along n:
+//   q = Phi(|G . n| / sigmaG)                      probability that G's sign along n is right (sigmaG: noise of G)
+//   P(n right | agrees)    = q (1 - flip) / (q (1 - flip) + (1 - q) flip)
+//   P(n right | disagrees) = (1 - q)(1 - flip) / ((1 - q)(1 - flip) + q flip)
+// with flip the prior probability that a measured direction is flipped.
+double directionProbability(const Eigen::Vector2f &G, const Eigen::Vector2f &n, int polarity, double sigmaG,
+                            double flip);
+
+// ------------------------------------------------------------------------------------------------------------------
 // R -> F: F's value from its evidence and the motion model's prediction (prior information kappa)
 //   F = (Lambda + kappa I)^-1 (eta + kappa M R)
 // Writes the value into the stored F map (channels y, x) and returns it. The prior never enters the evidence.

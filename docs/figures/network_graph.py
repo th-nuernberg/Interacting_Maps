@@ -48,7 +48,7 @@ EDGES = [
     ("contrast", "V", "pixel", "step\nsize", 0.0, (6.9, 8.05)),
     ("V", "I", "pixel", "add", 0.0, (10.7, 7.85)),
     ("I", "G", "regional", "∇ (3-px stencil)", -0.9, (14.5, 8.55)),
-    ("G", "I", "regional", "I ← G (divergence)", -0.9, (14.5, 6.65)),
+    ("G", "I", "regional", "I ← G (divergence)", -0.9, (13.85, 6.6)),
     ("events", "O", "pixel", "onset\n(depression)", 0.0, (2.65, 4.75)),
     ("O", "N", "regional", "plane fit\n5 × 5", 0.0, (6.9, 4.65)),
     ("N", "Fev", "pixel", "add\nmeasurement", 0.0, (10.7, 4.65)),
@@ -58,7 +58,8 @@ EDGES = [
     ("R", "F", "global", "prior κ·M R", -0.3, (14.95, 2.75)),
     ("M", "F", "pixel", "", 0.0, None),
     ("gyro", "R", "global", "measurement of R (weak input)", 0.0, (6.9, 1.2)),
-    ("G", "F", "open", "G ↔ F not coupled yet\n(V = −G·F, open)", 0.0, (17.75, 5.9)),
+    ("G", "Fev", "pixel", "sign check:\npolarity = sign(−G·n)", 0.0, (13.05, 5.9)),
+    ("F", "G", "open", "F → G\nopen", 0.0, (17.45, 5.9)),
 ]
 
 

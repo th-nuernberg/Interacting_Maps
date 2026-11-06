@@ -91,6 +91,7 @@ The mode that replaces the per-event F ← G, V and G ← F, V and the F ↔ R l
 | events → O (arrival time per pixel and polarity) | `OnsetRule`: `LatestEventOnset`, `HardGapOnset`, `DepressionOnset` (short-term depression: O ← O + r(t − O), r recovers with τ) | depression, τ = 20 ms (`--onsetRule`, `--onsetTime`) |
 | O → N (normal flow) | `fitNormalFlow`: plane fit to the same-polarity neighbours' arrival times; speed in px/s, variance from the residuals | 5 × 5, horizon 30 ms, time floor 0.1 ms |
 | N → F evidence | `FlowEvidence`: information form Λ = Σ w n nᵀ, η = Σ w n s per pixel, w = 1/σ², fading with the lifetime | replace, lifetime 10 ms (`--evidenceAccumulate`, `--evidenceLifetime`) |
+| G, polarity → F evidence | `directionProbability`: polarity = sign(−G·F); a measurement's information is multiplied by the probability that its direction is right, given polarity and G (σ_G = 0.5 steps/px, π = 0.1) | `weight` (`--polaritySign`) |
 | F evidence → R | `RotationFromFlow`: H = Σ MᵀΛM, b = Σ Mᵀη as running sums that fade as a whole in O(1); R = H⁻¹b in rad/s, solved only when new evidence arrived and R is read | — |
 | gyro → R | `RotationFromFlow::addMeasurement`: a measurement of R with weight 1/σ², fading like the evidence; a weak input | σ = 0.05 rad/s, with `--fuseR` |
 | R → F | `readFlow`: F = (Λ + κI)⁻¹(η + κMR), written into the stored F map where an event reads it and at every output frame; the prior never enters the evidence | κ = 1/(27 px/s)² |

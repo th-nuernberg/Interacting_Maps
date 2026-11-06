@@ -200,6 +200,19 @@ EvidenceChange FlowEvidence::add(int y, int x, const NormalFlow &measurement, do
 }
 
 // ------------------------------------------------------------------------------------------------------------------
+// G, polarity -> F evidence
+
+double directionProbability(const Eigen::Vector2f &G, const Eigen::Vector2f &n, int polarity, double sigmaG,
+                            double flip) {
+    const double along = static_cast<double>(G.dot(n));
+    const double q = 0.5 * std::erfc(-std::abs(along) / (sigmaG * std::sqrt(2.0)));   // Phi(|G . n| / sigmaG)
+    const bool agrees = (-along) * polarity > 0.0;
+    const double right = (agrees ? q : 1.0 - q) * (1.0 - flip);
+    const double wrong = (agrees ? 1.0 - q : q) * flip;
+    return right / (right + wrong);
+}
+
+// ------------------------------------------------------------------------------------------------------------------
 // F evidence -> R
 
 void RotationFromFlow::fadeTo(double t) {

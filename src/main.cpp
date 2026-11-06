@@ -98,6 +98,7 @@ struct ProgramArgs
     float refractoryTime;
     float silentSlack;
     bool randomInit;
+    std::string polaritySign;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -146,7 +147,8 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .silentRule        = vm["silentRule"].as<std::string>(),
         .refractoryTime    = vm["refractoryTime"].as<float>(),
         .silentSlack       = vm["silentSlack"].as<float>(),
-        .randomInit        = vm["randomInit"].as<bool>()
+        .randomInit        = vm["randomInit"].as<bool>(),
+        .polaritySign      = vm["polaritySign"].as<std::string>()
     };
 }
 
@@ -205,7 +207,8 @@ int main(int argc, char* argv[]) {
             ("silentRule", po::value<std::string>()->default_value("gradient"), "With --silentG: gradient (G = grad I when read), rate (relax G at rate_GI/GF_silent) or bound (no event bounds G along F by the thresholds / (|F| dt); falsified at edge fronts)")
             ("refractoryTime", po::value<float>()->default_value(1.2e-3f), "With silentRule bound: s after an event before silence counts")
             ("silentSlack", po::value<float>()->default_value(0.0f), "With silentRule bound: widen both thresholds by this many steps")
-            ("randomInit", po::value<bool>()->default_value(false), "Start F and R random (inherited, for comparison) instead of at zero");
+            ("randomInit", po::value<bool>()->default_value(false), "Start F and R random (inherited, for comparison) instead of at zero")
+            ("polaritySign", po::value<std::string>()->default_value("weight"), "Timing mode: check each normal flow against polarity = sign(-G . F): off | gate | weight");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -249,6 +252,11 @@ int main(int argc, char* argv[]) {
     Parameters parameters = initParameters(args->startTime, args->endTime, args->timeStep);
     parameters.seed = args->seed;
     parameters.randomInitialState = args->randomInit;
+    parameters.polaritySign = args->polaritySign;
+    if (parameters.polaritySign != "off" && parameters.polaritySign != "gate" && parameters.polaritySign != "weight") {
+        std::cerr << "Unknown --polaritySign " << parameters.polaritySign << " (off | gate | weight)" << std::endl;
+        return 1;
+    }
     parameters.useDecay = args->decay;
     parameters.decayParam = args->decayTime;
     parameters.silentRule = args->silentRule;
@@ -423,6 +431,21 @@ int main(int argc, char* argv[]) {
                         onsetRule->update(onsetMap, ey, ex, cEvent->polarity, event->time);
                         normalFlow = timing::fitNormalFlow(onsetMap, ey, ex, cEvent->polarity,
                                                                                     event->time, normalFlowSettings);
+                        if (normalFlow.valid && parameters.polaritySign != "off") {
+                            // G, polarity -> F evidence: G at this pixel before the event's own I/G update
+                            computeGradient(state.MI, state.delta_I, ey, ex);
+                            const Eigen::Vector2f g(state.delta_I(ey, ex, 0), state.delta_I(ey, ex, 1));
+                            if (parameters.polaritySign == "gate") {
+                                const float along = g.dot(normalFlow.n);
+                                if (-along * cEvent->polarity < 0.0f && std::abs(along) > parameters.gradientSigma) {
+                                    normalFlow.valid = false;
+                                }
+                            } else {
+                                const double p = timing::directionProbability(g, normalFlow.n, cEvent->polarity,
+                                                                              parameters.gradientSigma, parameters.flipPrior);
+                                normalFlow.variance = static_cast<float>(normalFlow.variance / std::max(p, 1e-6));
+                            }
+                        }
                         rotationFromFlow.fadeTo(event->time);
                         rotationFromFlow.apply(motionModel.at(ey, ex), flowEvidence.add(ey, ex, normalFlow, event->time));
                         const Eigen::Vector3f &R = rotationFromFlow.rotation();

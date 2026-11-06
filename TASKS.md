@@ -35,7 +35,9 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] Onset rules compared (`experiments/onset_rules.py`, report `experiments/reports/onset-rules.md`): soft onset by depression (τ 10–20 ms) slightly best for rotation, hard gap 10 ms best for single normal flows; both swappable via `experiments/event_maps.py`.
 - [x] Rotation from event timing in C++ (`--rotationFromTiming`, `include/timing.h`): reproduces the prototype (median cos 0.992, |R|/|ω| 0.995, RTF 0.26); gyro as a weak measurement of R; `read_imu` axis order fixed.
 - [x] Timing mode is the default (2026-11-06); the old pipeline runs with `--legacy true`. Still to validate on the simulator (M1).
-- [ ] Couple G ↔ F in real units (V = −G·F in log units/s); a bound from silence was falsified at edge fronts (`experiments/reports/silent-bound.md`).
+- [x] G → F in sign: polarity = sign(−G·F) weights the normal-flow evidence (`--polaritySign weight`, default; `experiments/reports/polarity-sign.md`). A bound from silence was falsified at edge fronts (`experiments/reports/silent-bound.md`).
+- [ ] F → G: correct G's sign along F where F is reliable.
+- [ ] R is 14 ms late (mean cos 0.940, 0.982 when shifted): date measurements at their onset and predict to the present, or shorten the windows.
 - [ ] Decide how event timing enters the network (time-surface normal flow as a relation) and sweep its parameters on the simulator (M1).
 - [ ] IMU fusion units: choose `imuScale` (rad/s → R units). Open: R has no physical time unit yet, see `docs/cpp-implementation.md`. Needs V per time bin (paper) or a calibrated event contribution.
 
