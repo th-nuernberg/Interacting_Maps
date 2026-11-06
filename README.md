@@ -95,7 +95,7 @@ Main options (`./InteractingMaps --help` lists all):
 | `--show`, `--pace`, `--writeFrames` | false, true, true | IMAGES builds: live window, real-time playback, PNG output |
 | `--asyncFR` | true | event-driven F ← R instead of global passes every `timeStep` |
 | `--silentG` | true | time without events at a pixel counts as V = 0 for G |
-| `--decay`, `--clamp`, `--resetG` | true, true, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
+| `--decay`, `--clamp`, `--resetG` | true, false, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--rotationFromTiming` | false | F and R (rad/s) from the arrival times of edges; see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--onsetRule`, `--onsetTime` | `depression`, 0.02 | with `--rotationFromTiming`: arrival time per pixel (`latest`, `gap`, `depression`) and its time constant |
 | `--evidenceLifetime`, `--evidenceAccumulate` | 0.01, false | with `--rotationFromTiming`: lifetime of flow measurements; add instead of replace |

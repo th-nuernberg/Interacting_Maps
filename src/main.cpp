@@ -166,7 +166,7 @@ int main(int argc, char* argv[]) {
             ("fuseI", po::value<bool>()->default_value(false), "Fuse with images folder?")
             ("seed", po::value<unsigned>()->default_value(0), "Seed for random initialisation and update order")
             ("decay", po::value<bool>()->default_value(true), "Decay I towards the neutral potential between events (not in the paper)")
-            ("clamp", po::value<bool>()->default_value(true), "Clip F and G to +-gamma and zero tiny values (not in the paper)")
+            ("clamp", po::value<bool>()->default_value(false), "Clip F and G to +-gamma and zero tiny values (old display-range bound, not in the paper)")
             ("resetG", po::value<bool>()->default_value(false), "IMAGES builds: zero G after each output frame (old hack, not in the paper)")
             ("silentG", po::value<bool>()->default_value(true), "Treat time without events at a pixel as V = 0 for the G <- F relation")
             ("asyncFR", po::value<bool>()->default_value(true), "Event-driven F <- R (closed-form relaxation) instead of global passes every timeStep")
@@ -503,7 +503,10 @@ int main(int argc, char* argv[]) {
 
                         std::string image_name = "VIGF_" + filename.str() + ".png";
                         fs::path image_path = folder_path / image_name;
-                        cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, F_now, image_path, false, 0.1);
+                        // I is in event steps around an unobservable offset; show 0 as mid grey, 10 grey levels per step
+                        const float displayGreyPerEvent = 10.0f;
+                        const Tensor2f I_display = MI_now * displayGreyPerEvent + 128.0f;
+                        cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(I_display), G_now, F_now, image_path, false, 0.1);
                         if (plotRotation) {
                             // omega = -R, from (y, x, z) storage to (x, y, z)
                             const Eigen::Vector3f omega(-state.R(1), -state.R(0), -state.R(2));

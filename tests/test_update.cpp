@@ -494,6 +494,16 @@ TEST_CASE("relaxSilentG: stale G at a pixel an edge has left goes to zero", "[up
     REQUIRE_THAT(G(0, 0, 1), WithinAbs(0.0f, 1e-6));
 }
 
+TEST_CASE("I is in event steps without bounds, and F and G are not clamped by default", "[deviations]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    REQUIRE(p.eventContribution == 1.0f);   // delta log I = +-c per event
+    REQUIRE(p.neutralPotential == 0.0f);    // the offset of log I is unobservable
+    REQUIRE(std::isinf(p.minPotential));
+    REQUIRE(std::isinf(p.maxPotential));
+    REQUIRE_FALSE(p.clampMaps);
+    REQUIRE(std::isinf(p.clampBound()));
+}
+
 TEST_CASE("G reset is off and silent relaxation on by default", "[deviations][silent]") {
     const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
     REQUIRE_FALSE(p.resetGEachFrame);

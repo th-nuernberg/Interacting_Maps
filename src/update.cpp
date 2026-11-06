@@ -525,6 +525,8 @@ void update_IV(Tensor2f &I, const float V, const int y, const int x, const float
 
 void update_Ifusion(Tensor2f &I, const cv::Mat &realImage, const float weight_Ifusion) {
     Tensor2f lastPotential = I;
+    // Not grounded: blends I (event steps, log intensity / c) with the raw frame in [0, 255]. Needs log(frame) / c
+    // and an offset before weight_Ifusion > 0 means anything.
     I = (1-weight_Ifusion) * lastPotential + 255 * weight_Ifusion * Matrix2Tensor(cvMatToEigen(realImage));
 }
 

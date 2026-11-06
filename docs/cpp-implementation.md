@@ -6,7 +6,8 @@ The C++ code in `src/` and `include/` predates the specs in this folder. It runs
 
 | Paper | C++ (`OpticalFlowState`) | Shape | Notes |
 | --- | --- | --- | --- |
-| V | `V` (scalar per event), `V_Vis` (display only) | H × W | `V = polarity · eventContribution`, polarity ∈ {−1, +1} |
+| V | `V` (scalar per event), `V_Vis` (display only) | H × W | `V = polarity · eventContribution` = ±1, polarity ∈ {−1, +1} |
+| I | `MI` | H × W | log intensity in units of the contrast threshold c (event steps), offset 0; shown as grey 128 + 10 · I |
 | I | `MI` | H × W | Not (H+1) × (W+1); see deviations |
 | G | `G` | H × W × 2 | channel 0 = y, channel 1 = x |
 | F | `F` | H × W × 2 | channel 0 = y, channel 1 = x |
@@ -38,9 +39,9 @@ Kept as defaults; each can be switched off (field in `Parameters`, command-line 
 
 | Deviation | Switch | Off means |
 | --- | --- | --- |
-| **V → I injection.** Each event adds `weight_IV · V` to `MI`, clipped to [`minPotential`, `maxPotential`]. The paper never observes I directly. | `weight_IV` | `weight_IV = 0` |
+| **V → I injection.** Each event adds `weight_IV · V` (±1, i.e. Δlog I = ±c) to `MI`. Not clipped since 2026-11-06 (the former [0, 255] with step 10 and neutral 128 was an 8-bit display mapping). The paper never observes I directly. | `weight_IV` | `weight_IV = 0` |
 | **Decay.** `MI` decays exponentially towards `neutralPotential` with time constant `decayParam`. | `useDecay` (`--decay`) | no decay |
-| **Clamping.** F and G are clipped to ±`gamma` and entries below `eps` are zeroed after each update. | `clampMaps` (`--clamp`) | no clipping, no zeroing |
+| **Clamping**, **off by default** since 2026-11-06. F and G are clipped to ±`gamma` (255, the old display range) and entries below `eps` are zeroed after each update. | `clampMaps` (`--clamp`) | no clipping, no zeroing |
 | **Per-frame G reset** when built with `IMAGES`: G is zeroed after each output frame. Old workaround for stale G, superseded by silent-time relaxation below; **off by default**. | `resetGEachFrame` (`--resetG`) | G keeps its state |
 | **Central differences** for ∇I on an H × W grid instead of forward differences on (H+1) × (W+1). | none | — |
 
@@ -95,4 +96,7 @@ On `shapes_rotation` (60 s, events only), R against the gyro, per 1/60 s frame (
 
 ## Known issues
 
-See M0 in `TASKS.md` for the full list and status. R does not yet track the camera rotation: on shapes_rotation, the correlation of R with the gyro is below 0.25 in both the synchronous and the event-driven version (2026-10-30). Open design question: R has no physical time unit. V is a per-event contribution, not a temporal derivative per bin, so F (and R) are "pixels per event contribution". Fusing a gyro (rad/s) into R therefore needs an explicit scale that the current model does not define. `update_RIMU` takes it as `Parameters::imuScale` (default 1, i.e. unscaled) together with the camera–IMU rotation `R_cam_imu` (default identity); both must be set before `weight_RIMU > 0` gives meaningful results.
+See M0 in `TASKS.md` for the full list and status, and [assumptions.md](assumptions.md) for every value the network rests on.
+
+- **Old pipeline (`--rotationFromTiming false`): R has no physical unit and does not track the camera rotation** (correlation with the gyro below 0.25). V is a step per event, not a temporal derivative, so F is in px per event; a pixel's event rate does not carry the speed on this sensor (`experiments/reports/v-units.md`). `update_RIMU`'s `imuScale` is therefore undefined. Timing mode solves this for F and R (rad/s, cos 0.99 against the gyro).
+- **I drifts without the decay:** OFF events outnumber ON events 1.36 : 1 per pixel, i.e. c_ON ≈ 1.36 c_OFF; the decay (τ = 0.1 s, inherited) is what keeps I usable (`experiments/reports/polarity-check.md`).

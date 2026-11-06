@@ -70,17 +70,19 @@ struct Parameters
     float lr           = 1.0f;
     int   FR_update_counter = 100;
 
-    // Image
-    float eventContribution = 10.0f;
-    float minPotential      = 0.0f;
-    float maxPotential      = 255.0f;
-    float neutralPotential  = 128.0f;
+    // Image. I is log intensity in units of the contrast threshold c: an event is a step of +-1 (delta log I = +-c).
+    // The offset of log I is unobservable, so I starts at 0; no bounds (never clamp). The former 10 / 128 / [0, 255]
+    // only mapped I onto 8-bit grey values; that mapping now lives in the display (displayGreyPerEvent in main.cpp).
+    float eventContribution = 1.0f;
+    float minPotential      = -std::numeric_limits<float>::infinity();
+    float maxPotential      = std::numeric_limits<float>::infinity();
+    float neutralPotential  = 0.0f;
     int   vis_counter = -1;
 
     // Deviations from the paper (docs/cpp-implementation.md). Defaults keep the established behaviour.
     // V -> I injection is controlled by weight_IV (0 disables it).
     bool useDecay        = true;    // decay MI towards neutralPotential between events
-    bool clampMaps       = true;    // clip F and G to +-gamma and zero entries below eps
+    bool clampMaps       = false;   // clip F and G to +-gamma and zero entries below eps (old display-range bound)
     bool resetGEachFrame = false;   // IMAGES builds only: zero G after writing each output frame (old hack)
 
     // Pixels without events carry V = 0 (paper: every pixel is updated every iteration). G <- I and G <- F (V = 0)

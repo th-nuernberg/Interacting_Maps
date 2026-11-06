@@ -11,6 +11,8 @@ State on 2026-11-06 (branch `rework/incomaps-alignment`). Every choice the curre
 | **open** | chosen deliberately, but the value still has to be determined (sweep, simulator M1) |
 | **violated** | known to be false here; the effect is noted |
 
+**Rule:** every inherited value is questioned and replaced by a grounded approximation where possible. The step 10, neutral 128 and bounds [0, 255] were chosen to map I directly onto 8-bit grey values; they were display choices, and the display now does that mapping itself.
+
 Parameter names refer to `Parameters` in [include/interacting_maps.h](../include/interacting_maps.h). Reports are in [experiments/reports/](../experiments/reports/).
 
 ## 1. World and sensor
@@ -19,7 +21,7 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 |---|---|---|---|
 | W1 | **Static scene, camera only rotates** (WP1). All pixels share one R. | **violated**, mildly | The mocap shows 0.23 m/s median translation in shapes_rotation. This matters most at slow rotation, where measured speeds are too high ([v-units](../experiments/reports/v-units.md)). Moving objects would also break it: the fit to R is plain least squares with no outlier handling. |
 | W2 | **Brightness constancy**, V = −G·F: the scene's brightness pattern moves without changing (Lambertian surfaces, constant lighting). | physics | Holds for shapes_rotation. Frame gradient with gyro flow predicts polarity for 96 % of events ([polarity-check](../experiments/reports/polarity-check.md)); the remaining 4 % include noise and blur. |
-| W3 | **An event means Δlog I = ±c, with the same c for ON and OFF.** | **violated** in effect | OFF events outnumber ON events: without the decay, I drifts into its lower bound within about 10 s ([polarity-check](../experiments/reports/polarity-check.md)). The cause could be c_ON ≠ c_OFF, scene statistics, or noise; not yet separated. |
+| W3 | **An event means Δlog I = ±c, with the same c for ON and OFF.** | **violated**, measured | OFF : ON = 1.32 overall and 1.36 per pixel (IQR 1.22–1.53). The camera keeps viewing the same scene, so each pixel's log I returns to where it started. That implies c_ON ≈ 1.36 · c_OFF, and a pixel collects about 79 net OFF steps per minute. Without the decay, I drifts ([polarity-check](../experiments/reports/polarity-check.md)). Grounded replacement: separate ON and OFF steps, estimated per pixel. |
 | W4 | **c never needs a value.** It cancels in F = −V G/\|G\|² as long as V and G use the same intensity unit; I is kept in "event steps". | physics | The c values fitted from frames include the unknown camera response and are not usable as the sensor's threshold ([v-units](../experiments/reports/v-units.md)). |
 | W5 | **A pixel's own event rate does not carry the edge speed** on this sensor (bandwidth, refractory time). | measured | The burst rate grows as speed^0.24, where an ideal sensor gives speed^1 ([v-units](../experiments/reports/v-units.md)). Might not hold at slow speeds or in bright light; check on the simulator. |
 | W6 | **The pixel delays an edge's onset by the same amount at neighbouring pixels**, so differences in arrival time carry the speed. | measured, indirectly | This is the basis of the timing mode. Normal speed is within 3–19 % of the truth above 240 px/s ([v-units](../experiments/reports/v-units.md)). Not tested directly (for example across contrast). |
@@ -42,11 +44,11 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 
 | # | Assumption | Value | Status | Evidence / effect |
 |---|---|---|---|---|
-| V1 | **Every event adds a step of the same size to I**, ±`eventContribution`. | 10 | inherited | Has no time unit ([v-units](../experiments/reports/v-units.md)). In timing mode it only sets the unit of I and G ("c/10"), so its value matters only together with the bounds below: 128/10 means about 13 net events from neutral to a bound. |
+| V1 | **Every event adds a step of ±1 to I**, i.e. I is log intensity in units of c. | 1 (was 10, for display) | **physics** since 2026-11-06 | Exactly equivalent to the old 10: same R.txt, G = G_old/10 to float rounding. Still assumes the same c for ON and OFF (W3). |
 | V2 | V → I adds the full step (`weight_IV`). | 1 | inherited ("weights 1" rule) | A different weight is equivalent to a different V1. |
-| V3 | **I starts at, and decays back to, a neutral value.** | 128 | inherited | The 8-bit display range. The number has no meaning beyond V1 and V4. |
-| V4 | **I is clamped** to [`minPotential`, `maxPotential`]. | [0, 255] | inherited; breaks "never clamp" | Inactive with decay (0.0 % of events). Without decay, 78 % of events touch the bound ([polarity-check](../experiments/reports/polarity-check.md)). |
-| V5 | **I decays to neutral** with time constant `decayParam`. So I is a *high-pass filtered* log I that forgets a static scene after about 0.1 s, not log I itself. | τ = 0.1 s | inherited value; the *need* is measured | Without it, I drifts (W3) and polarity agreement falls from 84 % to 70 %. The value is unjustified. Alternatives: balance ON and OFF steps (W3), or adapt τ. |
+| V3 | **I starts at, and decays back to, 0.** | 0 (was 128, for display) | **physics** since 2026-11-06 | The offset of log I is unobservable (the β ambiguity), so 0 is as good as any value. The display shows 0 as mid grey. |
+| V4 | **I has no bounds.** | ±∞ (was [0, 255], for display) | **physics** since 2026-11-06 | The bounds were inactive with the decay (0.0 % of events). Without the decay, I now drifts freely instead of sticking at 0 (W3). |
+| V5 | **I decays to 0** with time constant `decayParam`. So I is a *high-pass filtered* log I that forgets a static scene after about 0.1 s, not log I itself. | τ = 0.1 s | inherited value; the *need* is measured | It compensates the ON/OFF imbalance (W3): without it, polarity agreement falls from 84 % to 70 %. Grounded replacement: ON/OFF steps from W3, then a slow leak only for noise. |
 | V6 | I ← G pushes I towards the integral of G, with full weight. | `weight_IG` = 1 | inherited ("weights 1") | Not examined separately. |
 
 ## 4. G
@@ -54,7 +56,7 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 | # | Assumption | Value | Status | Evidence / effect |
 |---|---|---|---|---|
 | G1 | **G = ∇I** at the event pixel and its 4 neighbours after every event (G ← I with weight 1). | `weight_GI` = 1 | inherited ("weights 1") | G points the right way (median cos 0.92 with the frame gradient). It is wrong about 3.5× as often as the frames ([polarity-check](../experiments/reports/polarity-check.md)). Typical \|G\| corresponds to about one event step. |
-| G2 | **G is clamped** to ±`gamma` and values below `eps` are zeroed. | 255, 1e-5 | inherited; breaks "never clamp" | Inactive: the largest \|G\| is 68. |
+| G2 | **F and G are not clamped** (`--clamp` turns the old ±255 / 1e-5 back on). | off (was on) | **physics** since 2026-11-06 | Was inactive in timing mode (the largest \|G\| was 68). In the old pipeline it bounded F = −V/G in flat regions; that now shows as large F where \|G\| ≈ 0. |
 | G3 | **A pixel without events has V = 0**, an observation, not missing data (paper). Strictly, it means \|Δlog I\| < c. | — | physics, approximately | Replaced the G reset hack. Slow or low-contrast changes below c are treated as "no change". |
 | G4 | **Silent relaxation:** G ← I at `rate_GI_silent`, and G loses its component along F at `rate_GF_silent`. | 22.3 /s each | inherited values | The former weight 0.2 per 10 ms, converted to a rate. Open (sweep). In timing mode, only F's direction is used. |
 | G5 | **∇I and F stay constant over a pixel's silent time**, so the silent relaxation can be solved in closed form. | — | approximation | An event two pixels away can change ∇I in between. |
@@ -110,6 +112,6 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 
 1. **W3 + V5: ON/OFF imbalance and the I leak.** They decide whether I and G can be trusted. G is currently the weaker map (84 % vs 96 %).
 2. **W1: rotation only.** Translation biases slow speeds, and moving objects would corrupt R, since there is no robust fit (T8).
-3. **V1, V3, V4, G2: the numbers 10, 128, 255.** They are units and bounds from the 8-bit display. With the decay on, the clamps are inactive. Without the decay, they dominate.
+3. **V1, V3, V4, G2: the numbers 10, 128, 255** were display choices; replaced on 2026-11-06 by event units, offset 0, and no bounds (exactly equivalent in timing mode).
 4. **T5: independent measurement noise.** It makes R overconfident and could explain the spikes.
 5. **I1: float times.** Harmless now; a silent failure on long recordings.

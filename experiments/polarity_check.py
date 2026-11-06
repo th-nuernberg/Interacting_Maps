@@ -15,7 +15,7 @@ Usage (repository root):
     ./InteractingMaps --startTime 0 --endTime 60 --resultsDirectory polarity_default --rotationFromTiming true \\
         --writeFrames false --dumpEvents 20            # and e.g. --decay false into polarity_nodecay
     python/.venv/bin/python experiments/polarity_check.py default=output/polarity_default \\
-        nodecay=output/polarity_nodecay --stride 20
+        nodecay=output/polarity_nodecay --stride 20 [--i-bounds 0 255 for runs before I was unbounded]
 """
 import argparse
 import json
@@ -78,14 +78,15 @@ def binned(values, agree, ok, edges):
     return np.array(rate), np.array(count)
 
 
-def analyse(name, run):
+def analyse(name, run, bounds=None):
     d, motion = load(run)
     g = d["G"].astype(np.float64)
     g_norm = np.linalg.norm(g, axis=1)
     out = dict(run=str(run), events=len(d), G_zero=float(np.mean(g_norm < 1e-6)),
-               N_valid=float(np.mean(d["Nvalid"] > 0)),
-               I_at_bound=float(np.mean((d["Imin"] <= 0.0) | (d["Imax"] >= 255.0))),
-               I_at_upper=float(np.mean(d["Imax"] >= 255.0)), I_at_lower=float(np.mean(d["Imin"] <= 0.0)))
+               N_valid=float(np.mean(d["Nvalid"] > 0)))
+    lo, hi = bounds if bounds else (-np.inf, np.inf)      # I's clamp bounds of the run (0 255 before 2026-11-06)
+    out.update(I_at_bound=float(np.mean((d["Imin"] <= lo) | (d["Imax"] >= hi))),
+               I_at_upper=float(np.mean(d["Imax"] >= hi)), I_at_lower=float(np.mean(d["Imin"] <= lo)), bounds=[lo, hi])
     out["sign"] = {}
     for m, u in motion.items():
         valid = d["Nvalid"] > 0 if m.startswith("N ") else None
@@ -153,6 +154,7 @@ def main():
     ap.add_argument("--cache", type=Path, default=Path("experiments/results/v_units"))
     ap.add_argument("--out", type=Path, default=Path("experiments/results/polarity_check"))
     ap.add_argument("--no-frames", action="store_true", help="skip the frame-gradient join")
+    ap.add_argument("--i-bounds", type=float, nargs=2, help="clamp bounds of I in the runs (old runs: 0 255)")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -163,7 +165,7 @@ def main():
         import v_units
         gt = v_units.ground_truth_events(args.data, args.cache)
     for name, path in runs:
-        d, results[name] = analyse(name, Path(path))
+        d, results[name] = analyse(name, Path(path), args.i_bounds)
         if gt is not None:
             frames[name] = frame_reference(d, args.stride, gt)
 
@@ -251,7 +253,7 @@ def main():
     edges = np.arange(0, 60.01, 1.0)
     for n in names:
         r = results[n]
-        at = ((r["Imin"] <= 0) | (r["Imax"] >= 255)).astype(float)
+        at = ((r["Imin"] <= r["bounds"][0]) | (r["Imax"] >= r["bounds"][1])).astype(float)
         share = np.histogram(r["t"], edges, weights=at)[0] / np.maximum(np.histogram(r["t"], edges)[0], 1)
         ax.plot(0.5 * (edges[1:] + edges[:-1]), share, color=colours[n], lw=2, label=n)
     ax.set_ylim(0, 1)
