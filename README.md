@@ -11,7 +11,7 @@ The maps of the current network and the relations between them, by scope: pixel,
 ## Status
 
 - **Milestone M0** (rework of the C++ implementation, see [TASKS.md](TASKS.md)) is largely done: known implementation flaws are fixed one commit at a time, each with a Catch2 regression test. The network now runs faster than real time (RTF ≈ 0.11 on `shapes_rotation`).
-- **Rotation from event timing** (timing mode, the default since 2026-11-06): F gets evidence from the arrival times of edges at neighbouring pixels, and R is fitted to it in rad/s. On `shapes_rotation`, from events alone, R follows the gyro with median cos 0.992 and |R|/|ω| 0.995 (RTF 0.26). With `--legacy true`, the **legacy pipeline** runs instead: events are read as a step V with no time unit, so F and R have none, and R does not track the rotation. It is kept for comparison with the paper.
+- **Rotation from event timing** (timing mode, the default since 2026-11-06): F gets evidence from the arrival times of edges at neighbouring pixels, and R is fitted to it in rad/s. On `shapes_rotation`, from events alone, R follows the gyro with median cos 0.998, mean 0.986 and a 4 ms delay (RTF 0.21); |R| is still 10 % too large. With `--legacy true`, the **legacy pipeline** runs instead: events are read as a step V with no time unit, so F and R have none, and R does not track the rotation. It is kept for comparison with the paper.
 - The Python package (`python/`, `incomaps`: simulator, NumPy reference, generic engine) is still a scaffold (milestones M1–M3).
 
 ## Repository layout
@@ -103,6 +103,7 @@ Main options (`./InteractingMaps --help` lists all):
 | `--decay`, `--decayTime` | true, 0.06 | I forgets towards 0 with this time constant (s), derived from the error each event adds; see [forgetting.md](experiments/reports/forgetting.md) |
 | `--silentRule` | `gradient` | what G does between events: `gradient` (G = ∇I when read), `rate` (former relaxation), `bound` (silence bounds G along F; falsified at edge fronts), see [silent-bound.md](experiments/reports/silent-bound.md) |
 | `--polaritySign` | `weight` | check each normal flow against polarity = sign(−G·F): `weight` (by the probability that its direction is right), `gate` or `off`; see [polarity-sign.md](experiments/reports/polarity-sign.md) |
+| `--predictRotation`, `--signCorrectG` | true, true | R now (measurements dated at their onsets, R fitted with its rate of change) instead of 12 ms late; G's sign along F corrected from each event's polarity; see [delay-and-sign.md](experiments/reports/delay-and-sign.md) |
 | `--clamp`, `--resetG` | false, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--legacy` | false | run the legacy pipeline (F ← G, V and the F ↔ R loop; no units) instead of timing mode; see [docs/cpp-implementation.md](docs/cpp-implementation.md). Reports before 2026-11-06 write timing mode as `--rotationFromTiming true`. |
 | `--randomInit` | false | start F and R random (inherited, for comparison) instead of at zero |
@@ -128,6 +129,7 @@ PYTHONPATH=experiments python/.venv/bin/python experiments/v_units.py
 | `experiments/forgetting.py` | How much error does each event add to I, and how fast must I forget? | [forgetting.md](experiments/reports/forgetting.md) |
 | `experiments/polarity_check.py` with `--silentRule` runs | What should a silent pixel do to G: relax with rates, follow ∇I, or obey the bound that silence gives? | [silent-bound.md](experiments/reports/silent-bound.md) |
 | `--polaritySign` runs | Does brightness constancy in sign (polarity = sign(−G·F)) improve F and R? Why does R have spikes? | [polarity-sign.md](experiments/reports/polarity-sign.md) |
+| `experiments/rotation_accuracy.py` | How accurate is R against the IMU, and how late? Delay correction and F → G sign correction | [delay-and-sign.md](experiments/reports/delay-and-sign.md) |
 
 `experiments/event_maps.py` holds the shared maps and relations (event index, onset rules, normal flow) behind small interfaces, so rules can be swapped.
 

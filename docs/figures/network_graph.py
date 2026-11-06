@@ -31,12 +31,12 @@ NODES = {
     "contrast": (5.0, 7.6, "contrast steps", "c_ON / c_OFF per pixel,\nfrom ON/OFF counts", "map"),
     "V":        (8.8, 7.6, "V", "step of this event:\n−1 or +c_ON/c_OFF", "map"),
     "I":        (12.6, 7.6, "I", "log intensity (steps),\nforgets τ = 0.06 s", "map"),
-    "G":        (16.4, 7.6, "G", "∇I when read\n(steps / px)", "map"),
+    "G":        (16.4, 7.6, "G", "∇I + sign correction\n(steps / px)", "map"),
     "O":        (5.0, 4.2, "O", "arrival time per pixel\nand polarity", "map"),
     "N":        (8.8, 4.2, "N", "normal flow of\nthis event (px/s)", "map"),
-    "Fev":      (12.6, 4.2, "F evidence", "Λ, η per pixel,\nfade over 10 ms", "map"),
+    "Fev":      (12.6, 4.2, "F evidence", "Λ, η per pixel, dated,\nfade over 10 ms", "map"),
     "F":        (16.4, 4.2, "F", "stored flow (px/s),\nreadable any time", "map"),
-    "R":        (12.6, 0.9, "R", "camera rotation\n(rad/s), one 3-vector", "global"),
+    "R":        (12.6, 0.9, "R", "rotation now (rad/s)\nand its rate of change", "global"),
     "M":        (16.4, 0.9, "M", "motion model per pixel\n(calibration, lens)", "static"),
 }
 BOX_W, BOX_H = 2.55, 1.25
@@ -52,14 +52,14 @@ EDGES = [
     ("events", "O", "pixel", "onset\n(depression)", 0.0, (2.65, 4.75)),
     ("O", "N", "regional", "plane fit\n5 × 5", 0.0, (6.9, 4.65)),
     ("N", "Fev", "pixel", "add\nmeasurement", 0.0, (10.7, 4.65)),
-    ("Fev", "R", "global", "H = ΣMᵀΛM, b = ΣMᵀη\nR = H⁻¹b when changed", 0.0, (11.1, 2.55)),
+    ("Fev", "R", "global", "least squares over\nR(tᵢ) = R + Ṙ(tᵢ − t),\ntᵢ: when edges passed", 0.0, (11.1, 2.55)),
     ("M", "R", "pixel", "", 0.0, None),
     ("Fev", "F", "pixel", "readout", 0.0, (14.5, 4.45)),
     ("R", "F", "global", "prior κ·M R", -0.3, (14.95, 2.75)),
     ("M", "F", "pixel", "", 0.0, None),
     ("gyro", "R", "global", "measurement of R (weak input)", 0.0, (6.9, 1.2)),
     ("G", "Fev", "pixel", "sign check:\npolarity = sign(−G·n)", 0.0, (13.05, 5.9)),
-    ("F", "G", "open", "F → G\nopen", 0.0, (17.45, 5.9)),
+    ("F", "G", "pixel", "sign correction:\nG along F", 0.0, (17.55, 5.9)),
 ]
 
 
@@ -120,9 +120,11 @@ def main():
                 linespacing=1.15)
 
     # Legend: relation scope (colour + dash) and node kinds
-    handles = [Line2D([0], [0], color=SCOPE[s][0], lw=2.2, linestyle=SCOPE[s][1]) for s in SCOPE]
-    labels = ["pixel relation (one pixel)", "regional relation (neighbourhood)", "global relation (all pixels)",
-              "open, not in the network yet"]
+    names = {"pixel": "pixel relation (one pixel)", "regional": "regional relation (neighbourhood)",
+             "global": "global relation (all pixels)", "open": "open, not in the network yet"}
+    used = [s for s in SCOPE if any(edge[2] == s for edge in EDGES)]
+    handles = [Line2D([0], [0], color=SCOPE[s][0], lw=2.2, linestyle=SCOPE[s][1]) for s in used]
+    labels = [names[s] for s in used]
     ax.legend(handles, labels, loc="lower left", bbox_to_anchor=(0.0, 0.035), ncol=4, frameon=False, fontsize=9,
               labelcolor=TEXT, handlelength=3.2)
     ax.text(0.15, -1.65, "stacked box: one value per pixel  ·  double outline: one value for the whole image  ·  "

@@ -6,7 +6,7 @@ There are three layers:
 
 | Layer | Checks | Ground truth | Where |
 |---|---|---|---|
-| **Unit tests** (66 Catch2 cases, 747 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
+| **Unit tests** (73 Catch2 cases, 782 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
 | **Method experiments** (Python) | does an idea work on real data before it is ported? | gyro, DAVIS frames | `experiments/`, reports in `experiments/reports/` |
 | **End-to-end runs** (C++ binary) | does the whole network track the camera, how fast, and did a change break anything? | gyro (display/scoring only), earlier outputs | `output/<run>/`, `experiments/plot_r_vs_gyro.py` |
 
@@ -105,6 +105,13 @@ The pipeline per event: onset map O → normal flow N → flow evidence (Λ, η)
 | Gyro-like measurements of R alone determine R | the `--fuseR` input path |
 | readFlow gives R's prediction without evidence and follows strong evidence along n | the stored F: prior where unmeasured, data along n where measured |
 | directionProbability: polarity and G confirm or contradict a normal flow's direction | G → F in sign, Bayes with σ_G and π |
+| fitNormalFlow dates the measurement at the mean of the onsets it fitted | measurement time |
+| rotationAt gives R now for a changing rotation; rotation() gives its past average | delay correction |
+| rotationAt extrapolates between solves and keeps exact moments over 10 s rebases | solve interval, epoch rebase |
+| rotationAt falls back to the average when all evidence describes one time | no rate without time spread |
+| correctGradientSign moves G along F to the side the polarity requires, weighed by G's confidence | F → G in sign |
+| readCorrectedGradient adds the correction, which forgets with I's time constant | δG decay |
+| The sign correction of G and the delay correction of R are on by default | defaults |
 | Normal flow is weighted by its polarity check by default | default `weight` |
 
 ### Defaults, deviations and determinism `[deviations]` `[determinism]`
@@ -153,12 +160,13 @@ Each answers one question on `shapes_rotation` before anything is ported. Refere
 | [forgetting.md](../experiments/reports/forgetting.md) | How much error does each event add to I, and how fast must I forget? | σ² = 1.9 steps² per event; per-pixel steps remove the quadratic drift. τ* = 1/(σ²·rate) = 0.06 s is the optimum of a sweep (0.850, was 0.836 at 0.1 s); now the default. |
 | [silent-bound.md](../experiments/reports/silent-bound.md) | What should a silent pixel do to G? | G = ∇I when read equals the inherited rate relaxation (0.850) and is now the default. The bound from silence is falsified at edge fronts (0.752). Refractory time measured: 1.2 ms. |
 | [polarity-sign.md](../experiments/reports/polarity-sign.md) | Does G → F in sign (polarity = sign(−G·F)) improve F and R? | Measurements that contradict polarity and G are wrong 53 % of the time (vs 15 %). Weighting by P(direction right) is the default: R mean cos 0.938 → 0.940. R's spikes are latency: R is 14 ms late (0.982 when shifted). |
+| [delay-and-sign.md](../experiments/reports/delay-and-sign.md) | Can R be made current, and can F correct G? | Dating measurements and fitting Ṙ: mean cos 0.940 → 0.986, delay 12 → 4 ms, spikes 12 % → 2 %; exposes a 10 % magnitude bias. F → G in sign: G right way 92.0 → 93.2 % (frames). Both default. |
 
 ## 3. End-to-end runs (C++)
 
 | Check | How | Latest result |
 |---|---|---|
-| **Accuracy vs gyro**, events only (timing mode) | `experiments/plot_r_vs_gyro.py output/<run>/R.txt`; live in the rotation plot | 60 s: cos median 0.992, mean 0.938; \|ω\| ratio 0.995 [0.86, 1.14]; per-axis corr 0.956 / 0.963 / 0.954 |
+| **Accuracy vs gyro**, events only (timing mode) | `experiments/plot_r_vs_gyro.py output/<run>/R.txt`; live in the rotation plot | 60 s: cos median 0.998, mean 0.986; \|ω\| ratio 1.10 [1.05, 1.18]; per-axis corr 0.989 / 0.991 / 0.988; delay 4 ms |
 | Variants | same, with `--fuseR`, `--evidenceAccumulate`, `--onsetRule gap` | mean cos 0.941 / 0.918 / 0.933 |
 | **Regression when the new mode is off** | compare R.txt with the run before the change | bit-identical |
 | **Speed** | `Algorithm took … RTF` line, events loaded into memory first | timing mode RTF 0.25 (unpaced) |

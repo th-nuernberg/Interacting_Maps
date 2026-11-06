@@ -36,8 +36,10 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [x] Rotation from event timing in C++ (`--rotationFromTiming`, `include/timing.h`): reproduces the prototype (median cos 0.992, |R|/|ω| 0.995, RTF 0.26); gyro as a weak measurement of R; `read_imu` axis order fixed.
 - [x] Timing mode is the default (2026-11-06); the old pipeline runs with `--legacy true`. Still to validate on the simulator (M1).
 - [x] G → F in sign: polarity = sign(−G·F) weights the normal-flow evidence (`--polaritySign weight`, default; `experiments/reports/polarity-sign.md`). A bound from silence was falsified at edge fronts (`experiments/reports/silent-bound.md`).
-- [ ] F → G: correct G's sign along F where F is reliable.
-- [ ] R is 14 ms late (mean cos 0.940, 0.982 when shifted): date measurements at their onset and predict to the present, or shorten the windows.
+- [x] F → G in sign (`--signCorrectG`, default): G right way 92.0 → 93.2 % against the frames.
+- [x] R's delay: measurements dated at their onsets, R fitted with Ṙ (`--predictRotation`, default): delay 12 → 4 ms, mean cos 0.940 → 0.986 (`experiments/reports/delay-and-sign.md`).
+- [ ] |ω| is 10 % too large once the delay is removed: the normal-flow speed bias.
+- [ ] Single-frame glitches (e.g. 25.55 s); the remaining 4 ms; evidence lifetime (5 ms looks better).
 - [ ] Decide how event timing enters the network (time-surface normal flow as a relation) and sweep its parameters on the simulator (M1).
 - [ ] IMU fusion units: choose `imuScale` (rad/s → R units). Open: R has no physical time unit yet, see `docs/cpp-implementation.md`. Needs V per time bin (paper) or a calibrated event contribution.
 
