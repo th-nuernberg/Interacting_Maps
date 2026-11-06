@@ -17,7 +17,7 @@ The original algorithm works on frames of accumulated events. This implementatio
 | `src/`, `include/`, `tests/` | Event-based C++ implementation, Catch2 tests |
 | `python/` | Python package `incomaps`: simulator with ground truth, NumPy reference, evaluation (in progress) |
 | `experiments/` | Offline experiments on recorded data (scripts and reports; results in `experiments/results/`, not tracked) |
-| `docs/` | Paper summary, design, work-package specs, validation plan, notes on the C++ implementation |
+| `docs/` | Paper summary, design, work-package specs, validation plan, notes on the C++ implementation, tests, assumptions |
 | `configs/` | Network declarations (maps, relations, rates) |
 | `res/<dataset>/` | Input data (see below) |
 | `TASKS.md` | Milestones with acceptance criteria |
@@ -32,7 +32,7 @@ ctest --test-dir build --output-on-failure
 
 Requires OpenCV, HDF5 (with C++ bindings) and Eigen to be installed; Boost, Catch2, pybind11 and autodiff are fetched by CPM.
 
-What the tests and experiments check: [docs/tests.md](docs/tests.md).
+What the tests and experiments check: [docs/tests.md](docs/tests.md). Every assumption the network rests on, with its status: [docs/assumptions.md](docs/assumptions.md).
 
 The default build computes the maps and writes `R.txt`. To also produce images (the V/I/G/F panels, a live window), build with `IMAGES` in a separate build directory:
 
@@ -114,6 +114,7 @@ PYTHONPATH=experiments python/.venv/bin/python experiments/v_units.py
 | `experiments/v_units.py` | How should events be read as V = ∂ log I / ∂t? | [v-units.md](experiments/reports/v-units.md) |
 | `experiments/r_prototype.py` | Rotation from event timing: does the F ↔ R loop settle to the steady state, and how fast? | [r-prototype.md](experiments/reports/r-prototype.md) |
 | `experiments/onset_rules.py` | Which onset rule (latest event, burst gap, synaptic depression) gives the best arrival times? | [onset-rules.md](experiments/reports/onset-rules.md) |
+| `experiments/polarity_check.py` | Does the network's G predict event polarity, sign(−G·u)? Needs a C++ run with `--dumpEvents` | [polarity-check.md](experiments/reports/polarity-check.md) |
 
 `experiments/event_maps.py` holds the shared maps and relations (event index, onset rules, normal flow) behind small interfaces, so rules can be swapped.
 
