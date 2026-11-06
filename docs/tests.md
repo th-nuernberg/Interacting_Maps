@@ -129,6 +129,7 @@ Each answers one question on `shapes_rotation` before anything is ported. Refere
 | [v-units.md](../experiments/reports/v-units.md) | Which reading of the events gives V (and so F, R) in real units? | Per-pixel event rates carry almost no speed (rate ∝ speed^0.24). Arrival times across neighbours (plane fit) give normal flow in px/s, within 3–19 % above 240 px/s. |
 | [r-prototype.md](../experiments/reports/r-prototype.md) | Does the F ↔ R loop with fading measurements settle into a state that tracks the rotation? | Yes: steady state cos 0.99 (median), ratio 1.00, no fitted scale. The loop reaches the same fixed point but needs 100–300 trips per frame; solved directly instead. Lens distortion is needed for the magnitude (pinhole: −7 to −10 %). |
 | [onset-rules.md](../experiments/reports/onset-rules.md) | Which rule turns a pixel's burst into an arrival time? | Any burst rule beats the latest event. Depression τ = 10–20 ms, U = 1 is best for rotation (mean cos 0.938); hard gap is best for single measurements. |
+| [polarity-check.md](../experiments/reports/polarity-check.md) | Is the network's G good enough to predict event polarity, sign(−G·u)? | 84 % agreement (frames: 96 %); G points the right way (cos 0.92). Errors come from G, not from the motion. Without the I decay, I drifts into its clamp and agreement falls to 70 %. |
 
 ## 3. End-to-end runs (C++)
 

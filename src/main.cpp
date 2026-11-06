@@ -19,6 +19,7 @@
 #include <atomic>
 #include <mutex>
 #include <thread>
+#include <fstream>
 
 namespace po = boost::program_options;
 
@@ -87,6 +88,7 @@ struct ProgramArgs
     double evidenceLifetime;
     bool evidenceAccumulate;
     bool plotRotation;
+    int dumpEvents;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -126,7 +128,8 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .onsetTime         = vm["onsetTime"].as<double>(),
         .evidenceLifetime  = vm["evidenceLifetime"].as<double>(),
         .evidenceAccumulate = vm["evidenceAccumulate"].as<bool>(),
-        .plotRotation      = vm["plotRotation"].as<bool>()
+        .plotRotation      = vm["plotRotation"].as<bool>(),
+        .dumpEvents        = vm["dumpEvents"].as<int>()
     };
 }
 
@@ -176,7 +179,8 @@ int main(int argc, char* argv[]) {
             ("onsetTime", po::value<double>()->default_value(0.02), "With rotationFromTiming: depression recovery time or burst gap (s)")
             ("evidenceLifetime", po::value<double>()->default_value(0.01), "With rotationFromTiming: lifetime of flow measurements (s)")
             ("evidenceAccumulate", po::value<bool>()->default_value(false), "With rotationFromTiming: add measurements at a pixel instead of replacing them")
-            ("plotRotation", po::value<bool>()->default_value(true), "IMAGES builds with rotationFromTiming: plot R against the gyro (display only) below the maps");
+            ("plotRotation", po::value<bool>()->default_value(true), "IMAGES builds with rotationFromTiming: plot R against the gyro (display only) below the maps")
+            ("dumpEvents", po::value<int>()->default_value(0), "With rotationFromTiming: write the maps at every n-th event to event_diagnostics.bin (0 = off)");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -246,10 +250,30 @@ int main(int argc, char* argv[]) {
 
     // Plot of R against the gyro, for the display only: the gyro never reaches the network unless --fuseR.
     const bool plotRotation = args->plotRotation && parameters.rotationFromTiming && fs::exists(imuPath);
-    const GyroReference gyroReference = plotRotation ? GyroReference::load(imuPath, parameters.R_cam_imu) : GyroReference{};
+    const bool dumpEvents = args->dumpEvents > 0 && parameters.rotationFromTiming && fs::exists(imuPath);
+    const GyroReference gyroReference = (plotRotation || dumpEvents) ? GyroReference::load(imuPath, parameters.R_cam_imu) : GyroReference{};
     RotationPlot rotationPlot(parameters.startTime, parameters.endTime);
     const double imuLag = 0.004;   // s, IMU behind the events (experiments/v_units.py)
     const int plotHeight = 400;
+
+    // Diagnostics for experiments/polarity_check.py: the maps at an event pixel just before the event's I/G update
+    struct EventDiagnostics {
+        double t;
+        float y, x, p;
+        float G[2], F[2], MR[2], MRgyro[2];     // (y, x); MR = flow predicted by R, MRgyro = by the gyro
+        float Nvalid, N[2], Nspeed;             // normal flow of this event, unit direction (y, x) and px/s
+        float I, Imin, Imax;                    // I at the pixel and over its 3 x 3 stencil
+        float dtPrevious;                       // s since this pixel's previous event (any polarity)
+    };
+    std::ofstream diagnosticsFile;
+    std::vector<double> lastEventAt;
+    long long cameraEventCount = 0;
+    if (dumpEvents) {
+        diagnosticsFile.open(setupFilePath(folder_path, "event_diagnostics.bin"), std::ios::binary);
+        lastEventAt.assign(static_cast<size_t>(res.height) * res.width, -1.0);
+        std::cout << "Writing every " << args->dumpEvents << "th event to event_diagnostics.bin ("
+                  << sizeof(EventDiagnostics) << " bytes each)" << std::endl;
+    }
     if (parameters.rotationFromTiming) {
         state.R.setZero();
         state.F.setZero();
@@ -344,11 +368,12 @@ int main(int argc, char* argv[]) {
                     if (parameters.useDecay) {
                         decayNeighbourhood(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
                     }
+                    timing::NormalFlow normalFlow;
                     if (parameters.rotationFromTiming) {
                         // events -> O -> N -> F evidence -> R (rad/s); stored F where this event reads it
                         const int ey = cEvent->coordinates[0], ex = cEvent->coordinates[1];
                         onsetRule->update(onsetMap, ey, ex, cEvent->polarity, event->time);
-                        const timing::NormalFlow normalFlow = timing::fitNormalFlow(onsetMap, ey, ex, cEvent->polarity,
+                        normalFlow = timing::fitNormalFlow(onsetMap, ey, ex, cEvent->polarity,
                                                                                     event->time, normalFlowSettings);
                         rotationFromFlow.fadeTo(event->time);
                         rotationFromFlow.apply(motionModel.at(ey, ex), flowEvidence.add(ey, ex, normalFlow, event->time));
@@ -363,6 +388,32 @@ int main(int argc, char* argv[]) {
                     }
                     if (parameters.silentRelaxation) {
                         relaxSilentNeighbourhood(state.G, state.F, state.MI, state.delta_I, state.GTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_GI_silent, parameters.rate_GF_silent);
+                    }
+                    if (dumpEvents) {
+                        const int ey = cEvent->coordinates[0], ex = cEvent->coordinates[1];
+                        double &last = lastEventAt[static_cast<size_t>(ey) * res.width + ex];
+                        if (cameraEventCount++ % args->dumpEvents == 0) {
+                            const Eigen::Vector3f w = gyroReference.at(event->time + imuLag);
+                            const Eigen::Vector3d Rgyro(-w.y(), -w.x(), -w.z());
+                            const Eigen::Vector2d MR = motionModel.at(ey, ex) * Eigen::Vector3d(state.R(0), state.R(1), state.R(2));
+                            const Eigen::Vector2d MRgyro = motionModel.at(ey, ex) * Rgyro;
+                            float Imin = state.MI(ey, ex), Imax = Imin;
+                            for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+                                const int yy = std::clamp(ey + dy, 0, res.height - 1), xx = std::clamp(ex + dx, 0, res.width - 1);
+                                Imin = std::min(Imin, state.MI(yy, xx));
+                                Imax = std::max(Imax, state.MI(yy, xx));
+                            }
+                            const EventDiagnostics d{event->time, static_cast<float>(ey), static_cast<float>(ex),
+                                static_cast<float>(cEvent->polarity),
+                                {state.G(ey, ex, 0), state.G(ey, ex, 1)}, {state.F(ey, ex, 0), state.F(ey, ex, 1)},
+                                {static_cast<float>(MR(0)), static_cast<float>(MR(1))},
+                                {static_cast<float>(MRgyro(0)), static_cast<float>(MRgyro(1))},
+                                normalFlow.valid ? 1.0f : 0.0f, {normalFlow.n(0), normalFlow.n(1)}, normalFlow.speed,
+                                state.MI(ey, ex), Imin, Imax,
+                                last < 0 ? std::numeric_limits<float>::infinity() : static_cast<float>(event->time - last)};
+                            diagnosticsFile.write(reinterpret_cast<const char *>(&d), sizeof(d));
+                        }
+                        last = event->time;
                     }
                     for (int i = 0; i < parameters.event_steps; ++i) {
                         event_step(state.V, state.MI, state.delta_I, state.GIDiff, state.GIDiffGradient, state.F, state.G, state.R, state.CCM, state.dCdx, state.dCdy, state.A, state.B,
