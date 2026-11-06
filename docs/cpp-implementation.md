@@ -75,6 +75,24 @@ Approximation: `relaxFR` uses the current R for a pixel's whole silent time, whi
 
 Output frames, the live window (`--show`) and `R.txt` samples run at `--fps` (default 60), independent of `timeStep`.
 
+## Rotation from event timing (`--rotationFromTiming`)
+
+A switchable mode, off by default, that replaces the per-event F ← G, V and G ← F, V and the F ↔ R loop. The maps and relations live in `include/timing.h` / `src/timing.cpp`. Each map is a struct and each relation a function that takes only the maps it reads and writes, so relations can be swapped or added (e.g. a translation model next to the rotation model).
+
+| Map / relation | Implementation | Default |
+|---|---|---|
+| events → O (arrival time per pixel and polarity) | `OnsetRule`: `LatestEventOnset`, `HardGapOnset`, `DepressionOnset` (short-term depression: O ← O + r(t − O), r recovers with τ) | depression, τ = 20 ms (`--onsetRule`, `--onsetTime`) |
+| O → N (normal flow) | `fitNormalFlow`: plane fit to the same-polarity neighbours' arrival times; speed in px/s, variance from the residuals | 5 × 5, horizon 30 ms, time floor 0.1 ms |
+| N → F evidence | `FlowEvidence`: information form Λ = Σ w n nᵀ, η = Σ w n s per pixel, w = 1/σ², fading with the lifetime | replace, lifetime 10 ms (`--evidenceAccumulate`, `--evidenceLifetime`) |
+| F evidence → R | `RotationFromFlow`: H = Σ MᵀΛM, b = Σ Mᵀη as running sums that fade as a whole in O(1); R = H⁻¹b in rad/s, solved only when new evidence arrived and R is read | — |
+| gyro → R | `RotationFromFlow::addMeasurement`: a measurement of R with weight 1/σ², fading like the evidence; a weak input | σ = 0.05 rad/s, with `--fuseR` |
+| R → F | `readFlow`: F = (Λ + κI)⁻¹(η + κMR), written into the stored F map where an event reads it and at every output frame; the prior never enters the evidence | κ = 1/(27 px/s)² |
+| motion model | `MotionModel::rotation`: M per pixel through the lens model (radial-tangential distortion); without distortion it equals F = m32(R × C) | — |
+
+I and G are updated as before (V → I, I ↔ G, silent G relaxation, which now reads the stored F). In this mode R is in rad/s, R = −(camera angular velocity), stored as (y, x, z).
+
+On `shapes_rotation` (60 s, events only), R against the gyro, per 1/60 s frame (|ω| > 1 rad/s): median cos 0.992, mean 0.938, |R|/|ω| 0.995 [0.86, 1.14], per-axis correlation 0.956 / 0.963 / 0.954, at RTF 0.26. This reproduces the Python prototype exactly (`experiments/reports/r-prototype.md`, `onset-rules.md`). With `--fuseR`: mean cos 0.941. All parameter values are open (sweep on the simulator, M1).
+
 ## Known issues
 
 See M0 in `TASKS.md` for the full list and status. R does not yet track the camera rotation: on shapes_rotation, the correlation of R with the gyro is below 0.25 in both the synchronous and the event-driven version (2026-10-30). Open design question: R has no physical time unit. V is a per-event contribution, not a temporal derivative per bin, so F (and R) are "pixels per event contribution". Fusing a gyro (rad/s) into R therefore needs an explicit scale that the current model does not define. `update_RIMU` takes it as `Parameters::imuScale` (default 1, i.e. unscaled) together with the camera–IMU rotation `R_cam_imu` (default identity); both must be set before `weight_RIMU > 0` gives meaningful results.

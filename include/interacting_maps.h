@@ -97,6 +97,22 @@ struct Parameters
     bool  asyncFR = true;
     float rate_FR = 643.775165f;
 
+    // Rotation from event timing (include/timing.h, docs/cpp-implementation.md). Replaces F <- G, V, G <- F, V and
+    // the F <-> R loop: F gets evidence from the arrival times of edges, R (rad/s) is fitted to that evidence, and F's
+    // stored value combines its evidence with R's prediction. All values are open (sweep on the simulator, M1).
+    bool        rotationFromTiming  = false;
+    std::string onsetRule           = "depression";   // "latest", "gap", "depression"
+    double      onsetTime           = 0.02;           // s: depression recovery time constant, or the hard burst gap
+    double      onsetUse            = 1.0;            // depression: fraction of the resource an event consumes
+    int         normalFlowRadius    = 2;              // neighbourhood (2 r + 1)^2
+    double      normalFlowHorizon   = 0.03;           // s
+    double      normalFlowTimeFloor = 1e-4;           // s
+    float       normalFlowMaxSpeed  = 5000.0f;        // px/s
+    double      evidenceLifetime    = 0.01;           // s
+    bool        evidenceAccumulate  = false;          // false: a new measurement replaces the pixel's evidence
+    double      flowPriorSigma      = 27.0;           // px/s: how closely F follows R where evidence is weak
+    double      gyroSigma           = 0.05;           // rad/s: gyro as a measurement of R (with fuseR)
+
     // Bounds
     float eps   = 0.00001f;
     float gamma = 255.0f;

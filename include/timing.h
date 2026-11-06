@@ -159,6 +159,9 @@ struct RotationFromFlow {
 
 Eigen::Vector2f readFlow(FlowEvidence &evidence, const MotionModel &model, const Eigen::Vector3f &R, double kappa,
                          int y, int x, double t, Tensor3f &F);
+// readFlow at (y, x) and its 4 neighbours, the pixels whose F an event step reads
+void readFlowNeighbourhood(FlowEvidence &evidence, const MotionModel &model, const Eigen::Vector3f &R, double kappa,
+                           int y, int x, double t, Tensor3f &F);
 void readFlowAll(FlowEvidence &evidence, const MotionModel &model, const Eigen::Vector3f &R, double kappa, double t,
                  Tensor3f &F);
 

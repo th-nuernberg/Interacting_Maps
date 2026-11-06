@@ -13,6 +13,7 @@
 #include <boost/program_options.hpp>
 #include "file_operations.h"
 #include "imaging.h"
+#include "timing.h"
 #include <opencv2/highgui.hpp>
 #include <atomic>
 #include <mutex>
@@ -79,6 +80,11 @@ struct ProgramArgs
     bool show;
     bool pace;
     bool writeFrames;
+    bool rotationFromTiming;
+    std::string onsetRule;
+    double onsetTime;
+    double evidenceLifetime;
+    bool evidenceAccumulate;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -112,7 +118,12 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .fps               = vm["fps"].as<float>(),
         .show              = vm["show"].as<bool>(),
         .pace              = vm["pace"].as<bool>(),
-        .writeFrames       = vm["writeFrames"].as<bool>()
+        .writeFrames       = vm["writeFrames"].as<bool>(),
+        .rotationFromTiming = vm["rotationFromTiming"].as<bool>(),
+        .onsetRule         = vm["onsetRule"].as<std::string>(),
+        .onsetTime         = vm["onsetTime"].as<double>(),
+        .evidenceLifetime  = vm["evidenceLifetime"].as<double>(),
+        .evidenceAccumulate = vm["evidenceAccumulate"].as<bool>()
     };
 }
 
@@ -156,7 +167,12 @@ int main(int argc, char* argv[]) {
             ("fps", po::value<float>()->default_value(60), "Rate of output frames, live display and R.txt samples")
             ("show", po::value<bool>()->default_value(false), "IMAGES builds: stream the V/I/G/F frames to a live window")
             ("pace", po::value<bool>()->default_value(true), "With --show: play back in real time instead of as fast as possible")
-            ("writeFrames", po::value<bool>()->default_value(true), "IMAGES builds: write the V/I/G/F frames as PNG files");
+            ("writeFrames", po::value<bool>()->default_value(true), "IMAGES builds: write the V/I/G/F frames as PNG files")
+            ("rotationFromTiming", po::value<bool>()->default_value(false), "F and R (rad/s) from the arrival times of edges instead of F <- G, V and the F <-> R loop")
+            ("onsetRule", po::value<std::string>()->default_value("depression"), "With rotationFromTiming: arrival time per pixel, latest | gap | depression")
+            ("onsetTime", po::value<double>()->default_value(0.02), "With rotationFromTiming: depression recovery time or burst gap (s)")
+            ("evidenceLifetime", po::value<double>()->default_value(0.01), "With rotationFromTiming: lifetime of flow measurements (s)")
+            ("evidenceAccumulate", po::value<bool>()->default_value(false), "With rotationFromTiming: add measurements at a pixel instead of replacing them");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -205,7 +221,30 @@ int main(int argc, char* argv[]) {
     parameters.silentRelaxation = args->silentG;
     parameters.asyncFR = args->asyncFR;
     parameters.fps = args->fps;
+    parameters.rotationFromTiming = args->rotationFromTiming;
+    parameters.onsetRule = args->onsetRule;
+    parameters.onsetTime = args->onsetTime;
+    parameters.evidenceLifetime = args->evidenceLifetime;
+    parameters.evidenceAccumulate = args->evidenceAccumulate;
     OpticalFlowState state = initOpticalFlowState(res.height, res.width, parameters, calibration_data);
+
+    // Rotation from event timing: maps O, F evidence and R's sums; relations in include/timing.h
+    timing::OnsetMap onsetMap(res.height, res.width);
+    const auto onsetRule = timing::makeOnsetRule(parameters.onsetRule, parameters.onsetTime, parameters.onsetUse);
+    const timing::NormalFlowSettings normalFlowSettings{parameters.normalFlowRadius, parameters.normalFlowHorizon,
+                                                       parameters.normalFlowTimeFloor, parameters.normalFlowMaxSpeed};
+    const timing::MotionModel motionModel = parameters.rotationFromTiming
+        ? timing::MotionModel::rotation(calibration_data, res.height, res.width) : timing::MotionModel{};
+    timing::FlowEvidence flowEvidence(res.height, res.width, parameters.evidenceLifetime, parameters.evidenceAccumulate);
+    timing::RotationFromFlow rotationFromFlow(parameters.evidenceLifetime);
+    const double flowPriorKappa = 1.0 / (parameters.flowPriorSigma * parameters.flowPriorSigma);
+    std::vector<int> noFlowUpdates;   // with rotationFromTiming the event step only updates I and G
+    if (parameters.rotationFromTiming) {
+        state.R.setZero();
+        state.F.setZero();
+        std::cout << "Rotation from event timing: onset rule " << onsetRule->name() << " (" << parameters.onsetTime
+                  << " s), evidence lifetime " << parameters.evidenceLifetime << " s" << std::endl;
+    }
 
     // iterations are done after event calculations for a frame are done
     std::vector permutation {0,2,3}; // Which update steps to take; 1 is not needed
@@ -292,7 +331,18 @@ int main(int argc, char* argv[]) {
                     if (parameters.useDecay) {
                         decayNeighbourhood(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
                     }
-                    if (parameters.asyncFR) {
+                    if (parameters.rotationFromTiming) {
+                        // events -> O -> N -> F evidence -> R (rad/s); stored F where this event reads it
+                        const int ey = cEvent->coordinates[0], ex = cEvent->coordinates[1];
+                        onsetRule->update(onsetMap, ey, ex, cEvent->polarity, event->time);
+                        const timing::NormalFlow normalFlow = timing::fitNormalFlow(onsetMap, ey, ex, cEvent->polarity,
+                                                                                    event->time, normalFlowSettings);
+                        rotationFromFlow.fadeTo(event->time);
+                        rotationFromFlow.apply(motionModel.at(ey, ex), flowEvidence.add(ey, ex, normalFlow, event->time));
+                        const Eigen::Vector3f &R = rotationFromFlow.rotation();
+                        for (int k = 0; k < 3; ++k) state.R(k) = R(k);
+                        timing::readFlowNeighbourhood(flowEvidence, motionModel, R, flowPriorKappa, ey, ex, event->time, state.F);
+                    } else if (parameters.asyncFR) {
                         // F <- R since the last event: B in closed form, F where this event reads it.
                         relaxB(state.B, state.BTime, state.A, state.R, event->time, parameters.rate_FR);
                         relaxFRNeighbourhood(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, state.old_points,
@@ -303,15 +353,16 @@ int main(int argc, char* argv[]) {
                     }
                     for (int i = 0; i < parameters.event_steps; ++i) {
                         event_step(state.V, state.MI, state.delta_I, state.GIDiff, state.GIDiffGradient, state.F, state.G, state.R, state.CCM, state.dCdx, state.dCdy, state.A, state.B,
-                                   state.Identity_minus_outerProducts, state.old_points, parameters, permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
+                                   state.Identity_minus_outerProducts, state.old_points, parameters,
+                                   parameters.rotationFromTiming ? noFlowUpdates : permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
                     }
-                    if (parameters.asyncFR) {
+                    if (!parameters.rotationFromTiming && parameters.asyncFR) {
                         // F <- G and G <- F may have run after F -> R in this step; B must see the final F.
                         register_R_point(state.F, state.CCM, state.dCdx, state.dCdy, state.B, state.Identity_minus_outerProducts, state.old_points,
                                          cEvent->coordinates[0], cEvent->coordinates[1]);
                     }
 
-                    if (!parameters.asyncFR && parameters.startTime + static_cast<float>(parameters.FR_update_counter) * static_cast<float>(1 / parameters.FR_updates_per_second) < event->time) {
+                    if (!parameters.rotationFromTiming && !parameters.asyncFR && parameters.startTime + static_cast<float>(parameters.FR_update_counter) * static_cast<float>(1 / parameters.FR_updates_per_second) < event->time) {
                         state.time.setConstant(event->time);
                         for (int i = 0; i < static_cast<int>(parameters.updateIterationsFR); ++i) {
                             update_FR(state.F, state.CCM, state.dCdx, state.dCdy, state.R, parameters.weight_FR, parameters.zeroThreshold(), parameters.clampBound());
@@ -323,7 +374,18 @@ int main(int argc, char* argv[]) {
                     }
 
                 } else if (auto* imuEvent = dynamic_cast<IMUEvent*>(event.get()))  {
-                    update_RIMU(state.R, imuEvent->ang_velocity, parameters.weight_RIMU, parameters.R_cam_imu, parameters.imuScale);
+                    if (parameters.rotationFromTiming) {
+                        // The gyro as one more measurement of R (rad/s), weighted by its precision: a weak input
+                        const auto &g = imuEvent->ang_velocity;
+                        const Vector3f omega_cam = parameters.R_cam_imu * Vector3f(g[0], g[1], g[2]);
+                        rotationFromFlow.fadeTo(event->time);
+                        rotationFromFlow.addMeasurement(-Eigen::Vector3f(omega_cam.y(), omega_cam.x(), omega_cam.z()),
+                                                        1.0 / (parameters.gyroSigma * parameters.gyroSigma));
+                        const Eigen::Vector3f &R = rotationFromFlow.rotation();
+                        for (int k = 0; k < 3; ++k) state.R(k) = R(k);
+                    } else {
+                        update_RIMU(state.R, imuEvent->ang_velocity, parameters.weight_RIMU, parameters.R_cam_imu, parameters.imuScale);
+                    }
                 }
 
                 else if (auto* imageEvent = dynamic_cast<ImageEvent*>(event.get()))  {
@@ -355,7 +417,12 @@ int main(int argc, char* argv[]) {
                         const Tensor2f MI_now = parameters.useDecay
                             ? decayedCopy(state.MI, state.decayTimeSurface, event->time, parameters.neutralPotential, parameters.decayParam)
                             : state.MI;
-                        const Tensor3f F_now = parameters.asyncFR
+                        if (parameters.rotationFromTiming) {
+                            // bring the stored F up to the frame time everywhere
+                            timing::readFlowAll(flowEvidence, motionModel, rotationFromFlow.rotation(), flowPriorKappa,
+                                                event->time, state.F);
+                        }
+                        const Tensor3f F_now = !parameters.rotationFromTiming && parameters.asyncFR
                             ? relaxedFRCopy(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, event->time, parameters.rate_FR)
                             : state.F;
                         const Tensor3f G_now = parameters.silentRelaxation

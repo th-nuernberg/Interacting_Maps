@@ -252,6 +252,16 @@ Eigen::Vector2f readFlow(FlowEvidence &evidence, const MotionModel &model, const
     return value;
 }
 
+void readFlowNeighbourhood(FlowEvidence &evidence, const MotionModel &model, const Eigen::Vector3f &R, double kappa,
+                           int y, int x, double t, Tensor3f &F) {
+    const int offsets[5][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (const auto &offset : offsets) {
+        const int yy = y + offset[0], xx = x + offset[1];
+        if (yy < 0 || yy >= evidence.height || xx < 0 || xx >= evidence.width) continue;
+        readFlow(evidence, model, R, kappa, yy, xx, t, F);
+    }
+}
+
 void readFlowAll(FlowEvidence &evidence, const MotionModel &model, const Eigen::Vector3f &R, double kappa, double t,
                  Tensor3f &F) {
     for (int y = 0; y < evidence.height; ++y) {

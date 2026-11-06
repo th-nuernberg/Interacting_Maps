@@ -7,7 +7,7 @@ The original algorithm works on frames of accumulated events. This implementatio
 ## Status
 
 - **Milestone M0** (rework of the C++ implementation, see [TASKS.md](TASKS.md)) is largely done: known implementation flaws are fixed one commit at a time, each with a Catch2 regression test. The network now runs faster than real time (RTF ≈ 0.11 on `shapes_rotation`).
-- **R does not yet track the camera rotation.** Events are read with a constant V = ±10, which carries no time unit. Experiments in [experiments/](experiments/) show that event timing across neighbouring pixels gives normal flow in px/s, and from that the rotation in rad/s (median cos 0.99 with the gyro). Bringing this into the network is the next step.
+- **Rotation from event timing** (`--rotationFromTiming true`, off by default): F gets evidence from the arrival times of edges at neighbouring pixels, and R is fitted to it in rad/s. On `shapes_rotation`, from events alone, R follows the gyro with median cos 0.992 and |R|/|ω| 0.995 (RTF 0.26). Without the switch, events are read with a constant V = ±10, which has no time unit, and R does not track the rotation.
 - The Python package (`python/`, `incomaps`: simulator, NumPy reference, generic engine) is still a scaffold (milestones M1–M3).
 
 ## Repository layout
@@ -63,6 +63,9 @@ Run from the repository root. Results go to `output/<resultsDirectory>/`.
 # Algorithm only, as fast as possible; prints the RTF in total and per 1 s interval
 ./InteractingMaps --startTime 0 --endTime 60 --resultsDirectory run1 --seed 0
 
+# Rotation (rad/s) from event timing alone; R.txt can be compared with the gyro
+./InteractingMaps --startTime 0 --endTime 60 --resultsDirectory run1 --rotationFromTiming true
+
 # IMAGES build: watch the network live, in real time, without writing PNGs
 ./InteractingMaps --startTime 0 --endTime 60 --show true --writeFrames false
 
@@ -75,7 +78,7 @@ Each frame panel shows V (events since the last frame, red/green by polarity) to
 
 | Output | Contents |
 | --- | --- |
-| `R.txt` | time and R per output frame (currently in "per event" units, see Status) |
+| `R.txt` | time and R per output frame: rad/s with `--rotationFromTiming` (R = −angular velocity, stored as y, x, z), otherwise "per event" units |
 | `time_realtime.txt` | processing time, data span and RTF (processing time / data time; < 1 is faster than real time; loading excluded) |
 | `VLoss.txt`, `VIGF_*.png`, `frame_*.png` | IMAGES builds: consistency loss, panels and intensity per frame |
 
@@ -91,6 +94,9 @@ Main options (`./InteractingMaps --help` lists all):
 | `--asyncFR` | true | event-driven F ← R instead of global passes every `timeStep` |
 | `--silentG` | true | time without events at a pixel counts as V = 0 for G |
 | `--decay`, `--clamp`, `--resetG` | true, true, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
+| `--rotationFromTiming` | false | F and R (rad/s) from the arrival times of edges; see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
+| `--onsetRule`, `--onsetTime` | `depression`, 0.02 | with `--rotationFromTiming`: arrival time per pixel (`latest`, `gap`, `depression`) and its time constant |
+| `--evidenceLifetime`, `--evidenceAccumulate` | 0.01, false | with `--rotationFromTiming`: lifetime of flow measurements; add instead of replace |
 | `--fuseR`, `--fuseI` | false | fuse the gyro (`imu.txt`) or the frames (`images.txt`) |
 
 ## Experiments (Python)
