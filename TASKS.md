@@ -32,6 +32,7 @@ Fix implementational flaws in `src/` one commit at a time, each with a Catch2 re
 - [ ] R does not track the gyro (|corr| < 0.25, synchronous and event-driven). Diagnose against the NumPy reference / simulator ground truth.
 - [x] V-unit experiment, stage A (`experiments/v_units.py`, report `experiments/reports/v-units.md`): per-pixel event rates carry almost no speed on shapes_rotation; burst-onset time surfaces give normal flow in px/s.
 - [x] Offline prototype (`experiments/r_prototype.py`, report `experiments/reports/r-prototype.md`): standing timing-based normal-flow constraints give ω in rad/s (median cos 0.99 with the gyro, |ω| ratio 1.00, τ = 10 ms); the F ↔ R loop converges to the same steady state but needs ~100–300 trips per 1/60 s.
+- [x] Onset rules compared (`experiments/onset_rules.py`, report `experiments/reports/onset-rules.md`): soft onset by depression (τ 10–20 ms) slightly best for rotation, hard gap 10 ms best for single normal flows; both swappable via `experiments/event_maps.py`.
 - [ ] Decide how event timing enters the network (time-surface normal flow as a relation) and sweep its parameters on the simulator (M1).
 - [ ] IMU fusion units: choose `imuScale` (rad/s → R units). Open: R has no physical time unit yet, see `docs/cpp-implementation.md`. Needs V per time bin (paper) or a calibrated event contribution.
 

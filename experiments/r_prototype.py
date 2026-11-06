@@ -28,6 +28,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from event_maps import EventIndex, HardGap, normal_flow_all
 from v_units import HEIGHT, WIDTH, load_calibration, load_events, rotational_flow
 
 EVAL_RATE = 60.0                   # Hz
@@ -36,60 +37,16 @@ TAUS = [0.01, 0.03, 0.1]           # s, lifetime of a standing measurement
 
 
 # ----------------------------------------------------------------------------------------------------------------
-# Measurements: burst-onset time-surface normal flow for every event, with a variance
+# Measurements: events -> O (onset rule) -> N (normal flow), cached per rule
 
-def normal_flow_all(t, x, y, p, radius=2, horizon=0.03, burst_gap=0.01, chunk=1_000_000, time_floor=1e-4):
-    key_pix = (y.astype(np.int64) * WIDTH + x) * 2 + (p > 0)
-    o = np.argsort(key_pix, kind="stable")
-    key = key_pix[o].astype(np.float64) * 100.0 + t[o]
-    t_o = t[o]
-    new = np.ones(len(o), bool)
-    new[1:] = (key_pix[o][1:] != key_pix[o][:-1]) | (np.diff(t_o) > burst_gap)
-    stamp = t_o[np.maximum.accumulate(np.where(new, np.arange(len(o)), 0))]
-    onset_of_event = np.empty(len(t))
-    onset_of_event[o] = stamp
-
-    nx = np.full(len(t), np.nan); ny = np.full(len(t), np.nan)
-    s = np.full(len(t), np.nan); var = np.full(len(t), np.nan)
-    for c0 in range(0, len(t), chunk):
-        e = np.arange(c0, min(c0 + chunk, len(t)))
-        xe, ye, te, pe = x[e].astype(np.int64), y[e].astype(np.int64), t[e], (p[e] > 0)
-        te_ref = onset_of_event[e]
-        acc = {k: np.zeros(len(e)) for k in ["xx", "xy", "yy", "xt", "yt", "tt"]}
-        n = np.zeros(len(e), int)
-        for dy in range(-radius, radius + 1):
-            for dx in range(-radius, radius + 1):
-                if dx == 0 and dy == 0:
-                    continue
-                xq, yq = xe + dx, ye + dy
-                inside = (xq >= 0) & (xq < WIDTH) & (yq >= 0) & (yq < HEIGHT)
-                kq = ((yq * WIDTH + xq) * 2 + pe).astype(np.float64)
-                j = np.searchsorted(key, kq * 100.0 + te, side="left") - 1
-                jj = np.clip(j, 0, len(key) - 1)
-                t_last = key[jj] - kq * 100.0
-                valid = inside & (j >= 0) & (t_last <= te) & (t_last > te - horizon)
-                d = np.where(valid, stamp[jj] - te_ref, 0.0)
-                acc["xx"] += valid * dx * dx; acc["xy"] += valid * dx * dy; acc["yy"] += valid * dy * dy
-                acc["xt"] += dx * d; acc["yt"] += dy * d; acc["tt"] += d * d; n += valid
-        det = acc["xx"] * acc["yy"] - acc["xy"] ** 2
-        ok = (n >= 4) & (det > 1e-9)
-        sd = np.where(ok, det, 1.0)
-        a = (acc["yy"] * acc["xt"] - acc["xy"] * acc["yt"]) / sd
-        b = (acc["xx"] * acc["yt"] - acc["xy"] * acc["xt"]) / sd
-        g2 = a * a + b * b
-        ok &= g2 > 0
-        g = np.sqrt(np.where(ok, g2, 1.0))
-        # residual variance of the time fit, floored at the timestamp scale, and the slope variance along n
-        res = np.maximum(acc["tt"] - a * acc["xt"] - b * acc["yt"], 0.0)
-        sr2 = np.maximum(res / np.maximum(n - 2, 1), time_floor ** 2)
-        ux, uy = a / g, b / g
-        var_g = sr2 * (ux * ux * acc["yy"] - 2 * ux * uy * acc["xy"] + uy * uy * acc["xx"]) / sd
-        speed = 1.0 / g
-        nx[e] = np.where(ok, ux, np.nan); ny[e] = np.where(ok, uy, np.nan)
-        s[e] = np.where(ok, speed, np.nan)
-        var[e] = np.where(ok, var_g * speed ** 4, np.nan)          # sigma_s = sigma_g * s^2
-        print(f"  normal flow: {min(c0 + chunk, len(t))}/{len(t)} events", end="\r")
-    print()
+def normal_flow_for_rule(index, rule, out, horizon=0.03):
+    cache = out / f"normal_flow_{rule.name.replace(' ', '_')}_{horizon * 1000:g}ms.npz"
+    if cache.exists():
+        d = np.load(cache)
+        return d["nx"], d["ny"], d["s"], d["var"]
+    stamps, _ = rule(index)
+    nx, ny, s, var = normal_flow_all(index, stamps, horizon=horizon)
+    np.savez(cache, nx=nx, ny=ny, s=s, var=var)
     return nx, ny, s, var
 
 
@@ -141,6 +98,12 @@ def estimate(t, pix, nx, ny, s, var, J, kappa, tau, t_eval, max_speed):
         bs.append(np.einsum("p,pi,p->i", we, a, last_s[active]))
         counts.append(int(active.sum()))
     return np.array(Hs), np.array(bs), np.array(counts)
+
+
+def steady_state(t, pix, nx, ny, s, var, J, kappa, tau, t_eval, max_speed):
+    """omega at each evaluation time from the standing constraints (the loop's fixed point)."""
+    H, b, counts = estimate(t, pix, nx, ny, s, var, J, kappa, tau, t_eval, max_speed)
+    return np.array([np.linalg.lstsq(h, v, rcond=None)[0] for h, v in zip(H, b)]), H, b, counts
 
 
 def gyro_metrics(t_eval, est, imu, lag, min_speed=1.0):
@@ -203,12 +166,8 @@ def main():
     imu = np.loadtxt(args.data / "imu.txt")
     pix = y.astype(np.int64) * WIDTH + x
 
-    cache = args.out / "normal_flow.npz"
-    if cache.exists():
-        d = np.load(cache); nx, ny, s, var = d["nx"], d["ny"], d["s"], d["var"]
-    else:
-        nx, ny, s, var = normal_flow_all(t, x, y, p)
-        np.savez(cache, nx=nx, ny=ny, s=s, var=var)
+    index = EventIndex.build(t, x, y, p)
+    nx, ny, s, var = normal_flow_for_rule(index, HardGap(0.01), args.out)
     ok = np.isfinite(s) & (s < args.max_speed)
     sigma_s = np.sqrt(var[ok])
     kappa = 1.0 / np.median(sigma_s) ** 2       # model precision = typical measurement precision (open)

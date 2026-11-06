@@ -25,6 +25,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
+from event_maps import EventIndex, HardGap, LatestEvent, normal_flow
+
 WIDTH, HEIGHT = 240, 180
 SPEED_EDGES = np.array([20, 40, 80, 120, 160, 240, 320, 480, 640, 960, 1280, 1920.0])   # image speed |u| in px/s
 LEAKY_TAUS = [0.001, 0.003, 0.01, 0.03]                                         # s
@@ -157,53 +159,6 @@ def sample_gradient(frame_grad, frame_idx, xf, yf):
     return out
 
 
-def time_surface_flow(idx, x, y, p, t, order, radius=2, horizon=0.03, burst_gap=None):
-    """Normal flow from arrival times: fit t_q - t_e = a dx + b dy to the most recent same-polarity event of each
-    neighbour q (within radius, at most horizon before the event). With burst_gap, every time is replaced by the
-    onset of its burst (same pixel and polarity, gaps < burst_gap), which marks when the edge arrived.
-    Returns (vx, vy) in px/s and the neighbour count."""
-    key_pix = (y.astype(np.int64) * WIDTH + x) * 2 + (p > 0)
-    o = np.argsort(key_pix, kind="stable")                  # by (pixel, polarity), then time
-    key = key_pix[o].astype(np.float64) * 100.0 + t[o]
-    t_o = t[o]
-    if burst_gap is not None:
-        new = np.ones(len(o), bool)
-        new[1:] = (key_pix[o][1:] != key_pix[o][:-1]) | (np.diff(t_o) > burst_gap)
-        stamp = t_o[np.maximum.accumulate(np.where(new, np.arange(len(o)), 0))]
-    else:
-        stamp = t_o
-    ev = order[idx]                                         # original indices of the sampled events
-    xe, ye, te, pe = x[ev].astype(np.int64), y[ev].astype(np.int64), t[ev], (p[ev] > 0)
-    # reference time of the event itself (its burst onset with burst_gap)
-    ke = ((ye * WIDTH + xe) * 2 + pe).astype(np.float64)
-    te_ref = stamp[np.clip(np.searchsorted(key, ke * 100.0 + te, side="left"), 0, len(key) - 1)]
-    sxx = np.zeros(len(ev)); sxy = np.zeros(len(ev)); syy = np.zeros(len(ev))
-    sxt = np.zeros(len(ev)); syt = np.zeros(len(ev)); n = np.zeros(len(ev), int)
-    for dy in range(-radius, radius + 1):
-        for dx in range(-radius, radius + 1):
-            if dx == 0 and dy == 0:
-                continue
-            xq, yq = xe + dx, ye + dy
-            inside = (xq >= 0) & (xq < WIDTH) & (yq >= 0) & (yq < HEIGHT)
-            kq = ((yq * WIDTH + xq) * 2 + pe).astype(np.float64)
-            j = np.searchsorted(key, kq * 100.0 + te, side="left") - 1     # last event of q strictly before t_e
-            jj = np.clip(j, 0, len(key) - 1)
-            t_last = key[jj] - kq * 100.0
-            valid = inside & (j >= 0) & (t_last <= te) & (t_last > te - horizon)
-            d = np.where(valid, stamp[jj] - te_ref, 0.0)
-            sxx += valid * dx * dx; sxy += valid * dx * dy; syy += valid * dy * dy
-            sxt += dx * d; syt += dy * d; n += valid
-    det = sxx * syy - sxy * sxy
-    ok = (n >= 4) & (det > 1e-9)
-    a = np.where(ok, (syy * sxt - sxy * syt) / np.where(ok, det, 1), 0.0)
-    b = np.where(ok, (sxx * syt - sxy * sxt) / np.where(ok, det, 1), 0.0)
-    # Arrival times grow along the motion, so the edge moves along +grad T with speed 1 / |grad T|
-    g2 = a * a + b * b
-    vx = np.where(ok & (g2 > 0), a / np.where(g2 > 0, g2, 1), np.nan)
-    vy = np.where(ok & (g2 > 0), b / np.where(g2 > 0, g2, 1), np.nan)
-    return vx, vy, n
-
-
 def speed_exponent(speed, value):
     """Log-log slope of the per-speed-bin median of value against the bin's median speed."""
     mids, meds = [], []
@@ -255,6 +210,90 @@ def summarise(name, v_est, v_true, speed, pol):
                 k_spread_across_speeds=float(ks[valid].max() / ks[valid].min()) if valid.any() else float("nan"),
                 sign_agreement=float((np.sign(v_est[nonzero]) == np.sign(v_true[nonzero])).mean()),
                 coverage=float(nonzero.mean()), per_polarity=per_polarity, bins=rows)
+
+
+def time_surface_report(index, rule, gt, horizon=0.03):
+    """Normal flow from an onset rule (events -> O -> N) at the ground-truth events, against the true normal flow."""
+    stamps, _ = rule(index)
+    nx, ny, s_ts, _, _ = normal_flow(index, stamps, gt.events, horizon=horizon)
+    vx, vy = nx * s_ts, ny * s_ts
+    gn = np.hypot(gt.gx, gt.gy)
+    un_true = (gt.gx * gt.ux + gt.gy * gt.uy) / gn            # signed normal speed along the frame gradient
+    fitted = np.isfinite(s_ts) & (s_ts < 1e5) & (s_ts > 0)
+    cos_dir = ((vx * gt.ux + vy * gt.uy) / (s_ts * np.hypot(gt.ux, gt.uy)))[fitted]
+    ratio = s_ts[fitted] / np.abs(un_true[fitted])
+    bins = [dict(lo=float(lo), hi=float(hi), n=int(sel.sum()), median_ratio=float(np.median(ratio[sel])))
+            for lo, hi in zip(SPEED_EDGES[:-1], SPEED_EDGES[1:])
+            for sel in [(np.abs(un_true[fitted]) >= lo) & (np.abs(un_true[fitted]) < hi)]
+            if sel.sum() >= MIN_EVENTS_PER_BIN]
+    return dict(rule=rule.name, horizon=horizon,
+                exponent=speed_exponent(np.abs(un_true[fitted]), s_ts[fitted])["exponent"],
+                fitted_fraction=float(fitted.mean()), median_ratio=float(np.median(ratio)),
+                log_ratio_iqr=float(np.subtract(*np.percentile(np.log(ratio), [75, 25]))),
+                direction_cos_median=float(np.median(cos_dir)), ratio_by_normal_speed=bins)
+
+
+def ground_truth_events(data, out, seed=0, samples=1_000_000, frame_window=0.002, min_gradient=0.1, border=5):
+    """Events near DAVIS frames with their true image motion u (gyro, lens distortion included) and the
+    motion-compensated frame gradient of log intensity. Returns a namespace; `events` are original indices."""
+    from types import SimpleNamespace
+    rng = np.random.default_rng(seed)
+    t, x, y, p = load_events(data / "events.txt", out / "events_cache.npz")
+    calib = load_calibration(data / "calib.txt")
+    imu = np.loadtxt(data / "imu.txt")
+    frame_t, frame_grad = frame_gradients(data)
+    print(f"{len(t)} events, {len(frame_t)} frames, {len(imu)} IMU samples")
+
+    # IMU-event time offset: lag that best aligns the event rate with |omega|
+    edges = np.arange(1.0, t[-1], 0.005)
+    rate = np.histogram(t, edges)[0].astype(float)
+    centres = 0.5 * (edges[1:] + edges[:-1])
+    speed_imu = np.linalg.norm(imu[:, 4:7], axis=1)
+    lags = np.arange(-0.05, 0.0501, 0.001)
+    corr = [np.corrcoef(rate, np.interp(centres + lag, imu[:, 0], speed_imu))[0, 1] for lag in lags]
+    lag = float(lags[int(np.argmax(corr))])
+    print(f"IMU lag maximising corr(event rate, |omega|): {lag * 1000:.0f} ms (corr {max(corr):.3f})")
+
+    # Translation (mocap), for the record: the experiment assumes rotation only
+    mocap = np.loadtxt(data / "groundtruth.txt")
+    v_trans = np.linalg.norm(np.diff(mocap[:, 1:4], axis=0), axis=1) / np.diff(mocap[:, 0])
+    print(f"mocap translation speed: median {np.median(v_trans):.3f} m/s, 95th pct {np.percentile(v_trans, 95):.3f} m/s")
+
+    # Estimators need per-pixel histories: sort by pixel, keeping time order
+    pix = y.astype(np.int64) * WIDTH + x
+    order = np.argsort(pix, kind="stable")
+    t_s, p_s, pix_s = t[order], p[order], pix[order]
+    gap_any = previous_gap(pix_s, t_s)
+    order_pol = np.argsort(pix * 2 + (p > 0), kind="stable")
+    gap_same = np.empty(len(t))
+    gap_same[order_pol] = previous_gap((pix * 2 + (p > 0))[order_pol], t[order_pol])
+    gap_same_s = gap_same[order]
+
+    # Sample events near a frame and inside the image
+    nearest = np.clip(np.searchsorted(frame_t, t_s), 1, len(frame_t) - 1)
+    nearest = np.where(np.abs(frame_t[nearest - 1] - t_s) < np.abs(frame_t[nearest] - t_s), nearest - 1, nearest)
+    xs, ys = x[order].astype(float), y[order].astype(float)
+    candidate = (np.abs(frame_t[nearest] - t_s) < frame_window) & (t_s > 1.0)
+    candidate &= (xs >= border) & (xs < WIDTH - border) & (ys >= border) & (ys < HEIGHT - border)
+    idx = np.flatnonzero(candidate)
+    if len(idx) > 3 * samples:
+        idx = np.sort(rng.choice(idx, 3 * samples, replace=False))
+
+    # Ground truth at the sampled events. The gradient is read where the edge was at frame time
+    # (motion-compensated, bilinear), not at the event pixel.
+    omega = np.stack([np.interp(t_s[idx] + lag, imu[:, 0], imu[:, 4 + k]) for k in range(3)], -1)
+    ux, uy = rotational_flow(xs[idx], ys[idx], omega, calib)
+    dt_frame = t_s[idx] - frame_t[nearest[idx]]
+    gx, gy = sample_gradient(frame_grad, nearest[idx], xs[idx] - ux * dt_frame, ys[idx] - uy * dt_frame)
+    keep = np.hypot(gx, gy) >= min_gradient
+    idx, omega, ux, uy, gx, gy = idx[keep], omega[keep], ux[keep], uy[keep], gx[keep], gy[keep]
+    if len(idx) > samples:
+        pick = np.sort(rng.choice(len(idx), samples, replace=False))
+        idx, omega, ux, uy, gx, gy = idx[pick], omega[pick], ux[pick], uy[pick], gx[pick], gy[pick]
+    print(f"{candidate.sum()} events near frames, evaluating {len(idx)} on clear gradients")
+    return SimpleNamespace(t=t, x=x, y=y, p=p, order=order, idx=idx, events=order[idx], t_s=t_s, p_s=p_s,
+                           pix_s=pix_s, gap_any=gap_any, gap_same_s=gap_same_s, omega=omega, ux=ux, uy=uy,
+                           gx=gx, gy=gy, lag=lag, v_trans=v_trans, near_frames=int(candidate.sum()))
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -313,61 +352,10 @@ def main():
     ap.add_argument("--border", type=int, default=5, help="ignore pixels this close to the image border")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(args.seed)
-
-    t, x, y, p = load_events(args.data / "events.txt", args.out / "events_cache.npz")
-    calib = load_calibration(args.data / "calib.txt")
-    imu = np.loadtxt(args.data / "imu.txt")
-    frame_t, frame_grad = frame_gradients(args.data)
-    print(f"{len(t)} events, {len(frame_t)} frames, {len(imu)} IMU samples")
-
-    # IMU-event time offset: lag that best aligns the event rate with |omega|
-    edges = np.arange(1.0, t[-1], 0.005)
-    rate = np.histogram(t, edges)[0].astype(float)
-    centres = 0.5 * (edges[1:] + edges[:-1])
-    speed_imu = np.linalg.norm(imu[:, 4:7], axis=1)
-    lags = np.arange(-0.05, 0.0501, 0.001)
-    corr = [np.corrcoef(rate, np.interp(centres + lag, imu[:, 0], speed_imu))[0, 1] for lag in lags]
-    lag = float(lags[int(np.argmax(corr))])
-    print(f"IMU lag maximising corr(event rate, |omega|): {lag * 1000:.0f} ms (corr {max(corr):.3f})")
-
-    # Translation (mocap), for the record: the experiment assumes rotation only
-    gt = np.loadtxt(args.data / "groundtruth.txt")
-    v_trans = np.linalg.norm(np.diff(gt[:, 1:4], axis=0), axis=1) / np.diff(gt[:, 0])
-    print(f"mocap translation speed: median {np.median(v_trans):.3f} m/s, 95th pct {np.percentile(v_trans, 95):.3f} m/s")
-
-    # Estimators need per-pixel histories: sort by pixel, keeping time order
-    pix = y.astype(np.int64) * WIDTH + x
-    order = np.argsort(pix, kind="stable")
-    t_s, p_s, pix_s = t[order], p[order], pix[order]
-    gap_any = previous_gap(pix_s, t_s)
-    order_pol = np.argsort(pix * 2 + (p > 0), kind="stable")
-    gap_same = np.empty(len(t))
-    gap_same[order_pol] = previous_gap((pix * 2 + (p > 0))[order_pol], t[order_pol])
-    gap_same_s = gap_same[order]
-
-    # Sample events near a frame and inside the image
-    nearest = np.clip(np.searchsorted(frame_t, t_s), 1, len(frame_t) - 1)
-    nearest = np.where(np.abs(frame_t[nearest - 1] - t_s) < np.abs(frame_t[nearest] - t_s), nearest - 1, nearest)
-    xs, ys = x[order].astype(float), y[order].astype(float)
-    candidate = (np.abs(frame_t[nearest] - t_s) < args.frame_window) & (t_s > 1.0)
-    candidate &= (xs >= args.border) & (xs < WIDTH - args.border) & (ys >= args.border) & (ys < HEIGHT - args.border)
-    idx = np.flatnonzero(candidate)
-    if len(idx) > 3 * args.samples:
-        idx = np.sort(rng.choice(idx, 3 * args.samples, replace=False))
-
-    # Ground truth at the sampled events. The gradient is read where the edge was at frame time
-    # (motion-compensated, bilinear), not at the event pixel.
-    omega = np.stack([np.interp(t_s[idx] + lag, imu[:, 0], imu[:, 4 + k]) for k in range(3)], -1)
-    ux, uy = rotational_flow(xs[idx], ys[idx], omega, calib)
-    dt_frame = t_s[idx] - frame_t[nearest[idx]]
-    gx, gy = sample_gradient(frame_grad, nearest[idx], xs[idx] - ux * dt_frame, ys[idx] - uy * dt_frame)
-    keep = np.hypot(gx, gy) >= args.min_gradient
-    idx, omega, ux, uy, gx, gy = idx[keep], omega[keep], ux[keep], uy[keep], gx[keep], gy[keep]
-    if len(idx) > args.samples:
-        pick = np.sort(rng.choice(len(idx), args.samples, replace=False))
-        idx, omega, ux, uy, gx, gy = idx[pick], omega[pick], ux[pick], uy[pick], gx[pick], gy[pick]
-    print(f"{candidate.sum()} events near frames, evaluating {len(idx)} on clear gradients")
+    gt = ground_truth_events(args.data, args.out, args.seed, args.samples, args.frame_window, args.min_gradient,
+                             args.border)
+    idx, pix_s, t_s, p_s, gap_any, gap_same_s = gt.idx, gt.pix_s, gt.t_s, gt.p_s, gt.gap_any, gt.gap_same_s
+    gx, gy, ux, uy = gt.gx, gt.gy, gt.ux, gt.uy
     v_true = -(gx * ux + gy * uy)
     # Bin by the event pixel's own image speed: |omega| alone mixes axes (roll moves pixels far less per rad/s)
     speed = np.hypot(ux, uy)
@@ -383,31 +371,18 @@ def main():
         burst_rate_vs_normal_speed=speed_exponent(np.abs(gx * ux + gy * uy)[burst] / np.hypot(gx, gy)[burst],
                                                   1.0 / gap_same_s[idx][burst]),
     )
-    # Time-surface normal flow: speed and direction against the true normal flow. Labels: burst gap, horizon
-    # (the horizon sets the slowest measurable speed, about radius / horizon).
-    gn = np.hypot(gx, gy)
-    un_true = (gx * ux + gy * uy) / gn                       # signed normal speed along the frame gradient
-    for label, gap, horizon in [("last event, 30 ms", None, 0.03), ("onset 5 ms, 30 ms", 0.005, 0.03),
-                                ("onset 10 ms, 30 ms", 0.01, 0.03), ("onset 10 ms, 100 ms", 0.01, 0.1),
-                                ("onset 20 ms, 100 ms", 0.02, 0.1), ("onset 20 ms, 200 ms", 0.02, 0.2)]:
-        vx_ts, vy_ts, n_ts = time_surface_flow(idx, x, y, p, t, order, horizon=horizon, burst_gap=gap)
-        s_ts = np.hypot(vx_ts, vy_ts)
-        fitted = np.isfinite(s_ts) & (s_ts < 1e5) & (s_ts > 0)
-        cos_dir = ((vx_ts * ux + vy_ts * uy) / (s_ts * np.hypot(ux, uy)))[fitted]
-        ratio = s_ts[fitted] / np.abs(un_true[fitted])
-        bins = [dict(lo=float(lo), hi=float(hi), n=int(sel.sum()), median_ratio=float(np.median(ratio[sel])))
-                for lo, hi in zip(SPEED_EDGES[:-1], SPEED_EDGES[1:])
-                for sel in [(np.abs(un_true[fitted]) >= lo) & (np.abs(un_true[fitted]) < hi)]
-                if sel.sum() >= MIN_EVENTS_PER_BIN]
-        diagnostics[f"time_surface ({label})"] = dict(
-            exponent=speed_exponent(np.abs(un_true[fitted]), s_ts[fitted])["exponent"],
-            fitted_fraction=float(fitted.mean()), median_ratio=float(np.median(ratio)),
-            log_ratio_iqr=float(np.subtract(*np.percentile(np.log(ratio), [75, 25]))),
-            direction_cos_median=float(np.median(cos_dir)), ratio_by_normal_speed=bins)
-        d = diagnostics[f"time_surface ({label})"]
-        print(f"time surface ({label:19s}): exponent {d['exponent']:.2f}, median ratio {d['median_ratio']:.2f}, "
+    # Time-surface normal flow (events -> O -> N): speed and direction against the true normal flow.
+    # The horizon sets the slowest measurable speed, about radius / horizon.
+    index = EventIndex.build(gt.t, gt.x, gt.y, gt.p)
+    for rule, horizon in [(LatestEvent(), 0.03), (HardGap(0.005), 0.03), (HardGap(0.01), 0.03),
+                          (HardGap(0.01), 0.1), (HardGap(0.02), 0.1), (HardGap(0.02), 0.2)]:
+        d = time_surface_report(index, rule, gt, horizon)
+        label = f"{rule.name}, {horizon * 1000:g} ms"
+        diagnostics[f"time_surface ({label})"] = d
+        print(f"time surface ({label:24s}): exponent {d['exponent']:.2f}, median ratio {d['median_ratio']:.2f}, "
               f"IQR(log) {d['log_ratio_iqr']:.2f}, direction cos {d['direction_cos_median']:.2f}, "
-              f"fitted {d['fitted_fraction']:.0%}; ratio by |u_n|: " + " ".join(f"{b['median_ratio']:.2f}" for b in bins))
+              f"fitted {d['fitted_fraction']:.0%}; ratio by |u_n|: "
+              + " ".join(f"{b['median_ratio']:.2f}" for b in d["ratio_by_normal_speed"]))
     print("speed exponents (log-log slope vs image speed; 1 = proportional):",
           {k: round(v["exponent"], 2) for k, v in diagnostics.items() if not k.startswith("time_surface")})
 
@@ -422,11 +397,11 @@ def main():
 
     results = [summarise(name, v, v_true, speed, pol) for name, v in estimators.items()]
 
-    meta = dict(seed=args.seed, samples=int(len(idx)), near_frames=int(candidate.sum()), imu_lag_s=lag,
+    meta = dict(seed=args.seed, samples=int(len(idx)), near_frames=gt.near_frames, imu_lag_s=gt.lag,
                 diagnostics=diagnostics,
                 frame_window_s=args.frame_window, min_gradient=args.min_gradient,
-                translation_speed_median=float(np.median(v_trans)),
-                translation_speed_p95=float(np.percentile(v_trans, 95)),
+                translation_speed_median=float(np.median(gt.v_trans)),
+                translation_speed_p95=float(np.percentile(gt.v_trans, 95)),
                 note="k in V_est = k V_true with c = 1 (events/s); c = 1/k is in the frame's log units, which "
                      "include the unknown APS response curve.")
     (args.out / "results.json").write_text(json.dumps(dict(meta=meta, estimators=results), indent=2))
