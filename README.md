@@ -1,24 +1,25 @@
+# Interacting Maps
 
+An event-based C++ implementation of the Interacting Maps algorithm (Cook et al., IJCNN 2011). A small network of recurrently coupled, retinotopic maps (intensity I, gradient G, optical flow F, camera rotation R) relaxes from event-camera input towards a mutually consistent interpretation of the scene.
 
-# Interacting Maps 
-This is a C++ Implementation of the Interacting Maps algorithm.
+The original algorithm works on frames of accumulated events. This implementation updates the maps **per event** and treats the time between events at a pixel in closed form, so there are no time bins. No code was published with the paper; the implementation follows its description. Deliberate deviations from the paper are switchable and documented in [docs/cpp-implementation.md](docs/cpp-implementation.md).
 
-The algorithm jointly estimates visual quantities like image intensity, optic flow from event data of a DVS
+## Status
 
-The implementation is done on an event basis in contrast to the original implementation which uses accumulated event frames.
-As there is no code provided with the original paper, this implementation was done based on the descriptions in the paper.
-The executable creates a folder of output frames for visual inspection, a time series of estimated rotational velocities
+- **Milestone M0** (rework of the C++ implementation, see [TASKS.md](TASKS.md)) is largely done: known implementation flaws are fixed one commit at a time, each with a Catch2 regression test. The network now runs faster than real time (RTF ≈ 0.11 on `shapes_rotation`).
+- **R does not yet track the camera rotation.** Events are read with a constant V = ±10, which carries no time unit. Experiments in [experiments/](experiments/) show that event timing across neighbouring pixels gives normal flow in px/s, and from that the rotation in rad/s (median cos 0.99 with the gyro). Bringing this into the network is the next step.
+- The Python package (`python/`, `incomaps`: simulator, NumPy reference, generic engine) is still a scaffold (milestones M1–M3).
 
-The events currently have to be provided with via a text file, called events.txt. Each event consists of a time stamp, a x and y coordinate and a polarity [0,1]
-
-# Repository layout
+## Repository layout
 
 | Path | Contents |
 | --- | --- |
 | `src/`, `include/`, `tests/` | Event-based C++ implementation, Catch2 tests |
 | `python/` | Python package `incomaps`: simulator with ground truth, NumPy reference, evaluation (in progress) |
-| `docs/` | Paper summary, design, work-package specs, validation plan |
+| `experiments/` | Offline experiments on recorded data (scripts and reports; results in `experiments/results/`, not tracked) |
+| `docs/` | Paper summary, design, work-package specs, validation plan, notes on the C++ implementation |
 | `configs/` | Network declarations (maps, relations, rates) |
+| `res/<dataset>/` | Input data (see below) |
 | `TASKS.md` | Milestones with acceptance criteria |
 
 ## Build and test (C++)
@@ -30,6 +31,82 @@ ctest --test-dir build --output-on-failure
 ```
 
 Requires OpenCV, HDF5 (with C++ bindings) and Eigen to be installed; Boost, Catch2, pybind11 and autodiff are fetched by CPM.
+
+The default build computes the maps and writes `R.txt`. To also produce images (the V/I/G/F panels, a live window), build with `IMAGES` in a separate build directory:
+
+```
+cmake -S . -B build-images -DCMAKE_BUILD_TYPE=Release -DIMAGES=ON
+cmake --build build-images -j
+```
+
+Both builds write the executable to `./InteractingMaps` in the repository root, so the build compiled last wins.
+
+## Input data
+
+The executable reads `res/<resourceDirectory>/` relative to the working directory. The format follows the [Event Camera Dataset](https://rpg.ifi.uzh.ch/davis_data.html) (e.g. `shapes_rotation`):
+
+| File | Contents |
+| --- | --- |
+| `events.txt` | one event per line, `t x y p`: time in seconds, column, row, polarity 0/1; chronological; an optional header line is skipped |
+| `settings.txt` | `height width` of the sensor, e.g. `180 240` |
+| `calib.txt` | `fx fy cx cy k1 k2 p1 p2 k3` (pinhole intrinsics and radial-tangential distortion; the C++ model uses only the intrinsics) |
+| `imu.txt` | `t ax ay az gx gy gz` (only with `--fuseR`) |
+| `images.txt`, `images/` | frame list and frames (only with `--fuseI`) |
+
+`events.txt` is large and not tracked; `.gitignore` excludes `res/shapes_rotation/events.txt`. The whole file is loaded into memory at start-up (about 2.4 s and 280 MB for 23 M events).
+
+## Running
+
+Run from the repository root. Results go to `output/<resultsDirectory>/`.
+
+```
+# Algorithm only, as fast as possible; prints the RTF in total and per 1 s interval
+./InteractingMaps --startTime 0 --endTime 60 --resultsDirectory run1 --seed 0
+
+# IMAGES build: watch the network live, in real time, without writing PNGs
+./InteractingMaps --startTime 0 --endTime 60 --show true --writeFrames false
+
+# IMAGES build: write frames and turn them into a video
+./InteractingMaps --startTime 0 --endTime 60 --resultsDirectory run1
+ffmpeg -framerate 60 -pattern_type glob -i 'output/run1/VIGF_*.png' -c:v libx264 -pix_fmt yuv420p output/run1/run1.mp4
+```
+
+Each frame panel shows V (events since the last frame, red/green by polarity) top left, I top right, G bottom left and F bottom right; the colour wheel gives the direction of G and F.
+
+| Output | Contents |
+| --- | --- |
+| `R.txt` | time and R per output frame (currently in "per event" units, see Status) |
+| `time_realtime.txt` | processing time, data span and RTF (processing time / data time; < 1 is faster than real time; loading excluded) |
+| `VLoss.txt`, `VIGF_*.png`, `frame_*.png` | IMAGES builds: consistency loss, panels and intensity per frame |
+
+Main options (`./InteractingMaps --help` lists all):
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--startTime`, `--endTime` | 0, 5 | time range of the recording in seconds |
+| `--resourceDirectory`, `--resultsDirectory` | `shapes_rotation` | input under `res/`, output under `output/` |
+| `--seed` | 0 | random initialisation and update order; runs are reproducible bit for bit |
+| `--fps` | 60 | rate of output frames, live display and `R.txt` samples |
+| `--show`, `--pace`, `--writeFrames` | false, true, true | IMAGES builds: live window, real-time playback, PNG output |
+| `--asyncFR` | true | event-driven F ← R instead of global passes every `timeStep` |
+| `--silentG` | true | time without events at a pixel counts as V = 0 for G |
+| `--decay`, `--clamp`, `--resetG` | true, true, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
+| `--fuseR`, `--fuseI` | false | fuse the gyro (`imu.txt`) or the frames (`images.txt`) |
+
+## Experiments (Python)
+
+```
+cd python && python3 -m venv .venv && .venv/bin/pip install -e ".[dev,fast]" && cd ..
+PYTHONPATH=experiments python/.venv/bin/python experiments/v_units.py
+```
+
+| Script | Question | Report |
+| --- | --- | --- |
+| `experiments/v_units.py` | How should events be read as V = ∂ log I / ∂t? | [v-units.md](experiments/reports/v-units.md) |
+| `experiments/r_prototype.py` | Rotation from event timing: does the F ↔ R loop settle to the steady state, and how fast? | [r-prototype.md](experiments/reports/r-prototype.md) |
+| `experiments/onset_rules.py` | Which onset rule (latest event, burst gap, synaptic depression) gives the best arrival times? | [onset-rules.md](experiments/reports/onset-rules.md) |
+
+`experiments/event_maps.py` holds the shared maps and relations (event index, onset rules, normal flow) behind small interfaces, so rules can be swapped.
 
 # Installation (manual dependency setup)
 ```
@@ -76,7 +153,7 @@ cmake --build . --target install
 
 ## Install dv-processing
 https://gitlab.com/inivation/dv/dv-processing
-###Clone repo
+### Clone repo
 ```
 git clone https://gitlab.com/inivation/dv/dv-processing.git
 cd dv-processing
