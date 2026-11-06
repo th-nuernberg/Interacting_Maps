@@ -14,6 +14,7 @@
 #include "file_operations.h"
 #include "imaging.h"
 #include "timing.h"
+#include "rotation_plot.h"
 #include <opencv2/highgui.hpp>
 #include <atomic>
 #include <mutex>
@@ -85,6 +86,7 @@ struct ProgramArgs
     double onsetTime;
     double evidenceLifetime;
     bool evidenceAccumulate;
+    bool plotRotation;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -123,7 +125,8 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .onsetRule         = vm["onsetRule"].as<std::string>(),
         .onsetTime         = vm["onsetTime"].as<double>(),
         .evidenceLifetime  = vm["evidenceLifetime"].as<double>(),
-        .evidenceAccumulate = vm["evidenceAccumulate"].as<bool>()
+        .evidenceAccumulate = vm["evidenceAccumulate"].as<bool>(),
+        .plotRotation      = vm["plotRotation"].as<bool>()
     };
 }
 
@@ -172,7 +175,8 @@ int main(int argc, char* argv[]) {
             ("onsetRule", po::value<std::string>()->default_value("depression"), "With rotationFromTiming: arrival time per pixel, latest | gap | depression")
             ("onsetTime", po::value<double>()->default_value(0.02), "With rotationFromTiming: depression recovery time or burst gap (s)")
             ("evidenceLifetime", po::value<double>()->default_value(0.01), "With rotationFromTiming: lifetime of flow measurements (s)")
-            ("evidenceAccumulate", po::value<bool>()->default_value(false), "With rotationFromTiming: add measurements at a pixel instead of replacing them");
+            ("evidenceAccumulate", po::value<bool>()->default_value(false), "With rotationFromTiming: add measurements at a pixel instead of replacing them")
+            ("plotRotation", po::value<bool>()->default_value(true), "IMAGES builds with rotationFromTiming: plot R against the gyro (display only) below the maps");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -239,6 +243,13 @@ int main(int argc, char* argv[]) {
     timing::RotationFromFlow rotationFromFlow(parameters.evidenceLifetime);
     const double flowPriorKappa = 1.0 / (parameters.flowPriorSigma * parameters.flowPriorSigma);
     std::vector<int> noFlowUpdates;   // with rotationFromTiming the event step only updates I and G
+
+    // Plot of R against the gyro, for the display only: the gyro never reaches the network unless --fuseR.
+    const bool plotRotation = args->plotRotation && parameters.rotationFromTiming && fs::exists(imuPath);
+    const GyroReference gyroReference = plotRotation ? GyroReference::load(imuPath, parameters.R_cam_imu) : GyroReference{};
+    RotationPlot rotationPlot(parameters.startTime, parameters.endTime);
+    const double imuLag = 0.004;   // s, IMU behind the events (experiments/v_units.py)
+    const int plotHeight = 400;
     if (parameters.rotationFromTiming) {
         state.R.setZero();
         state.F.setZero();
@@ -271,7 +282,9 @@ int main(int argc, char* argv[]) {
 #ifdef IMAGES
     if (args->show) {
         cv::namedWindow("Interacting Maps", cv::WINDOW_NORMAL);
-        cv::resizeWindow("Interacting Maps", 1260, 760);
+        // 2x the panel; with the rotation plot below, 1.2x so that it fits on a laptop screen
+        if (plotRotation) cv::resizeWindow("Interacting Maps", 756, static_cast<int>(1.2 * (380 + plotHeight)));
+        else cv::resizeWindow("Interacting Maps", 1260, 760);
     }
 #else
     if (args->show || !args->writeFrames) {
@@ -439,7 +452,16 @@ int main(int argc, char* argv[]) {
 
                         std::string image_name = "VIGF_" + filename.str() + ".png";
                         fs::path image_path = folder_path / image_name;
-                        const cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, F_now, image_path, args->writeFrames, 0.1);
+                        cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, F_now, image_path, false, 0.1);
+                        if (plotRotation) {
+                            // omega = -R, from (y, x, z) storage to (x, y, z)
+                            const Eigen::Vector3f omega(-state.R(1), -state.R(0), -state.R(2));
+                            rotationPlot.add(event->time, omega, gyroReference.at(event->time + imuLag));
+                            cv::vconcat(vigf, rotationPlot.render(vigf.cols, plotHeight), vigf);
+                        }
+                        if (args->writeFrames) {
+                            cv::imwrite(image_path.string(), vigf);
+                        }
                         if (args->show) {
                             if (args->pace) {
                                 const auto due = start_realtime + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(

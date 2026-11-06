@@ -4,6 +4,7 @@
 add_executable(im_tests
         test_update.cpp
         test_timing.cpp
+        test_rotation_plot.cpp
 )
 
 target_link_libraries(im_tests PRIVATE interacting_maps_lib Catch2::Catch2WithMain)

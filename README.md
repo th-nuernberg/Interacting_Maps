@@ -74,7 +74,7 @@ Run from the repository root. Results go to `output/<resultsDirectory>/`.
 ffmpeg -framerate 60 -pattern_type glob -i 'output/run1/VIGF_*.png' -c:v libx264 -pix_fmt yuv420p output/run1/run1.mp4
 ```
 
-Each frame panel shows V (events since the last frame, red/green by polarity) top left, I top right, G bottom left and F bottom right; the colour wheel gives the direction of G and F.
+Each frame panel shows V (events since the last frame, red/green by polarity) top left, I top right, G bottom left and F bottom right; the colour wheel gives the direction of G and F. With `--rotationFromTiming`, a plot below the panels shows the estimated angular velocity against the gyro over the last 10 s, and the 1 s rolling direction cosine and magnitude ratio over the whole run.
 
 | Output | Contents |
 | --- | --- |
@@ -97,6 +97,7 @@ Main options (`./InteractingMaps --help` lists all):
 | `--rotationFromTiming` | false | F and R (rad/s) from the arrival times of edges; see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--onsetRule`, `--onsetTime` | `depression`, 0.02 | with `--rotationFromTiming`: arrival time per pixel (`latest`, `gap`, `depression`) and its time constant |
 | `--evidenceLifetime`, `--evidenceAccumulate` | 0.01, false | with `--rotationFromTiming`: lifetime of flow measurements; add instead of replace |
+| `--plotRotation` | true | IMAGES builds with `--rotationFromTiming`: plot R against the gyro below the maps (display only; the gyro is not fused) |
 | `--fuseR`, `--fuseI` | false | fuse the gyro (`imu.txt`) or the frames (`images.txt`) |
 
 ## Experiments (Python)
