@@ -11,6 +11,7 @@ add_library(interacting_maps_lib
         events.cpp
         datatypes.cpp
         cost.cpp
+        timing.cpp
 )
 
 target_link_libraries(interacting_maps_lib

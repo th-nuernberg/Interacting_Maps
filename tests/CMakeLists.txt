@@ -3,6 +3,7 @@
 # branch; it does not compile against the Eigen code on this branch and is not built here.
 add_executable(im_tests
         test_update.cpp
+        test_timing.cpp
 )
 
 target_link_libraries(im_tests PRIVATE interacting_maps_lib Catch2::Catch2WithMain)
