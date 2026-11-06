@@ -32,6 +32,8 @@ ctest --test-dir build --output-on-failure
 
 Requires OpenCV, HDF5 (with C++ bindings) and Eigen to be installed; Boost, Catch2, pybind11 and autodiff are fetched by CPM.
 
+What the tests and experiments check: [docs/tests.md](docs/tests.md).
+
 The default build computes the maps and writes `R.txt`. To also produce images (the V/I/G/F panels, a live window), build with `IMAGES` in a separate build directory:
 
 ```

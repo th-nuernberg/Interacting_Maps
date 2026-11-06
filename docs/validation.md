@@ -1,6 +1,6 @@
 # Validation
 
-Test on a ladder from exact synthetic ground truth to real hardware, and report the metrics the paper left out.
+Test on a ladder from exact synthetic ground truth to real hardware, and report the metrics the paper left out. This is the plan; the tests that exist now are listed in [tests.md](tests.md).
 
 | Environment | Ground truth available | Used for |
 | --- | --- | --- |
