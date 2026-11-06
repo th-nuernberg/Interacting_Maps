@@ -6,7 +6,7 @@ There are three layers:
 
 | Layer | Checks | Ground truth | Where |
 |---|---|---|---|
-| **Unit tests** (56 Catch2 cases, 633 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
+| **Unit tests** (57 Catch2 cases, 636 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
 | **Method experiments** (Python) | does an idea work on real data before it is ported? | gyro, DAVIS frames | `experiments/`, reports in `experiments/reports/` |
 | **End-to-end runs** (C++ binary) | does the whole network track the camera, how fast, and did a change break anything? | gyro (display/scoring only), earlier outputs | `output/<run>/`, `experiments/plot_r_vs_gyro.py` |
 
@@ -121,6 +121,7 @@ These pin the decisions so they can't change unnoticed.
 | Per-pixel contrast ratio moves from the global ratio to the pixel's own counts | `pixel` shrinkage |
 | Unknown contrast step modes are rejected | |
 | I is in event steps without bounds, and F and G are not clamped by default | the display-derived values are gone |
+| I uses per-pixel contrast steps and forgets with the derived time constant by default | `pixel` steps, τ = 0.06 s |
 
 ### Display `[plot]` `[imu]`
 
@@ -141,6 +142,7 @@ Each answers one question on `shapes_rotation` before anything is ported. Refere
 | [onset-rules.md](../experiments/reports/onset-rules.md) | Which rule turns a pixel's burst into an arrival time? | Any burst rule beats the latest event. Depression τ = 10–20 ms, U = 1 is best for rotation (mean cos 0.938); hard gap is best for single measurements. |
 | [polarity-check.md](../experiments/reports/polarity-check.md) | Is the network's G good enough to predict event polarity, sign(−G·u)? | 84 % agreement (frames: 96 %); G points the right way (cos 0.92). Errors come from G, not from the motion. Without the I decay, I drifts into its clamp and agreement falls to 70 %. |
 | [contrast-steps.md](../experiments/reports/contrast-steps.md) | Do separate ON/OFF steps make the I decay unnecessary? | They remove the drift of the mean (−73 → −0.5 steps), but I still spreads like a random walk without forgetting (agreement 0.53). The decay forgets accumulated per-event error. With decay: 0.836 → 0.839. |
+| [forgetting.md](../experiments/reports/forgetting.md) | How much error does each event add to I, and how fast must I forget? | σ² = 1.9 steps² per event; per-pixel steps remove the quadratic drift. τ* = 1/(σ²·rate) = 0.06 s is the optimum of a sweep (0.850, was 0.836 at 0.1 s); now the default. |
 
 ## 3. End-to-end runs (C++)
 

@@ -504,6 +504,13 @@ TEST_CASE("I is in event steps without bounds, and F and G are not clamped by de
     REQUIRE(std::isinf(p.clampBound()));
 }
 
+TEST_CASE("I uses per-pixel contrast steps and forgets with the derived time constant by default", "[deviations][contrast]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    REQUIRE(p.contrastSteps == "pixel");   // c_ON / c_OFF differs between pixels
+    REQUIRE(p.useDecay);
+    REQUIRE_THAT(p.decayParam, WithinAbs(0.06f, 1e-6));   // 1 / (sigma^2 rate), experiments/reports/forgetting.md
+}
+
 TEST_CASE("G reset is off and silent relaxation on by default", "[deviations][silent]") {
     const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
     REQUIRE_FALSE(p.resetGEachFrame);

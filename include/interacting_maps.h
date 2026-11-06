@@ -79,7 +79,7 @@ struct Parameters
     float neutralPotential  = 0.0f;
     // ON and OFF events may stand for different contrasts (c_ON != c_OFF; docs/assumptions.md, W3). I is in units of
     // c_OFF; an ON event adds c_ON / c_OFF. "equal", "fixed" (contrastRatio), "global" or "pixel" (include/contrast.h).
-    std::string contrastSteps = "equal";
+    std::string contrastSteps = "pixel";   // per-pixel thresholds differ (experiments/reports/forgetting.md)
     double      contrastRatio = 1.0;     // c_ON / c_OFF for "fixed"
     double      contrastPrior = 100.0;   // "pixel": pseudo-events of the global ratio
     int   vis_counter = -1;
@@ -126,8 +126,10 @@ struct Parameters
     float clampBound() const { return clampMaps ? gamma : std::numeric_limits<float>::infinity(); }
     float zeroThreshold() const { return clampMaps ? eps : 0.0f; }
 
-    // Decay
-    float decayParam = 1e-1f;
+    // Decay: I forgets with time constant decayParam (s). tau* = 1 / (sigma^2 rate): forget before the error that every
+    // event adds (sigma^2 = 1.9 steps^2 per event) reaches one step^2 in a neighbour difference; 0.06 s at the median
+    // 8.8 events/s of active pixels on shapes_rotation, and the optimum of a sweep (experiments/reports/forgetting.md).
+    float decayParam = 0.06f;
 
     // Reproducibility: random initialisation and the update-order shuffle derive from this seed
     unsigned seed = 0;

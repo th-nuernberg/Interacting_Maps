@@ -93,6 +93,7 @@ struct ProgramArgs
     std::string contrastSteps;
     double contrastRatio;
     double contrastPrior;
+    float decayTime;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -136,7 +137,8 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .dumpEvents        = vm["dumpEvents"].as<int>(),
         .contrastSteps     = vm["contrastSteps"].as<std::string>(),
         .contrastRatio     = vm["contrastRatio"].as<double>(),
-        .contrastPrior     = vm["contrastPrior"].as<double>()
+        .contrastPrior     = vm["contrastPrior"].as<double>(),
+        .decayTime         = vm["decayTime"].as<float>()
     };
 }
 
@@ -188,9 +190,10 @@ int main(int argc, char* argv[]) {
             ("evidenceAccumulate", po::value<bool>()->default_value(false), "With rotationFromTiming: add measurements at a pixel instead of replacing them")
             ("plotRotation", po::value<bool>()->default_value(true), "IMAGES builds with rotationFromTiming: plot R against the gyro (display only) below the maps")
             ("dumpEvents", po::value<int>()->default_value(0), "With rotationFromTiming: write the maps at every n-th event to event_diagnostics.bin (0 = off)")
-            ("contrastSteps", po::value<std::string>()->default_value("equal"), "Step of an ON event relative to an OFF event (c_ON / c_OFF): equal | fixed | global | pixel")
+            ("contrastSteps", po::value<std::string>()->default_value("pixel"), "Step of an ON event relative to an OFF event (c_ON / c_OFF): equal | fixed | global | pixel")
             ("contrastRatio", po::value<double>()->default_value(1.0), "With contrastSteps fixed: c_ON / c_OFF")
-            ("contrastPrior", po::value<double>()->default_value(100.0), "With contrastSteps pixel: pseudo-events of the global ratio per pixel");
+            ("contrastPrior", po::value<double>()->default_value(100.0), "With contrastSteps pixel: pseudo-events of the global ratio per pixel")
+            ("decayTime", po::value<float>()->default_value(0.06f), "Time constant (s) with which I forgets towards 0 (with --decay)");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -234,6 +237,7 @@ int main(int argc, char* argv[]) {
     Parameters parameters = initParameters(args->startTime, args->endTime, args->timeStep);
     parameters.seed = args->seed;
     parameters.useDecay = args->decay;
+    parameters.decayParam = args->decayTime;
     parameters.clampMaps = args->clamp;
     parameters.resetGEachFrame = args->resetG;
     parameters.silentRelaxation = args->silentG;

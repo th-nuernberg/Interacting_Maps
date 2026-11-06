@@ -95,8 +95,9 @@ Main options (`./InteractingMaps --help` lists all):
 | `--show`, `--pace`, `--writeFrames` | false, true, true | IMAGES builds: live window, real-time playback, PNG output |
 | `--asyncFR` | true | event-driven F ← R instead of global passes every `timeStep` |
 | `--silentG` | true | time without events at a pixel counts as V = 0 for G |
-| `--contrastSteps`, `--contrastRatio` | `equal`, 1 | step of an ON event relative to an OFF event, c_ON / c_OFF: `equal`, `fixed` (the ratio), `global` or `pixel` (estimated from the event counts) |
-| `--decay`, `--clamp`, `--resetG` | true, false, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
+| `--contrastSteps`, `--contrastRatio` | `pixel`, 1 | step of an ON event relative to an OFF event, c_ON / c_OFF: `equal`, `fixed` (the ratio), `global` or `pixel` (estimated from the event counts) |
+| `--decay`, `--decayTime` | true, 0.06 | I forgets towards 0 with this time constant (s), derived from the error each event adds; see [forgetting.md](experiments/reports/forgetting.md) |
+| `--clamp`, `--resetG` | false, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--rotationFromTiming` | false | F and R (rad/s) from the arrival times of edges; see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--onsetRule`, `--onsetTime` | `depression`, 0.02 | with `--rotationFromTiming`: arrival time per pixel (`latest`, `gap`, `depression`) and its time constant |
 | `--evidenceLifetime`, `--evidenceAccumulate` | 0.01, false | with `--rotationFromTiming`: lifetime of flow measurements; add instead of replace |
@@ -117,6 +118,7 @@ PYTHONPATH=experiments python/.venv/bin/python experiments/v_units.py
 | `experiments/onset_rules.py` | Which onset rule (latest event, burst gap, synaptic depression) gives the best arrival times? | [onset-rules.md](experiments/reports/onset-rules.md) |
 | `experiments/polarity_check.py` | Does the network's G predict event polarity, sign(−G·u)? Needs a C++ run with `--dumpEvents` | [polarity-check.md](experiments/reports/polarity-check.md) |
 | `experiments/contrast_steps.py` | Do separate ON/OFF contrast steps (c_ON ≠ c_OFF) make the I decay unnecessary? | [contrast-steps.md](experiments/reports/contrast-steps.md) |
+| `experiments/forgetting.py` | How much error does each event add to I, and how fast must I forget? | [forgetting.md](experiments/reports/forgetting.md) |
 
 `experiments/event_maps.py` holds the shared maps and relations (event index, onset rules, normal flow) behind small interfaces, so rules can be swapped.
 
