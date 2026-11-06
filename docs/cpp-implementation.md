@@ -7,7 +7,7 @@ The C++ code in `src/` and `include/` predates the specs in this folder. It runs
 | Paper | C++ (`OpticalFlowState`) | Shape | Notes |
 | --- | --- | --- | --- |
 | V | `V` (scalar per event), `V_Vis` (display only) | H × W | `V = polarity · eventContribution` = ±1, polarity ∈ {−1, +1} |
-| I | `MI` | H × W | log intensity in units of the contrast threshold c (event steps), offset 0; shown as grey 128 + 10 · I |
+| I | `MI` | H × W | log intensity in units of the OFF threshold c_OFF (event steps), offset 0; an ON event adds c_ON / c_OFF (`--contrastSteps`, default 1); shown from −5 (black) to +5 (white) steps |
 | I | `MI` | H × W | Not (H+1) × (W+1); see deviations |
 | G | `G` | H × W × 2 | channel 0 = y, channel 1 = x |
 | F | `F` | H × W × 2 | channel 0 = y, channel 1 = x |

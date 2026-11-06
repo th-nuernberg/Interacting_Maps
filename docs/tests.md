@@ -6,7 +6,7 @@ There are three layers:
 
 | Layer | Checks | Ground truth | Where |
 |---|---|---|---|
-| **Unit tests** (51 Catch2 cases, 617 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
+| **Unit tests** (56 Catch2 cases, 633 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
 | **Method experiments** (Python) | does an idea work on real data before it is ported? | gyro, DAVIS frames | `experiments/`, reports in `experiments/reports/` |
 | **End-to-end runs** (C++ binary) | does the whole network track the camera, how fast, and did a change break anything? | gyro (display/scoring only), earlier outputs | `output/<run>/`, `experiments/plot_r_vs_gyro.py` |
 
@@ -112,6 +112,16 @@ These pin the decisions so they can't change unnoticed.
 | clampMaps switches the F/G clamping off | inputs are never clamped |
 | initOpticalFlowState is reproducible for a given seed | determinism |
 
+### Contrast steps `[contrast]`
+
+| Test | Guarantees |
+|---|---|
+| Equal contrast steps are ±1, a fixed ratio scales only ON events | `equal`, `fixed` |
+| Global contrast ratio is the OFF/ON count ratio, used causally | `global` uses counts before the event |
+| Per-pixel contrast ratio moves from the global ratio to the pixel's own counts | `pixel` shrinkage |
+| Unknown contrast step modes are rejected | |
+| I is in event steps without bounds, and F and G are not clamped by default | the display-derived values are gone |
+
 ### Display `[plot]` `[imu]`
 
 | Test | Guarantees |
@@ -130,6 +140,7 @@ Each answers one question on `shapes_rotation` before anything is ported. Refere
 | [r-prototype.md](../experiments/reports/r-prototype.md) | Does the F ↔ R loop with fading measurements settle into a state that tracks the rotation? | Yes: steady state cos 0.99 (median), ratio 1.00, no fitted scale. The loop reaches the same fixed point but needs 100–300 trips per frame; solved directly instead. Lens distortion is needed for the magnitude (pinhole: −7 to −10 %). |
 | [onset-rules.md](../experiments/reports/onset-rules.md) | Which rule turns a pixel's burst into an arrival time? | Any burst rule beats the latest event. Depression τ = 10–20 ms, U = 1 is best for rotation (mean cos 0.938); hard gap is best for single measurements. |
 | [polarity-check.md](../experiments/reports/polarity-check.md) | Is the network's G good enough to predict event polarity, sign(−G·u)? | 84 % agreement (frames: 96 %); G points the right way (cos 0.92). Errors come from G, not from the motion. Without the I decay, I drifts into its clamp and agreement falls to 70 %. |
+| [contrast-steps.md](../experiments/reports/contrast-steps.md) | Do separate ON/OFF steps make the I decay unnecessary? | They remove the drift of the mean (−73 → −0.5 steps), but I still spreads like a random walk without forgetting (agreement 0.53). The decay forgets accumulated per-event error. With decay: 0.836 → 0.839. |
 
 ## 3. End-to-end runs (C++)
 

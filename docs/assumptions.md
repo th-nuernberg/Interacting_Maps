@@ -44,12 +44,13 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 
 | # | Assumption | Value | Status | Evidence / effect |
 |---|---|---|---|---|
-| V1 | **Every event adds a step of ±1 to I**, i.e. I is log intensity in units of c. | 1 (was 10, for display) | **physics** since 2026-11-06 | Exactly equivalent to the old 10: same R.txt, G = G_old/10 to float rounding. Still assumes the same c for ON and OFF (W3). |
+| V1 | **Every event adds a step of ±1 to I**, i.e. I is log intensity in units of c. | 1 (was 10, for display) | **physics** since 2026-11-06 | Exactly equivalent to the old 10: same R.txt, G = G_old/10 to float rounding. With the default `--contrastSteps equal`, assumes the same c for ON and OFF (see V7). |
 | V2 | V → I adds the full step (`weight_IV`). | 1 | inherited ("weights 1" rule) | A different weight is equivalent to a different V1. |
 | V3 | **I starts at, and decays back to, 0.** | 0 (was 128, for display) | **physics** since 2026-11-06 | The offset of log I is unobservable (the β ambiguity), so 0 is as good as any value. The display shows 0 as mid grey. |
 | V4 | **I has no bounds.** | ±∞ (was [0, 255], for display) | **physics** since 2026-11-06 | The bounds were inactive with the decay (0.0 % of events). Without the decay, I now drifts freely instead of sticking at 0 (W3). |
-| V5 | **I decays to 0** with time constant `decayParam`. So I is a *high-pass filtered* log I that forgets a static scene after about 0.1 s, not log I itself. | τ = 0.1 s | inherited value; the *need* is measured | It compensates the ON/OFF imbalance (W3): without it, polarity agreement falls from 84 % to 70 %. Grounded replacement: ON/OFF steps from W3, then a slow leak only for noise. |
+| V5 | **I decays to 0** with time constant `decayParam`. So I is a *high-pass filtered* log I that forgets a static scene after about 0.1 s, not log I itself. | τ = 0.1 s | inherited value; the *need* is measured | It forgets the error each event adds (threshold noise, mismatch, noise events). Without it, I spreads like a random walk even with ON/OFF steps (V7), and polarity agreement falls to 0.53 ([contrast-steps](../experiments/reports/contrast-steps.md)). Grounded replacement: forgetting at a rate set by the per-event variance σ_c² and the event rate. |
 | V6 | I ← G pushes I towards the integral of G, with full weight. | `weight_IG` = 1 | inherited ("weights 1") | Not examined separately. |
+| V7 | **ON and OFF events stand for different contrasts**, c_ON and c_OFF. I is in units of c_OFF: an OFF event adds −1, an ON event +c_ON/c_OFF ([include/contrast.h](../include/contrast.h)). | `--contrastSteps` `equal` (default), `fixed` (`--contrastRatio`), `global`, `pixel` (`--contrastPrior` = 100) | open, kept switchable | The real thresholds are unknown. A threshold calibration (for example a slow brightness ramp or flicker of known contrast in front of the sensor) or the sensor's bias settings would give them, and `fixed` takes the measured ratio directly. Estimated from the event counts it is ≈ 1.36 (W3), which assumes each pixel's log I returns to where it started; `global` and `pixel` make that estimate online. It removes the drift of the mean but cannot replace the decay ([contrast-steps](../experiments/reports/contrast-steps.md)). |
 
 ## 4. G
 
@@ -99,6 +100,7 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 | I2 | **`slice_events` includes both ends** of each 1 s slice. | bug | About 40 boundary events per minute are processed twice. Negligible here, but pinned by a test. |
 | I3 | **Decay and relaxation are lazy:** a pixel is brought up to date only when an event reads it, or for display. | approximation, tested | Exact for the closed forms; uses the current R for the whole silent time (≈ 1.6 ms error window for F ← R). |
 | I4 | Display and `R.txt` sample at 60 fps from relaxed copies, without changing the state. | convention | |
+| I5 | The display shows I from −5 (black) to +5 (white) event steps, the same in every frame, with a labelled bar. | convention | 99.9 % of event pixels have \|I\| < 4.6 steps on shapes_rotation. Only the display clips. |
 
 ## 8. Evaluation
 

@@ -95,6 +95,7 @@ Main options (`./InteractingMaps --help` lists all):
 | `--show`, `--pace`, `--writeFrames` | false, true, true | IMAGES builds: live window, real-time playback, PNG output |
 | `--asyncFR` | true | event-driven F ← R instead of global passes every `timeStep` |
 | `--silentG` | true | time without events at a pixel counts as V = 0 for G |
+| `--contrastSteps`, `--contrastRatio` | `equal`, 1 | step of an ON event relative to an OFF event, c_ON / c_OFF: `equal`, `fixed` (the ratio), `global` or `pixel` (estimated from the event counts) |
 | `--decay`, `--clamp`, `--resetG` | true, false, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--rotationFromTiming` | false | F and R (rad/s) from the arrival times of edges; see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--onsetRule`, `--onsetTime` | `depression`, 0.02 | with `--rotationFromTiming`: arrival time per pixel (`latest`, `gap`, `depression`) and its time constant |
@@ -115,6 +116,7 @@ PYTHONPATH=experiments python/.venv/bin/python experiments/v_units.py
 | `experiments/r_prototype.py` | Rotation from event timing: does the F ↔ R loop settle to the steady state, and how fast? | [r-prototype.md](experiments/reports/r-prototype.md) |
 | `experiments/onset_rules.py` | Which onset rule (latest event, burst gap, synaptic depression) gives the best arrival times? | [onset-rules.md](experiments/reports/onset-rules.md) |
 | `experiments/polarity_check.py` | Does the network's G predict event polarity, sign(−G·u)? Needs a C++ run with `--dumpEvents` | [polarity-check.md](experiments/reports/polarity-check.md) |
+| `experiments/contrast_steps.py` | Do separate ON/OFF contrast steps (c_ON ≠ c_OFF) make the I decay unnecessary? | [contrast-steps.md](experiments/reports/contrast-steps.md) |
 
 `experiments/event_maps.py` holds the shared maps and relations (event index, onset rules, normal flow) behind small interfaces, so rules can be swapped.
 
