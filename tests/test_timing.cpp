@@ -303,3 +303,87 @@ TEST_CASE("Normal flow is weighted by its polarity check by default", "[deviatio
     REQUIRE_THAT(p.gradientSigma, WithinAbs(0.5, 1e-12));
     REQUIRE_THAT(p.flipPrior, WithinAbs(0.1, 1e-12));
 }
+
+// ------------------------------------------------------------------------------------------------------------------
+// Delay: measurements dated at their onsets, R now with its rate of change
+
+TEST_CASE("fitNormalFlow dates the measurement at the mean of the onsets it fitted", "[timing][normal-flow][delay]") {
+    OnsetMap onset(5, 5);
+    double sum = 0.0;
+    int n = 0;
+    for (int y = 0; y < 5; ++y)
+        for (int x = 0; x < 5; ++x) {
+            const double t = 1.0 + 0.004 * x + 0.001 * y;   // a plane wave of arrival times
+            onset.stamp[onset.index(y, x, 1)] = t;
+            onset.lastEvent[onset.index(y, x, 1)] = t;
+            sum += t;
+            ++n;
+        }
+    const NormalFlow N = fitNormalFlow(onset, 2, 2, 1, 1.025, NormalFlowSettings{});   // all onsets within the horizon
+    REQUIRE(N.valid);
+    REQUIRE_THAT(N.time, WithinAbs(sum / n, 1e-12));
+}
+
+namespace {
+// Measurements of a rotation that changes linearly in time: R(t) = R0 + A t, each dated at its own time
+RotationFromFlow linearRotation(const MotionModel &model, const Eigen::Vector3d &R0, const Eigen::Vector3d &A,
+                                double tEnd, double lifetime) {
+    FlowEvidence evidence(model.height, model.width, lifetime, false);
+    RotationFromFlow rotation(lifetime);
+    std::mt19937 rng(5);
+    std::uniform_real_distribution<float> angle(0.0f, 6.2831853f);
+    std::uniform_int_distribution<int> py(0, model.height - 1), px(0, model.width - 1);
+    for (double t = 0.0; t < tEnd; t += 2e-5) {
+        const int y = py(rng), x = px(rng);
+        const double measured = t - 0.004;   // onsets a little in the past
+        const float a = angle(rng);
+        const Eigen::Vector2f n(std::sin(a), std::cos(a));
+        const double s = n.cast<double>().dot(model.at(y, x) * (R0 + A * measured));
+        NormalFlow N = measurement(s >= 0 ? n : Eigen::Vector2f(-n), static_cast<float>(std::abs(s)), 1.0f);
+        N.time = measured;
+        rotation.fadeTo(t);
+        rotation.apply(model.at(y, x), evidence.add(y, x, N, t));
+    }
+    return rotation;
+}
+}
+
+TEST_CASE("rotationAt gives R now for a changing rotation; rotation() gives its past average", "[timing][rotation][delay]") {
+    const int H = 40, W = 50;
+    const MotionModel model = MotionModel::rotation(calibration(H, W), H, W);
+    const Eigen::Vector3d R0(0.5, -1.0, 2.0), A(30.0, -20.0, 50.0);   // rad/s and rad/s^2
+    const double tEnd = 0.2;
+    RotationFromFlow rotation = linearRotation(model, R0, A, tEnd, 0.01);
+    const Eigen::Vector3d now = R0 + A * tEnd;
+    const Eigen::Vector3f average = rotation.rotation();
+    const Eigen::Vector3f predicted = rotation.rotationAt(tEnd);
+    for (int k = 0; k < 3; ++k) {
+        REQUIRE_THAT(predicted(k), WithinAbs(now(k), 1e-3));
+        REQUIRE(std::abs(average(k) - now(k)) > 0.1);   // the average lags: about (lifetime + 4 ms) * A
+    }
+    REQUIRE_THAT(rotation.Rdot(2), WithinAbs(A(2), 1e-2));
+}
+
+TEST_CASE("rotationAt extrapolates between solves and keeps exact moments over 10 s rebases", "[timing][rotation][delay]") {
+    const int H = 20, W = 20;
+    const MotionModel model = MotionModel::rotation(calibration(H, W), H, W);
+    const Eigen::Vector3d R0(0.2, 0.1, -0.3), A(1.0, 2.0, -1.5);
+    RotationFromFlow rotation = linearRotation(model, R0, A, 10.5, 0.01);   // crosses one rebase of the moments
+    const Eigen::Vector3f R = rotation.rotationAt(10.5);
+    for (int k = 0; k < 3; ++k) REQUIRE_THAT(R(k), WithinAbs(R0(k) + A(k) * 10.5, 1e-3));
+    const long solves = rotation.solves;
+    rotation.dirtyAt = true;
+    const Eigen::Vector3f later = rotation.rotationAt(10.5 + 0.5 * rotation.solveInterval);   // within the interval
+    REQUIRE(rotation.solves == solves);
+    for (int k = 0; k < 3; ++k) REQUIRE_THAT(later(k), WithinAbs(R0(k) + A(k) * (10.5 + 0.5 * rotation.solveInterval), 1e-3));
+}
+
+TEST_CASE("rotationAt falls back to the average when all evidence describes one time", "[timing][rotation][delay]") {
+    RotationFromFlow rotation(0.01);
+    rotation.fadeTo(1.0);
+    rotation.addMeasurement(Eigen::Vector3f(0.1f, -0.2f, 0.3f), 100.0, 0.996);
+    const Eigen::Vector3f R = rotation.rotationAt(1.0);
+    REQUIRE_THAT(R(0), WithinAbs(0.1, 1e-6));
+    REQUIRE_THAT(R(2), WithinAbs(0.3, 1e-6));
+    REQUIRE(rotation.Rdot.isZero());
+}

@@ -531,6 +531,62 @@ Tensor3f gradientCopy(const Tensor2f &I){
     return gradient;
 }
 
+Vector2f readCorrectedGradient(const Tensor2f &I, Tensor3f &I_gradient, Tensor3f &dG, Tensor2f &dGTime, const int y, const int x, const float time, const float tau){
+    const float dt = time - dGTime(y, x);
+    if (dt > 0.0f) {
+        const float keep = expf(-dt / tau);
+        dG(y, x, 0) *= keep;
+        dG(y, x, 1) *= keep;
+        dGTime(y, x) = time;
+    }
+    computeGradient(I, I_gradient, y, x);
+    return {I_gradient(y, x, 0) + dG(y, x, 0), I_gradient(y, x, 1) + dG(y, x, 1)};
+}
+
+void followCorrectedGradientNeighbourhood(Tensor3f &G, const Tensor2f &I, Tensor3f &I_gradient, Tensor3f &dG, Tensor2f &dGTime, const int y, const int x, const float time, const float tau){
+    PROFILE_FUNCTION();
+    const int rows = static_cast<int>(G.dimension(0));
+    const int cols = static_cast<int>(G.dimension(1));
+    const int offsets[5][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (const auto &offset : offsets) {
+        const int yy = y + offset[0];
+        const int xx = x + offset[1];
+        if (yy < 0 || yy >= rows || xx < 0 || xx >= cols) continue;
+        const Vector2f g = readCorrectedGradient(I, I_gradient, dG, dGTime, yy, xx, time, tau);
+        G(yy, xx, 0) = g(0);
+        G(yy, xx, 1) = g(1);
+    }
+}
+
+void correctGradientSign(Tensor3f &dG, const Vector2f &G_read, const Vector2f &F, const int polarity, const int y, const int x, const float sigmaG, const float reliability){
+    const float speed = F.norm();
+    if (speed <= 0.0f || polarity == 0) return;
+    const Vector2f f_hat = F / speed;
+    const double g = G_read.dot(f_hat);
+    const double s = polarity > 0 ? -1.0 : 1.0;   // V = -G . F has the polarity's sign: G along F has the opposite
+    const double z = s * g / sigmaG;
+    const double phi = std::exp(-0.5 * z * z) / std::sqrt(2.0 * M_PI);
+    const double Phi = 0.5 * std::erfc(-z / std::sqrt(2.0));
+    const double rho = reliability;
+    const double posterior = g + s * sigmaG * phi * (2.0 * rho - 1.0) / (rho * Phi + (1.0 - rho) * (1.0 - Phi));
+    const float shift = static_cast<float>(posterior - g);
+    dG(y, x, 0) += shift * f_hat(0);
+    dG(y, x, 1) += shift * f_hat(1);
+}
+
+Tensor3f correctedGradientCopy(const Tensor2f &I, const Tensor3f &dG, const Tensor2f &dGTime, const float time, const float tau){
+    PROFILE_FUNCTION();
+    Tensor3f G = gradientCopy(I);
+    for (int y = 0; y < I.dimension(0); ++y) {
+        for (int x = 0; x < I.dimension(1); ++x) {
+            const float keep = expf(-std::max(time - dGTime(y, x), 0.0f) / tau);
+            G(y, x, 0) += keep * dG(y, x, 0);
+            G(y, x, 1) += keep * dG(y, x, 1);
+        }
+    }
+    return G;
+}
+
 void boundSilentG(Tensor3f &G, const Tensor3f &F, const Tensor3f &I_gradient, const int y, const int x, const float silentTime, const float onStep, const float slack){
     PROFILE_FUNCTION();
     // dI = -(G . F) dt must stay in (-1, onStep) steps while the pixel is silent: G_par |F| dt in (-onStep, 1).

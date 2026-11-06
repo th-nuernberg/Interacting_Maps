@@ -79,6 +79,7 @@ struct NormalFlow {
     float speed = 0.0f;                            // px/s along n
     float variance = 0.0f;                         // of speed, (px/s)^2
     int neighbours = 0;
+    double time = 0.0;                             // s; when the measured motion happened: mean of the onsets fitted
 };
 
 struct NormalFlowSettings {
@@ -110,8 +111,12 @@ struct MotionModel {
 // F evidence: what the events measured about F, per pixel, in information form, fading with `lifetime`
 
 struct EvidenceChange {
-    Eigen::Matrix2d dInformation = Eigen::Matrix2d::Zero();
+    Eigen::Matrix2d dInformation = Eigen::Matrix2d::Zero();   // added - removed
     Eigen::Vector2d dVector = Eigen::Vector2d::Zero();
+    // The same change split by the time each part describes (for relations that model motion over time)
+    Eigen::Matrix2d removedInformation = Eigen::Matrix2d::Zero(), addedInformation = Eigen::Matrix2d::Zero();
+    Eigen::Vector2d removedVector = Eigen::Vector2d::Zero(), addedVector = Eigen::Vector2d::Zero();
+    double removedTime = 0.0, addedTime = 0.0;
 };
 
 struct FlowEvidence {
@@ -121,6 +126,7 @@ struct FlowEvidence {
     std::vector<Eigen::Matrix2d> information;   // Lambda = sum w n n^T
     std::vector<Eigen::Vector2d> vector;        // eta = sum w n s
     std::vector<double> time;                   // time up to which the pixel's evidence has been faded
+    std::vector<double> measured;               // time the pixel's evidence describes (replace mode)
 
     FlowEvidence(int height, int width, double lifetime, bool accumulate);
     // Fades the pixel's evidence to time t (exactly; all evidence fades with the same rate).
@@ -134,6 +140,11 @@ struct FlowEvidence {
 //   H = sum_p M_p^T Lambda_p M_p,  b = sum_p M_p^T eta_p,  R = H^-1 b
 // All evidence fades with the same lifetime, so the sums fade as a whole in O(1). R is solved only when the sums
 // changed since the last solve and R is read.
+//
+// rotationAt(t): every measurement describes the motion at its own time t_i (the onsets it was fitted from), which
+// lies in the past. Modelling R(t_i) = R(t) + Rdot (t_i - t), the least squares over [R(t), Rdot] needs the moments
+// sum t_i^k M^T Lambda M (k = 0, 1, 2) and sum t_i^k M^T eta (k = 0, 1), which also fade as a whole. R is then the
+// rotation now instead of an average over the evidence's past. Times are kept relative to `epoch`.
 
 struct RotationFromFlow {
     double lifetime;
@@ -143,13 +154,28 @@ struct RotationFromFlow {
     Eigen::Vector3f R = Eigen::Vector3f::Zero();
     bool dirty = false;
     long solves = 0;
+    // Moments for rotationAt (H and b are the 0th)
+    double epoch = 0.0;
+    Eigen::Matrix3d H1 = Eigen::Matrix3d::Zero(), H2 = Eigen::Matrix3d::Zero();
+    Eigen::Vector3d b1 = Eigen::Vector3d::Zero();
+    double solveInterval = 1e-3;   // s; rotationAt solves at most this often and extrapolates with Rdot in between
+    bool dirtyAt = false;          // rotationAt's own flag: new evidence since its last solve
+    double solvedAt = -std::numeric_limits<double>::infinity();
+    Eigen::Vector3d Rsolved = Eigen::Vector3d::Zero(), Rdot = Eigen::Vector3d::Zero();
 
     explicit RotationFromFlow(double lifetime) : lifetime(lifetime) {}
     void fadeTo(double t);
     void apply(const Eigen::Matrix<double, 2, 3> &M, const EvidenceChange &change);
-    // A direct measurement of R (e.g. the gyro) with information `weight` per component, fading like the evidence.
-    void addMeasurement(const Eigen::Vector3f &R_measured, double weight);
+    // A direct measurement of R (e.g. the gyro) with information `weight` per component, describing time `measured`,
+    // fading like the evidence.
+    void addMeasurement(const Eigen::Vector3f &R_measured, double weight, double measured = 0.0);
+    // R as a weighted average over the evidence (what the evidence says on average over its lifetime)
     const Eigen::Vector3f &rotation();
+    // R at time t, with the rate of change estimated from when each measurement happened
+    const Eigen::Vector3f &rotationAt(double t);
+
+private:
+    void addMoments(const Eigen::Matrix3d &P, const Eigen::Vector3d &q, double measured, double sign);
 };
 
 // ------------------------------------------------------------------------------------------------------------------

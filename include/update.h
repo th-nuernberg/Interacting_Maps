@@ -392,6 +392,31 @@ void followGradientNeighbourhood(Tensor3f &G, const Tensor2f &I, Tensor3f &I_gra
 Tensor3f gradientCopy(const Tensor2f &I);
 
 /**
+ * F, polarity -> G: brightness constancy in sign. G has two sources: grad I, and the sign evidence of events, kept as
+ * a correction dG that forgets with I's time constant tau (it describes the same intensity pattern).
+ * readCorrectedGradient: G at (y, x) = grad I + dG decayed to time (I already decayed to time).
+ */
+Vector2f readCorrectedGradient(const Tensor2f &I, Tensor3f &I_gradient, Tensor3f &dG, Tensor2f &dGTime, int y, int x, float time, float tau);
+
+/**
+ * G = grad I + dG at (y, x) and its 4 neighbours (silentRule "gradient" with the sign correction)
+ */
+void followCorrectedGradientNeighbourhood(Tensor3f &G, const Tensor2f &I, Tensor3f &I_gradient, Tensor3f &dG, Tensor2f &dGTime, int y, int x, float time, float tau);
+
+/**
+ * The event's polarity is the sign of V = -G . F. With G's component along F uncertain (sigmaG) and the polarity right
+ * with probability `reliability`, the posterior mean of that component is
+ *     g + s sigmaG phi(z) (2 rho - 1) / (rho Phi(z) + (1 - rho)(1 - Phi(z))),   s = -polarity, z = s g / sigmaG
+ * dG at (y, x) takes the difference; the component across F is unchanged. Nothing changes where F = 0.
+ */
+void correctGradientSign(Tensor3f &dG, const Vector2f &G_read, const Vector2f &F, int polarity, int y, int x, float sigmaG, float reliability);
+
+/**
+ * grad I + dG at every pixel, dG decayed to time; display copy of G with the sign correction
+ */
+Tensor3f correctedGradientCopy(const Tensor2f &I, const Tensor3f &dG, const Tensor2f &dGTime, float time, float tau);
+
+/**
  * Silence as a bound on G (Parameters::silentRule = "bound"). No event at (y, x) for silentTime means the change of I
  * there stayed between the OFF threshold (-1 step) and the ON threshold (+onStep). With brightness constancy,
  * dI = -(G . F) dt, so G's component along F is bounded:

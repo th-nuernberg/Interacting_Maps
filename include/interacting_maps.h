@@ -144,6 +144,15 @@ struct Parameters
     std::string polaritySign        = "weight";   // experiments/reports/polarity-sign.md
     double      gradientSigma       = 0.5;            // steps/px
     double      flipPrior           = 0.1;
+    // F, polarity -> G (correctGradientSign): the polarity moves G's component along F to its posterior mean, kept as
+    // a correction that forgets with I's decay time. polarityReliability: P(polarity = sign of the true V), 0.96 from
+    // the frame gradient (experiments/reports/polarity-check.md).
+    bool        signCorrectG        = true;    // experiments/reports/delay-and-sign.md
+    double      polarityReliability = 0.96;
+    // R now instead of its average over the evidence's lifetime: measurements dated at their onsets, R and its rate
+    // of change fitted together (RotationFromFlow::rotationAt). rotationSolveInterval: computational, not physical.
+    bool        predictRotation     = true;    // experiments/reports/delay-and-sign.md
+    double      rotationSolveInterval = 1e-3;     // s
 
     // Bounds
     float eps   = 0.00001f;
@@ -173,6 +182,8 @@ struct OpticalFlowState
     Tensor3f G;               // Spatial gradient
     Tensor2f GTimeSurface;    // time up to which G's silent-time relaxation has been applied
     Tensor2f EventTimeSurface;   // time of each pixel's latest event (start time if none)
+    Tensor3f GSign;              // dG: G's correction from the sign evidence of events (F, polarity -> G)
+    Tensor2f GSignTime;          // time up to which dG has been decayed
     Tensor2f FTimeSurface;    // time up to which F's relaxation towards m32(R x C) has been applied
     float    BTime = 0.0f;    // time up to which B's relaxation towards A R has been applied
     Tensor3f delta_I;

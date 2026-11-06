@@ -99,6 +99,8 @@ struct ProgramArgs
     float silentSlack;
     bool randomInit;
     std::string polaritySign;
+    bool signCorrectG;
+    bool predictRotation;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -148,7 +150,9 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .refractoryTime    = vm["refractoryTime"].as<float>(),
         .silentSlack       = vm["silentSlack"].as<float>(),
         .randomInit        = vm["randomInit"].as<bool>(),
-        .polaritySign      = vm["polaritySign"].as<std::string>()
+        .polaritySign      = vm["polaritySign"].as<std::string>(),
+        .signCorrectG      = vm["signCorrectG"].as<bool>(),
+        .predictRotation   = vm["predictRotation"].as<bool>()
     };
 }
 
@@ -208,7 +212,9 @@ int main(int argc, char* argv[]) {
             ("refractoryTime", po::value<float>()->default_value(1.2e-3f), "With silentRule bound: s after an event before silence counts")
             ("silentSlack", po::value<float>()->default_value(0.0f), "With silentRule bound: widen both thresholds by this many steps")
             ("randomInit", po::value<bool>()->default_value(false), "Start F and R random (inherited, for comparison) instead of at zero")
-            ("polaritySign", po::value<std::string>()->default_value("weight"), "Timing mode: check each normal flow against polarity = sign(-G . F): off | gate | weight");
+            ("polaritySign", po::value<std::string>()->default_value("weight"), "Timing mode: check each normal flow against polarity = sign(-G . F): off | gate | weight")
+            ("signCorrectG", po::value<bool>()->default_value(true), "Timing mode: correct G's sign along F from each event's polarity (F, polarity -> G)")
+            ("predictRotation", po::value<bool>()->default_value(true), "Timing mode: date measurements at their onsets and estimate R now with its rate of change");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -253,6 +259,8 @@ int main(int argc, char* argv[]) {
     parameters.seed = args->seed;
     parameters.randomInitialState = args->randomInit;
     parameters.polaritySign = args->polaritySign;
+    parameters.signCorrectG = args->signCorrectG;
+    parameters.predictRotation = args->predictRotation;
     if (parameters.polaritySign != "off" && parameters.polaritySign != "gate" && parameters.polaritySign != "weight") {
         std::cerr << "Unknown --polaritySign " << parameters.polaritySign << " (off | gate | weight)" << std::endl;
         return 1;
@@ -290,6 +298,7 @@ int main(int argc, char* argv[]) {
         ? timing::MotionModel::rotation(calibration_data, res.height, res.width) : timing::MotionModel{};
     timing::FlowEvidence flowEvidence(res.height, res.width, parameters.evidenceLifetime, parameters.evidenceAccumulate);
     timing::RotationFromFlow rotationFromFlow(parameters.evidenceLifetime);
+    rotationFromFlow.solveInterval = parameters.rotationSolveInterval;
     const double flowPriorKappa = 1.0 / (parameters.flowPriorSigma * parameters.flowPriorSigma);
     std::vector<int> noFlowUpdates;
     ContrastSteps contrastSteps(parameters.contrastSteps, res.height, res.width, parameters.contrastRatio, parameters.contrastPrior);
@@ -425,16 +434,24 @@ int main(int argc, char* argv[]) {
                         decayNeighbourhood(state.MI, state.decayTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.neutralPotential, parameters.decayParam);
                     }
                     timing::NormalFlow normalFlow;
+                    Eigen::Vector2f gRead = Eigen::Vector2f::Zero();   // G at the event pixel before its own update
                     if (parameters.rotationFromTiming) {
                         // events -> O -> N -> F evidence -> R (rad/s); stored F where this event reads it
                         const int ey = cEvent->coordinates[0], ex = cEvent->coordinates[1];
                         onsetRule->update(onsetMap, ey, ex, cEvent->polarity, event->time);
                         normalFlow = timing::fitNormalFlow(onsetMap, ey, ex, cEvent->polarity,
                                                                                     event->time, normalFlowSettings);
-                        if (normalFlow.valid && parameters.polaritySign != "off") {
-                            // G, polarity -> F evidence: G at this pixel before the event's own I/G update
+                        // G at this pixel before the event's own I/G update (with the sign correction if on)
+                        if (parameters.signCorrectG) {
+                            gRead = readCorrectedGradient(state.MI, state.delta_I, state.GSign, state.GSignTime, ey, ex,
+                                                          event->time, parameters.decayParam);
+                        } else {
                             computeGradient(state.MI, state.delta_I, ey, ex);
-                            const Eigen::Vector2f g(state.delta_I(ey, ex, 0), state.delta_I(ey, ex, 1));
+                            gRead = Eigen::Vector2f(state.delta_I(ey, ex, 0), state.delta_I(ey, ex, 1));
+                        }
+                        if (normalFlow.valid && parameters.polaritySign != "off") {
+                            // G, polarity -> F evidence
+                            const Eigen::Vector2f &g = gRead;
                             if (parameters.polaritySign == "gate") {
                                 const float along = g.dot(normalFlow.n);
                                 if (-along * cEvent->polarity < 0.0f && std::abs(along) > parameters.gradientSigma) {
@@ -448,7 +465,8 @@ int main(int argc, char* argv[]) {
                         }
                         rotationFromFlow.fadeTo(event->time);
                         rotationFromFlow.apply(motionModel.at(ey, ex), flowEvidence.add(ey, ex, normalFlow, event->time));
-                        const Eigen::Vector3f &R = rotationFromFlow.rotation();
+                        const Eigen::Vector3f &R = parameters.predictRotation ? rotationFromFlow.rotationAt(event->time)
+                                                                              : rotationFromFlow.rotation();
                         for (int k = 0; k < 3; ++k) state.R(k) = R(k);
                         timing::readFlowNeighbourhood(flowEvidence, motionModel, R, flowPriorKappa, ey, ex, event->time, state.F);
                     } else if (parameters.asyncFR) {
@@ -457,7 +475,11 @@ int main(int argc, char* argv[]) {
                         relaxFRNeighbourhood(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, state.old_points,
                                              cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_FR);
                     }
-                    if (parameters.silentRelaxation && parameters.silentRule == "gradient") {
+                    if (parameters.silentRelaxation && parameters.silentRule == "gradient" && parameters.signCorrectG) {
+                        followCorrectedGradientNeighbourhood(state.G, state.MI, state.delta_I, state.GSign, state.GSignTime,
+                                                             cEvent->coordinates[0], cEvent->coordinates[1], event->time,
+                                                             parameters.decayParam);
+                    } else if (parameters.silentRelaxation && parameters.silentRule == "gradient") {
                         followGradientNeighbourhood(state.G, state.MI, state.delta_I, cEvent->coordinates[0], cEvent->coordinates[1]);
                     } else if (parameters.silentRelaxation && parameters.silentRule == "bound") {
                         boundSilentNeighbourhood(state.G, state.F, state.MI, state.delta_I, state.EventTimeSurface, contrastSteps,
@@ -498,6 +520,13 @@ int main(int argc, char* argv[]) {
                                    parameters.rotationFromTiming ? noFlowUpdates : permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
                     }
                     state.EventTimeSurface(cEvent->coordinates[0], cEvent->coordinates[1]) = event->time;   // silence restarts
+                    if (parameters.rotationFromTiming && parameters.signCorrectG) {
+                        // F, polarity -> G: the polarity tells which way G pointed along F when this event fired
+                        const int ey = cEvent->coordinates[0], ex = cEvent->coordinates[1];
+                        correctGradientSign(state.GSign, gRead, Eigen::Vector2f(state.F(ey, ex, 0), state.F(ey, ex, 1)),
+                                            cEvent->polarity, ey, ex, static_cast<float>(parameters.gradientSigma),
+                                            static_cast<float>(parameters.polarityReliability));
+                    }
                     if (!parameters.rotationFromTiming && parameters.asyncFR) {
                         // F <- G and G <- F may have run after F -> R in this step; B must see the final F.
                         register_R_point(state.F, state.CCM, state.dCdx, state.dCdy, state.B, state.Identity_minus_outerProducts, state.old_points,
@@ -522,8 +551,10 @@ int main(int argc, char* argv[]) {
                         const Vector3f omega_cam = parameters.R_cam_imu * Vector3f(g[0], g[1], g[2]);
                         rotationFromFlow.fadeTo(event->time);
                         rotationFromFlow.addMeasurement(-Eigen::Vector3f(omega_cam.y(), omega_cam.x(), omega_cam.z()),
-                                                        1.0 / (parameters.gyroSigma * parameters.gyroSigma));
-                        const Eigen::Vector3f &R = rotationFromFlow.rotation();
+                                                        1.0 / (parameters.gyroSigma * parameters.gyroSigma),
+                                                        event->time - imuLag);   // the IMU lags the events
+                        const Eigen::Vector3f &R = parameters.predictRotation ? rotationFromFlow.rotationAt(event->time)
+                                                                              : rotationFromFlow.rotation();
                         for (int k = 0; k < 3; ++k) state.R(k) = R(k);
                     } else {
                         update_RIMU(state.R, imuEvent->ang_velocity, parameters.weight_RIMU, parameters.R_cam_imu, parameters.imuScale);
@@ -561,14 +592,18 @@ int main(int argc, char* argv[]) {
                             : state.MI;
                         if (parameters.rotationFromTiming) {
                             // bring the stored F up to the frame time everywhere
-                            timing::readFlowAll(flowEvidence, motionModel, rotationFromFlow.rotation(), flowPriorKappa,
-                                                event->time, state.F);
+                            timing::readFlowAll(flowEvidence, motionModel,
+                                                parameters.predictRotation ? rotationFromFlow.rotationAt(event->time)
+                                                                           : rotationFromFlow.rotation(),
+                                                flowPriorKappa, event->time, state.F);
                         }
                         const Tensor3f F_now = !parameters.rotationFromTiming && parameters.asyncFR
                             ? relaxedFRCopy(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, event->time, parameters.rate_FR)
                             : state.F;
                         const Tensor3f G_now = parameters.silentRelaxation && parameters.silentRule == "gradient"
-                            ? gradientCopy(MI_now)
+                            ? (parameters.signCorrectG
+                                   ? correctedGradientCopy(MI_now, state.GSign, state.GSignTime, event->time, parameters.decayParam)
+                                   : gradientCopy(MI_now))
                             : parameters.silentRelaxation && parameters.silentRule == "bound"
                             ? boundedSilentCopy(F_now, MI_now, state.EventTimeSurface, contrastSteps, event->time,
                                                 parameters.refractoryTime, parameters.silentSlack)

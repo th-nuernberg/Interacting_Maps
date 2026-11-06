@@ -738,3 +738,47 @@ TEST_CASE("read_imu keeps the file's (x, y, z) axis order", "[io][imu]") {
     REQUIRE(imu->lin_acceleration == std::vector<float>{1.0f, 2.0f, 3.0f});
     REQUIRE(imu->ang_velocity == std::vector<float>{0.1f, 0.2f, 0.3f});
 }
+
+TEST_CASE("correctGradientSign moves G along F to the side the polarity requires, weighed by G's confidence", "[update][polarity]") {
+    const Vector2f F(0.0f, 200.0f);   // moving along +x
+    const float sigma = 0.5f, rho = 0.96f;
+    auto corrected = [&](float g_x, int polarity) {
+        Tensor3f dG(1, 1, 2);
+        dG.setZero();
+        correctGradientSign(dG, Vector2f(0.3f, g_x), F, polarity, 0, 0, sigma, rho);
+        REQUIRE(dG(0, 0, 0) == 0.0f);          // across F: unchanged
+        return g_x + dG(0, 0, 1);
+    };
+    // ON event: V > 0 needs G_x < 0 (brighter side behind the motion)
+    REQUIRE(corrected(0.1f, +1) < 0.0f);             // a weak contradiction is overruled
+    REQUIRE(corrected(-1.5f, +1) < -1.5f);           // agreement: pushed slightly further
+    REQUIRE(corrected(-1.5f, +1) > -1.6f);
+    REQUIRE_THAT(corrected(2.0f, +1), WithinAbs(2.0f, 0.01f));   // a strong contradiction: the polarity is likely wrong
+    // the formula at one point: g = 0.1, s = -1, z = -0.2
+    const double z = -0.2, phi = std::exp(-0.5 * z * z) / std::sqrt(2 * M_PI), Phi = 0.5 * std::erfc(-z / std::sqrt(2.0));
+    REQUIRE_THAT(corrected(0.1f, +1), WithinAbs(0.1 - 0.5 * phi * (2 * 0.96 - 1) / (0.96 * Phi + 0.04 * (1 - Phi)), 1e-5));
+    Tensor3f dG(1, 1, 2);
+    dG.setZero();
+    correctGradientSign(dG, Vector2f(0.3f, 0.1f), Vector2f::Zero(), +1, 0, 0, sigma, rho);   // no motion: no change
+    REQUIRE(dG(0, 0, 1) == 0.0f);
+}
+
+TEST_CASE("readCorrectedGradient adds the correction, which forgets with I's time constant", "[update][polarity]") {
+    Tensor2f I(3, 3);
+    for (int y = 0; y < 3; ++y) for (int x = 0; x < 3; ++x) I(y, x) = float(x);
+    Tensor3f grad(3, 3, 2), dG(3, 3, 2);
+    dG.setZero();
+    dG(1, 1, 1) = 0.8f;
+    Tensor2f times(3, 3);
+    times.setZero();
+    const Vector2f g = readCorrectedGradient(I, grad, dG, times, 1, 1, 0.06f, 0.06f);
+    REQUIRE_THAT(g(1), WithinAbs(1.0f + 0.8f * std::exp(-1.0f), 1e-6));
+    REQUIRE_THAT(g(0), WithinAbs(0.0f, 1e-6));
+}
+
+TEST_CASE("The sign correction of G and the delay correction of R are on by default", "[deviations]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    REQUIRE(p.signCorrectG);
+    REQUIRE(p.predictRotation);
+    REQUIRE_THAT(p.polarityReliability, WithinAbs(0.96, 1e-12));
+}

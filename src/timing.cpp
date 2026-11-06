@@ -83,6 +83,21 @@ NormalFlow fitNormalFlow(const OnsetMap &onset, int y, int x, int polarity, doub
     const double residual = std::max(stt - a * sxt - b * syt, 0.0);
     const double sr2 = std::max(residual / std::max(n - 2, 1), settings.timeFloor * settings.timeFloor);
     const double nx = a / g, ny = b / g;
+    // The plane passes through the event pixel's onset and its neighbours': it describes the motion around the mean
+    // of those onsets.
+    double sumStamps = reference;
+    for (int dy = -settings.radius; dy <= settings.radius; ++dy) {
+        for (int dx = -settings.radius; dx <= settings.radius; ++dx) {
+            if (dx == 0 && dy == 0) continue;
+            const int yq = y + dy, xq = x + dx;
+            if (yq < 0 || yq >= onset.height || xq < 0 || xq >= onset.width) continue;
+            const int q = onset.index(yq, xq, polarity);
+            const double last = onset.lastEvent[q];
+            if (!(last <= t && last > t - settings.horizon)) continue;
+            sumStamps += onset.stamp[q];
+        }
+    }
+    result.time = sumStamps / (n + 1);
     const double varSlope = sr2 * (nx * nx * syy - 2 * nx * ny * sxy + ny * ny * sxx) / det;
     result.valid = true;
     result.n = Eigen::Vector2f(static_cast<float>(ny), static_cast<float>(nx));
@@ -165,7 +180,8 @@ FlowEvidence::FlowEvidence(int height, int width, double lifetime, bool accumula
     : height(height), width(width), lifetime(lifetime), accumulate(accumulate),
       information(static_cast<size_t>(height) * width, Eigen::Matrix2d::Zero()),
       vector(static_cast<size_t>(height) * width, Eigen::Vector2d::Zero()),
-      time(static_cast<size_t>(height) * width, -std::numeric_limits<double>::infinity()) {}
+      time(static_cast<size_t>(height) * width, -std::numeric_limits<double>::infinity()),
+      measured(static_cast<size_t>(height) * width, 0.0) {}
 
 void FlowEvidence::fadeTo(int y, int x, double t) {
     const int p = y * width + x;
@@ -185,16 +201,23 @@ EvidenceChange FlowEvidence::add(int y, int x, const NormalFlow &measurement, do
     const double w = 1.0 / std::max(static_cast<double>(measurement.variance), 1e-12);
     const Eigen::Matrix2d newInformation = w * n * n.transpose();
     const Eigen::Vector2d newVector = w * n * static_cast<double>(measurement.speed);
+    change.addedInformation = newInformation;
+    change.addedVector = newVector;
+    change.addedTime = measurement.time;
     if (accumulate) {
         change.dInformation = newInformation;
         change.dVector = newVector;
         information[p] += newInformation;
         vector[p] += newVector;
     } else {
+        change.removedInformation = information[p];
+        change.removedVector = vector[p];
+        change.removedTime = measured[p];
         change.dInformation = newInformation - information[p];
         change.dVector = newVector - vector[p];
         information[p] = newInformation;
         vector[p] = newVector;
+        measured[p] = measurement.time;
     }
     return change;
 }
@@ -222,20 +245,84 @@ void RotationFromFlow::fadeTo(double t) {
         const double keep = std::exp(-(t - time) / lifetime);
         H *= keep;
         b *= keep;
+        H1 *= keep;
+        H2 *= keep;
+        b1 *= keep;
+    } else {
+        epoch = t;
     }
     time = t;
+    if (t - epoch > 10.0) {
+        // Rebase the moments to keep t_i - epoch small: t' = t - shift
+        const double shift = t - epoch;
+        H2 += -2.0 * shift * H1 + shift * shift * H;
+        H1 += -shift * H;
+        b1 += -shift * b;
+        epoch = t;
+    }
+}
+
+void RotationFromFlow::addMoments(const Eigen::Matrix3d &P, const Eigen::Vector3d &q, double measured, double sign) {
+    const double tau = measured - epoch;
+    H1 += sign * tau * P;
+    H2 += sign * tau * tau * P;
+    b1 += sign * tau * q;
 }
 
 void RotationFromFlow::apply(const Eigen::Matrix<double, 2, 3> &M, const EvidenceChange &change) {
     H += M.transpose() * change.dInformation * M;
     b += M.transpose() * change.dVector;
+    if (!change.removedInformation.isZero()) {
+        addMoments(M.transpose() * change.removedInformation * M, M.transpose() * change.removedVector,
+                   change.removedTime, -1.0);
+    }
+    if (!change.addedInformation.isZero()) {
+        addMoments(M.transpose() * change.addedInformation * M, M.transpose() * change.addedVector, change.addedTime,
+                   1.0);
+    }
     dirty = true;
+    dirtyAt = true;
 }
 
-void RotationFromFlow::addMeasurement(const Eigen::Vector3f &R_measured, double weight) {
+void RotationFromFlow::addMeasurement(const Eigen::Vector3f &R_measured, double weight, double measured) {
     H += weight * Eigen::Matrix3d::Identity();
     b += weight * R_measured.cast<double>();
+    addMoments(weight * Eigen::Matrix3d::Identity(), weight * R_measured.cast<double>(),
+               measured == 0.0 ? time : measured, 1.0);
     dirty = true;
+    dirtyAt = true;
+}
+
+const Eigen::Vector3f &RotationFromFlow::rotationAt(double t) {
+    if (dirtyAt && t - solvedAt >= solveInterval) {
+        dirtyAt = false;
+        // Least squares over x = [R(t); Rdot] with A_i = [M_i, tau_i M_i], tau_i = t_i - t
+        const double t0 = t - epoch;
+        Eigen::Matrix<double, 6, 6> A;
+        A.topLeftCorner<3, 3>() = H;
+        A.topRightCorner<3, 3>() = H1 - t0 * H;
+        A.bottomLeftCorner<3, 3>() = (H1 - t0 * H).transpose();
+        A.bottomRightCorner<3, 3>() = H2 - 2.0 * t0 * H1 + t0 * t0 * H;
+        Eigen::Matrix<double, 6, 1> rhs;
+        rhs << b, b1 - t0 * b;
+        const Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 6, 6>> eigen(A, Eigen::EigenvaluesOnly);
+        const double largest = eigen.eigenvalues().maxCoeff();
+        if (largest > 0 && eigen.eigenvalues().minCoeff() > 1e-12 * largest) {
+            const Eigen::Matrix<double, 6, 1> x = A.ldlt().solve(rhs);
+            Rsolved = x.head<3>();
+            Rdot = x.tail<3>();
+        } else {
+            // the evidence does not span enough time for a rate: the average, without extrapolation
+            const Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigen3(H, Eigen::EigenvaluesOnly);
+            const double largest3 = eigen3.eigenvalues().maxCoeff();
+            if (largest3 > 0 && eigen3.eigenvalues().minCoeff() > 1e-9 * largest3) Rsolved = H.ldlt().solve(b);
+            Rdot.setZero();
+        }
+        solvedAt = t;
+        ++solves;
+    }
+    R = (std::isinf(solvedAt) ? Rsolved : Eigen::Vector3d(Rsolved + Rdot * (t - solvedAt))).cast<float>();
+    return R;
 }
 
 const Eigen::Vector3f &RotationFromFlow::rotation() {
