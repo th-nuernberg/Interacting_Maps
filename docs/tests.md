@@ -6,7 +6,7 @@ There are three layers:
 
 | Layer | Checks | Ground truth | Where |
 |---|---|---|---|
-| **Unit tests** (62 Catch2 cases, 661 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
+| **Unit tests** (63 Catch2 cases, 737 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
 | **Method experiments** (Python) | does an idea work on real data before it is ported? | gyro, DAVIS frames | `experiments/`, reports in `experiments/reports/` |
 | **End-to-end runs** (C++ binary) | does the whole network track the camera, how fast, and did a change break anything? | gyro (display/scoring only), earlier outputs | `output/<run>/`, `experiments/plot_r_vs_gyro.py` |
 
@@ -115,7 +115,8 @@ These pin the decisions so they can't change unnoticed.
 | G reset is off and silent relaxation on by default | the hack stays off |
 | Event-driven F ← R is on by default | |
 | clampMaps switches the F/G clamping off | inputs are never clamped |
-| initOpticalFlowState is reproducible for a given seed | determinism |
+| F and R start at zero by default | no inherited random start |
+| initOpticalFlowState is reproducible for a given seed | determinism (with `--randomInit`) |
 
 ### Contrast steps `[contrast]`
 

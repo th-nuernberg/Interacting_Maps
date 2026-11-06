@@ -314,8 +314,17 @@ TEST_CASE("F = m32(R x C) with R = -(camera rotation) reproduces projected pixel
     }
 }
 
+TEST_CASE("F and R start at zero by default", "[determinism][deviations]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.1f);
+    REQUIRE_FALSE(p.randomInitialState);
+    const OpticalFlowState s = initOpticalFlowState(6, 6, p, smallCalibration(6, 6));
+    for (int i = 0; i < s.F.size(); ++i) REQUIRE(s.F.data()[i] == 0.0f);
+    for (int i = 0; i < 3; ++i) REQUIRE(s.R(i) == 0.0f);
+}
+
 TEST_CASE("initOpticalFlowState is reproducible for a given seed", "[determinism]") {
     Parameters p = initParameters(0.0f, 1.0f, 0.1f);
+    p.randomInitialState = true;
     p.seed = 42;
     const OpticalFlowState a = initOpticalFlowState(6, 6, p, smallCalibration(6, 6));
     const OpticalFlowState b = initOpticalFlowState(6, 6, p, smallCalibration(6, 6));

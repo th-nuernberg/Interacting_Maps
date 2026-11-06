@@ -10,6 +10,7 @@ State on 2026-11-06 (branch `rework/incomaps-alignment`). Every choice the curre
 | **inherited** | from the original code; no justification found |
 | **open** | chosen deliberately, but the value still has to be determined (sweep, simulator M1) |
 | **violated** | known to be false here; the effect is noted |
+| **legacy** | belongs to the legacy pipeline (section 5), which timing mode replaces; listed, not grounded |
 
 **Rule:** every inherited value is questioned and replaced by a grounded approximation where possible. The step 10, neutral 128 and bounds [0, 255] were chosen to map I directly onto 8-bit grey values; they were display choices, and the display now does that mapping itself.
 
@@ -64,17 +65,19 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 | G5 | **∇I and F stay constant over a pixel's silent time**, so the silent relaxation can be solved in closed form (`--silentRule rate` only). | — | approximation | Not needed by the default rule. |
 | G6 | G starts at 0. | — | convention | |
 
-## 5. Old pipeline: F and R from V and G (default when `--rotationFromTiming` is off)
+## 5. Legacy pipeline: F and R from V and G (when `--rotationFromTiming` is off)
+
+This pipeline is **legacy**: V has no time unit, so F and R have none, and R does not follow the gyro (correlation 0.02). Its inherited values are listed for completeness but are not being grounded; timing mode (section 6) replaces it. It is kept for comparison with the paper.
 
 | # | Assumption | Value | Status | Notes |
 |---|---|---|---|---|
-| O1 | **F ← G, V:** F's component along G is set from V = ±10 (minimal-norm solution of V = −G·F). | `weight_FG` = 1 | physics, wrong input unit | F comes out in px per event, not px/s. Hence R has no unit (cos ≈ 0.02 against the gyro). |
-| O2 | G ← F, V enforces the same constraint on G. | `weight_GF` = 1 | as O1 | Switched off in timing mode. |
-| O3 | F ← R relaxes F towards m32(R × C) at `rate_FR`. | 644 /s | inherited | The former 4 passes of weight 0.8 per 10 ms. Lets about 10 F ↔ R trips happen per frame, where 100–300 are needed ([r-prototype](../experiments/reports/r-prototype.md)). |
-| O4 | F → R least squares over **all** pixels, measured or not. | `weight_RF` = 1 | inherited | Dilutes the measurements ([r-prototype](../experiments/reports/r-prototype.md)). |
-| O5 | Initial state: F uniform in [−1, 1], R uniform in [−10, 10]. | — | inherited | Timing mode starts from F = R = 0. |
-| O6 | One event step per event, with relations in shuffled order; `lr` = 1. | — | inherited | |
-| O7 | Gyro → R needs a scale (`imuScale`). | 1 | open, undefined | Meaningless while R has no unit. |
+| O1 | **F ← G, V:** F's component along G is set from V (minimal-norm solution of V = −G·F). | `weight_FG` = 1 | legacy: physics, wrong input unit | F comes out in px per event, not px/s. Hence R has no unit (cos ≈ 0.02 against the gyro). |
+| O2 | G ← F, V enforces the same constraint on G. | `weight_GF` = 1 | legacy, as O1 | Switched off in timing mode. |
+| O3 | F ← R relaxes F towards m32(R × C) at `rate_FR`. | 644 /s | legacy | The former 4 passes of weight 0.8 per 10 ms. Lets about 10 F ↔ R trips happen per frame, where 100–300 are needed ([r-prototype](../experiments/reports/r-prototype.md)). |
+| O4 | F → R least squares over **all** pixels, measured or not. | `weight_RF` = 1 | legacy | Dilutes the measurements ([r-prototype](../experiments/reports/r-prototype.md)). |
+| O5 | **F and R start at 0** ("no information yet"); `--randomInit true` restores the inherited random start (F in [−1, 1], R in [−10, 10]). | 0 | **physics** since 2026-11-06 | No effect in either pipeline: in the legacy pipeline R is back at 0 within 0.1 s from either start (identical correlation with the gyro); timing mode always started at 0. |
+| O6 | One event step per event, with relations in shuffled order; `lr` = 1. | — | legacy | |
+| O7 | Gyro → R needs a scale (`imuScale`). | 1 | legacy, undefined | Meaningless while R has no unit. |
 
 ## 6. Timing pipeline (`--rotationFromTiming`)
 

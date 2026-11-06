@@ -7,7 +7,7 @@ The original algorithm works on frames of accumulated events. This implementatio
 ## Status
 
 - **Milestone M0** (rework of the C++ implementation, see [TASKS.md](TASKS.md)) is largely done: known implementation flaws are fixed one commit at a time, each with a Catch2 regression test. The network now runs faster than real time (RTF ≈ 0.11 on `shapes_rotation`).
-- **Rotation from event timing** (`--rotationFromTiming true`, off by default): F gets evidence from the arrival times of edges at neighbouring pixels, and R is fitted to it in rad/s. On `shapes_rotation`, from events alone, R follows the gyro with median cos 0.992 and |R|/|ω| 0.995 (RTF 0.26). Without the switch, events are read with a constant V = ±10, which has no time unit, and R does not track the rotation.
+- **Rotation from event timing** (`--rotationFromTiming true`, off by default): F gets evidence from the arrival times of edges at neighbouring pixels, and R is fitted to it in rad/s. On `shapes_rotation`, from events alone, R follows the gyro with median cos 0.992 and |R|/|ω| 0.995 (RTF 0.26). Without the switch, the **legacy pipeline** runs: events are read as a step V with no time unit, so F and R have none, and R does not track the rotation. It is kept for comparison with the paper.
 - The Python package (`python/`, `incomaps`: simulator, NumPy reference, generic engine) is still a scaffold (milestones M1–M3).
 
 ## Repository layout
@@ -99,7 +99,8 @@ Main options (`./InteractingMaps --help` lists all):
 | `--decay`, `--decayTime` | true, 0.06 | I forgets towards 0 with this time constant (s), derived from the error each event adds; see [forgetting.md](experiments/reports/forgetting.md) |
 | `--silentRule` | `gradient` | what G does between events: `gradient` (G = ∇I when read), `rate` (former relaxation), `bound` (silence bounds G along F; falsified at edge fronts), see [silent-bound.md](experiments/reports/silent-bound.md) |
 | `--clamp`, `--resetG` | false, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
-| `--rotationFromTiming` | false | F and R (rad/s) from the arrival times of edges; see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
+| `--rotationFromTiming` | false | F and R (rad/s) from the arrival times of edges; false runs the legacy pipeline; see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
+| `--randomInit` | false | start F and R random (inherited, for comparison) instead of at zero |
 | `--onsetRule`, `--onsetTime` | `depression`, 0.02 | with `--rotationFromTiming`: arrival time per pixel (`latest`, `gap`, `depression`) and its time constant |
 | `--evidenceLifetime`, `--evidenceAccumulate` | 0.01, false | with `--rotationFromTiming`: lifetime of flow measurements; add instead of replace |
 | `--plotRotation` | true | IMAGES builds with `--rotationFromTiming`: plot R against the gyro below the maps (display only; the gyro is not fused) |

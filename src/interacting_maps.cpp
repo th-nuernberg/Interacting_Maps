@@ -56,7 +56,8 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     // One stream per randomly initialised map, so adding maps does not shift existing draws.
     std::seed_seq seed_F{parameters.seed, 0u};
     std::mt19937 rng_F(seed_F);
-    randomInit(s.F, -1, 1, rng_F);
+    if (parameters.randomInitialState) randomInit(s.F, -1, 1, rng_F);
+    else s.F.setZero();
 
     s.G = Tensor3f(height, width, 2);
     s.G.setZero();
@@ -86,7 +87,8 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     s.R = Tensor1f(3);
     std::seed_seq seed_R{parameters.seed, 1u};
     std::mt19937 rng_R(seed_R);
-    randomInit(s.R, -10, 10, rng_R);
+    if (parameters.randomInitialState) randomInit(s.R, -10, 10, rng_R);
+    else s.R.setZero();
 
     // Camera calibration
     s.CCM  = Tensor3f(height, width, 3);  s.CCM.setZero();

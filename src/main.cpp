@@ -97,6 +97,7 @@ struct ProgramArgs
     std::string silentRule;
     float refractoryTime;
     float silentSlack;
+    bool randomInit;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -144,7 +145,8 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .decayTime         = vm["decayTime"].as<float>(),
         .silentRule        = vm["silentRule"].as<std::string>(),
         .refractoryTime    = vm["refractoryTime"].as<float>(),
-        .silentSlack       = vm["silentSlack"].as<float>()
+        .silentSlack       = vm["silentSlack"].as<float>(),
+        .randomInit        = vm["randomInit"].as<bool>()
     };
 }
 
@@ -202,7 +204,8 @@ int main(int argc, char* argv[]) {
             ("decayTime", po::value<float>()->default_value(0.06f), "Time constant (s) with which I forgets towards 0 (with --decay)")
             ("silentRule", po::value<std::string>()->default_value("gradient"), "With --silentG: gradient (G = grad I when read), rate (relax G at rate_GI/GF_silent) or bound (no event bounds G along F by the thresholds / (|F| dt); falsified at edge fronts)")
             ("refractoryTime", po::value<float>()->default_value(1.2e-3f), "With silentRule bound: s after an event before silence counts")
-            ("silentSlack", po::value<float>()->default_value(0.0f), "With silentRule bound: widen both thresholds by this many steps");
+            ("silentSlack", po::value<float>()->default_value(0.0f), "With silentRule bound: widen both thresholds by this many steps")
+            ("randomInit", po::value<bool>()->default_value(false), "Start F and R random (inherited, for comparison) instead of at zero");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -245,6 +248,7 @@ int main(int argc, char* argv[]) {
     Calibration_Data calibration_data = readCalibration(calibrationPath, res.height, res.width);
     Parameters parameters = initParameters(args->startTime, args->endTime, args->timeStep);
     parameters.seed = args->seed;
+    parameters.randomInitialState = args->randomInit;
     parameters.useDecay = args->decay;
     parameters.decayParam = args->decayTime;
     parameters.silentRule = args->silentRule;
@@ -313,6 +317,10 @@ int main(int argc, char* argv[]) {
         lastEventAt.assign(static_cast<size_t>(res.height) * res.width, -1.0);
         std::cout << "Writing every " << args->dumpEvents << "th event to event_diagnostics.bin ("
                   << sizeof(EventDiagnostics) << " bytes each)" << std::endl;
+    }
+    if (!parameters.rotationFromTiming) {
+        std::cout << "Legacy pipeline (F <- G, V and the F <-> R loop): V has no time unit, so F and R have none and R does "
+                     "not track the rotation. Use --rotationFromTiming true for F in px/s and R in rad/s." << std::endl;
     }
     if (parameters.rotationFromTiming) {
         state.R.setZero();

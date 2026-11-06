@@ -100,5 +100,5 @@ On `shapes_rotation` (60 s, events only), R against the gyro, per 1/60 s frame (
 
 See M0 in `TASKS.md` for the full list and status, and [assumptions.md](assumptions.md) for every value the network rests on.
 
-- **Old pipeline (`--rotationFromTiming false`): R has no physical unit and does not track the camera rotation** (correlation with the gyro below 0.25). V is a step per event, not a temporal derivative, so F is in px per event; a pixel's event rate does not carry the speed on this sensor (`experiments/reports/v-units.md`). `update_RIMU`'s `imuScale` is therefore undefined. Timing mode solves this for F and R (rad/s, cos 0.99 against the gyro).
+- **Legacy pipeline (`--rotationFromTiming false`): R has no physical unit and does not track the camera rotation** (correlation with the gyro below 0.25). V is a step per event, not a temporal derivative, so F is in px per event; a pixel's event rate does not carry the speed on this sensor (`experiments/reports/v-units.md`). `update_RIMU`'s `imuScale` is therefore undefined. Timing mode solves this for F and R (rad/s, cos 0.99 against the gyro).
 - **I drifts without the decay:** OFF events outnumber ON events 1.36 : 1 per pixel, i.e. c_ON ≈ 1.36 c_OFF; the decay (τ = 0.06 s, derived in `experiments/reports/forgetting.md`) forgets the error each event adds (`experiments/reports/polarity-check.md`).

@@ -53,6 +53,11 @@ struct Parameters
     int   updateIterationsFR = 4;
     int   event_steps = 1;
 
+    // Legacy pipeline (rotationFromTiming = false): F <- G, V, G <- F, V, the F <-> R loop and gyro fusion. V has no
+    // time unit there, so F and R have none. Its values below (FR_updates_per_second, updateIterationsFR, event_steps,
+    // weight_FG/GF/FR/RF, rate_FR, imuScale, lr) are inherited and are not being grounded; timing mode replaces them.
+    // I <- V, I <-> G and G's rules are shared by both pipelines.
+    //
     // Weights [0-1] of the per-update convex combination old -> candidate. 1 solves the relation's local
     // constraint exactly (no damping); kept at 1 until there is a reason for another value (sweep, M2).
     float weight_FG    = 1.0f;
@@ -145,6 +150,9 @@ struct Parameters
 
     // Reproducibility: random initialisation and the update-order shuffle derive from this seed
     unsigned seed = 0;
+    // Start state. F = 0 and R = 0 encode "no information yet". The former random start (F uniform in [-1, 1],
+    // R uniform in [-10, 10]) is inherited without a reason and kept for comparison only.
+    bool randomInitialState = false;
 };
 
 struct OpticalFlowState
