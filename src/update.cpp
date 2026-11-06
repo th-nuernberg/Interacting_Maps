@@ -505,6 +505,77 @@ Tensor3f relaxedSilentCopy(const Tensor3f &G, const Tensor3f &F, const Tensor2f 
     return relaxed;
 }
 
+void followGradientNeighbourhood(Tensor3f &G, const Tensor2f &I, Tensor3f &I_gradient, const int y, const int x){
+    PROFILE_FUNCTION();
+    const int rows = static_cast<int>(G.dimension(0));
+    const int cols = static_cast<int>(G.dimension(1));
+    const int offsets[5][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (const auto &offset : offsets) {
+        const int yy = y + offset[0];
+        const int xx = x + offset[1];
+        if (yy < 0 || yy >= rows || xx < 0 || xx >= cols) continue;
+        computeGradient(I, I_gradient, yy, xx);
+        G(yy, xx, 0) = I_gradient(yy, xx, 0);
+        G(yy, xx, 1) = I_gradient(yy, xx, 1);
+    }
+}
+
+Tensor3f gradientCopy(const Tensor2f &I){
+    PROFILE_FUNCTION();
+    Tensor3f gradient(I.dimension(0), I.dimension(1), 2);
+    for (int y = 0; y < I.dimension(0); ++y) {
+        for (int x = 0; x < I.dimension(1); ++x) {
+            computeGradient(I, gradient, y, x);
+        }
+    }
+    return gradient;
+}
+
+void boundSilentG(Tensor3f &G, const Tensor3f &F, const Tensor3f &I_gradient, const int y, const int x, const float silentTime, const float onStep, const float slack){
+    PROFILE_FUNCTION();
+    // dI = -(G . F) dt must stay in (-1, onStep) steps while the pixel is silent: G_par |F| dt in (-onStep, 1).
+    Vector2f g(I_gradient(y, x, 0), I_gradient(y, x, 1));
+    const Vector2f f(F(y, x, 0), F(y, x, 1));
+    const float travelled = f.norm() * silentTime;    // px the scene moved past the pixel
+    if (travelled > 0.0f) {
+        const Vector2f f_hat = f / f.norm();
+        const float g_par = g.dot(f_hat);
+        const float bounded = std::clamp(g_par, -(onStep + slack) / travelled, (1.0f + slack) / travelled);
+        g += (bounded - g_par) * f_hat;
+    }
+    G(y, x, 0) = g(0);
+    G(y, x, 1) = g(1);
+}
+
+void boundSilentNeighbourhood(Tensor3f &G, const Tensor3f &F, const Tensor2f &I, Tensor3f &I_gradient, const Tensor2f &EventTimeSurface, const ContrastSteps &contrast, const int y, const int x, const float time, const float refractoryTime, const float slack){
+    PROFILE_FUNCTION();
+    const int rows = static_cast<int>(G.dimension(0));
+    const int cols = static_cast<int>(G.dimension(1));
+    const int offsets[5][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (const auto &offset : offsets) {
+        const int yy = y + offset[0];
+        const int xx = x + offset[1];
+        if (yy < 0 || yy >= rows || xx < 0 || xx >= cols) continue;
+        computeGradient(I, I_gradient, yy, xx);
+        boundSilentG(G, F, I_gradient, yy, xx, time - EventTimeSurface(yy, xx) - refractoryTime,
+                     static_cast<float>(contrast.ratio(yy, xx)), slack);
+    }
+}
+
+Tensor3f boundedSilentCopy(const Tensor3f &F, const Tensor2f &I, const Tensor2f &EventTimeSurface, const ContrastSteps &contrast, const float time, const float refractoryTime, const float slack){
+    PROFILE_FUNCTION();
+    Tensor3f bounded(F.dimensions());
+    Tensor3f I_gradient(F.dimensions());
+    for (int y = 0; y < F.dimension(0); ++y) {
+        for (int x = 0; x < F.dimension(1); ++x) {
+            computeGradient(I, I_gradient, y, x);
+            boundSilentG(bounded, F, I_gradient, y, x, time - EventTimeSurface(y, x) - refractoryTime,
+                         static_cast<float>(contrast.ratio(y, x)), slack);
+        }
+    }
+    return bounded;
+}
+
 Tensor2f decayedCopy(const Tensor2f &I, const Tensor2f &decayTimeSurface, const float time, const float neutralPotential, const float decayParam){
     PROFILE_FUNCTION();
     // Exponential decay composes exactly, so decaying a copy for display does not change the dynamics.

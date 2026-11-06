@@ -53,6 +53,8 @@ The continuous-time rates (`rate_GI_silent`, `rate_GF_silent`, `rate_FR`, in 1/s
 
 ## Pixels without events (asynchronous V = 0)
 
+Default since 2026-11-06: `--silentRule gradient`, G = ∇I wherever it is read, with no rates (`experiments/reports/silent-bound.md`). The rate relaxation below is kept as `--silentRule rate`; in timing mode it gives the same result.
+
 In the paper every pixel is updated every iteration, and a pixel without events has V = 0: an observation ("brightness did not change"), not missing data. Event-driven updates alone never touch such pixels, so G stayed wherever the last edge left it.
 
 Instead of a per-bin sweep, each pixel stores `GTimeSurface`, the time up to which its G is current. Before `event_step` reads G at the event pixel and its 4 neighbours, `relaxSilentNeighbourhood` integrates the two relations the paper applies at a silent pixel over the elapsed time, in closed form:

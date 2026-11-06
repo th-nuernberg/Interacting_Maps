@@ -511,6 +511,77 @@ TEST_CASE("I uses per-pixel contrast steps and forgets with the derived time con
     REQUIRE_THAT(p.decayParam, WithinAbs(0.06f, 1e-6));   // 1 / (sigma^2 rate), experiments/reports/forgetting.md
 }
 
+// Silence as a bound: 1x1 maps, grad I given directly
+namespace {
+Tensor3f vec(float y, float x) {
+    Tensor3f t(1, 1, 2);
+    t(0, 0, 0) = y;
+    t(0, 0, 1) = x;
+    return t;
+}
+}
+
+TEST_CASE("boundSilentG: without motion or silence G is grad I", "[update][silent][bound]") {
+    Tensor3f G = vec(5, 5);
+    boundSilentG(G, vec(0, 0), vec(0.3f, -2.0f), 0, 0, 0.5f, 1.0f, 0.0f);   // F = 0: no bound
+    REQUIRE(G(0, 0, 0) == 0.3f);
+    REQUIRE(G(0, 0, 1) == -2.0f);
+    boundSilentG(G, vec(0, 100), vec(0.3f, -2.0f), 0, 0, -0.001f, 1.0f, 0.0f);   // inside the refractory time
+    REQUIRE(G(0, 0, 1) == -2.0f);
+}
+
+TEST_CASE("boundSilentG holds G's component along F to the thresholds over the distance travelled", "[update][silent][bound]") {
+    // F = 100 px/s along x, silent 0.05 s: 5 px travelled. OFF threshold 1 -> G_x < 0.2, ON step 1.5 -> G_x > -0.3
+    Tensor3f G(1, 1, 2);
+    boundSilentG(G, vec(0, 100), vec(0.7f, 2.0f), 0, 0, 0.05f, 1.5f, 0.0f);
+    REQUIRE_THAT(G(0, 0, 1), WithinAbs(0.2f, 1e-6));
+    REQUIRE_THAT(G(0, 0, 0), WithinAbs(0.7f, 1e-6));   // across F: untouched
+    boundSilentG(G, vec(0, 100), vec(0.7f, -2.0f), 0, 0, 0.05f, 1.5f, 0.0f);
+    REQUIRE_THAT(G(0, 0, 1), WithinAbs(-0.3f, 1e-6));
+    boundSilentG(G, vec(0, 100), vec(0.7f, 0.1f), 0, 0, 0.05f, 1.5f, 0.0f);   // inside: grad I unchanged
+    REQUIRE_THAT(G(0, 0, 1), WithinAbs(0.1f, 1e-6));
+    boundSilentG(G, vec(0, 100), vec(0.7f, 2.0f), 0, 0, 0.05f, 1.5f, 1.0f);   // slack 1 step: (1 + 1) / 5
+    REQUIRE_THAT(G(0, 0, 1), WithinAbs(0.4f, 1e-6));
+}
+
+TEST_CASE("boundSilentG: the bound is the change brightness constancy allows during the silence", "[update][silent][bound]") {
+    // A diagonal F: the bounded G predicts dI = -(G . F) dt exactly at the OFF threshold
+    Tensor3f G(1, 1, 2);
+    const float dt = 0.02f;
+    boundSilentG(G, vec(300, 400), vec(3.0f, 4.0f), 0, 0, dt, 1.0f, 0.0f);
+    const float dI = -(G(0, 0, 0) * 300 + G(0, 0, 1) * 400) * dt;
+    REQUIRE_THAT(dI, WithinAbs(-1.0f, 1e-5));
+}
+
+TEST_CASE("followGradientNeighbourhood is relaxSilentG in the limit of an infinite G <- I rate", "[update][silent]") {
+    const int n = 5;
+    Tensor2f I(n, n);
+    for (int y = 0; y < n; ++y) for (int x = 0; x < n; ++x) I(y, x) = float(y * y) - 0.5f * float(x);
+    Tensor3f G_follow(n, n, 2), G_relax(n, n, 2), grad(n, n, 2), F(n, n, 2);
+    G_follow.setConstant(7.0f);
+    G_relax.setConstant(7.0f);
+    F.setConstant(1.0f);
+    Tensor2f times(n, n);
+    times.setZero();
+    followGradientNeighbourhood(G_follow, I, grad, 2, 2);
+    relaxSilentNeighbourhood(G_relax, F, I, grad, times, 2, 2, 1.0f, 1e9f, 0.0f);
+    for (const auto &[y, x] : std::vector<std::pair<int, int>>{{2, 2}, {1, 2}, {3, 2}, {2, 1}, {2, 3}}) {
+        REQUIRE_THAT(G_follow(y, x, 0), WithinAbs(G_relax(y, x, 0), 1e-5));
+        REQUIRE_THAT(G_follow(y, x, 1), WithinAbs(G_relax(y, x, 1), 1e-5));
+    }
+    REQUIRE(G_follow(0, 0, 0) == 7.0f);   // outside the neighbourhood: untouched
+    const Tensor3f all = gradientCopy(I);
+    REQUIRE_THAT(all(2, 2, 0), WithinAbs((9.0f - 1.0f) / 2.0f, 1e-6));
+    REQUIRE_THAT(all(2, 2, 1), WithinAbs(-0.5f, 1e-6));
+}
+
+TEST_CASE("G follows grad I between events by default; the bound uses the measured refractory time", "[deviations][silent]") {
+    const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
+    REQUIRE(p.silentRule == "gradient");
+    REQUIRE_THAT(p.refractoryTime, WithinAbs(1.2e-3f, 1e-9));
+    REQUIRE(p.silentSlack == 0.0f);
+}
+
 TEST_CASE("G reset is off and silent relaxation on by default", "[deviations][silent]") {
     const Parameters p = initParameters(0.0f, 1.0f, 0.01f);
     REQUIRE_FALSE(p.resetGEachFrame);

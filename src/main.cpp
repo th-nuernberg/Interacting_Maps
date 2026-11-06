@@ -94,6 +94,9 @@ struct ProgramArgs
     double contrastRatio;
     double contrastPrior;
     float decayTime;
+    std::string silentRule;
+    float refractoryTime;
+    float silentSlack;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -138,7 +141,10 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .contrastSteps     = vm["contrastSteps"].as<std::string>(),
         .contrastRatio     = vm["contrastRatio"].as<double>(),
         .contrastPrior     = vm["contrastPrior"].as<double>(),
-        .decayTime         = vm["decayTime"].as<float>()
+        .decayTime         = vm["decayTime"].as<float>(),
+        .silentRule        = vm["silentRule"].as<std::string>(),
+        .refractoryTime    = vm["refractoryTime"].as<float>(),
+        .silentSlack       = vm["silentSlack"].as<float>()
     };
 }
 
@@ -193,7 +199,10 @@ int main(int argc, char* argv[]) {
             ("contrastSteps", po::value<std::string>()->default_value("pixel"), "Step of an ON event relative to an OFF event (c_ON / c_OFF): equal | fixed | global | pixel")
             ("contrastRatio", po::value<double>()->default_value(1.0), "With contrastSteps fixed: c_ON / c_OFF")
             ("contrastPrior", po::value<double>()->default_value(100.0), "With contrastSteps pixel: pseudo-events of the global ratio per pixel")
-            ("decayTime", po::value<float>()->default_value(0.06f), "Time constant (s) with which I forgets towards 0 (with --decay)");
+            ("decayTime", po::value<float>()->default_value(0.06f), "Time constant (s) with which I forgets towards 0 (with --decay)")
+            ("silentRule", po::value<std::string>()->default_value("gradient"), "With --silentG: gradient (G = grad I when read), rate (relax G at rate_GI/GF_silent) or bound (no event bounds G along F by the thresholds / (|F| dt); falsified at edge fronts)")
+            ("refractoryTime", po::value<float>()->default_value(1.2e-3f), "With silentRule bound: s after an event before silence counts")
+            ("silentSlack", po::value<float>()->default_value(0.0f), "With silentRule bound: widen both thresholds by this many steps");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -238,6 +247,13 @@ int main(int argc, char* argv[]) {
     parameters.seed = args->seed;
     parameters.useDecay = args->decay;
     parameters.decayParam = args->decayTime;
+    parameters.silentRule = args->silentRule;
+    parameters.refractoryTime = args->refractoryTime;
+    parameters.silentSlack = args->silentSlack;
+    if (parameters.silentRule != "gradient" && parameters.silentRule != "rate" && parameters.silentRule != "bound") {
+        std::cerr << "Unknown --silentRule " << parameters.silentRule << " (gradient | rate | bound)" << std::endl;
+        return 1;
+    }
     parameters.clampMaps = args->clamp;
     parameters.resetGEachFrame = args->resetG;
     parameters.silentRelaxation = args->silentG;
@@ -410,7 +426,13 @@ int main(int argc, char* argv[]) {
                         relaxFRNeighbourhood(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, state.old_points,
                                              cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_FR);
                     }
-                    if (parameters.silentRelaxation) {
+                    if (parameters.silentRelaxation && parameters.silentRule == "gradient") {
+                        followGradientNeighbourhood(state.G, state.MI, state.delta_I, cEvent->coordinates[0], cEvent->coordinates[1]);
+                    } else if (parameters.silentRelaxation && parameters.silentRule == "bound") {
+                        boundSilentNeighbourhood(state.G, state.F, state.MI, state.delta_I, state.EventTimeSurface, contrastSteps,
+                                                 cEvent->coordinates[0], cEvent->coordinates[1], event->time,
+                                                 parameters.refractoryTime, parameters.silentSlack);
+                    } else if (parameters.silentRelaxation) {
                         relaxSilentNeighbourhood(state.G, state.F, state.MI, state.delta_I, state.GTimeSurface, cEvent->coordinates[0], cEvent->coordinates[1], event->time, parameters.rate_GI_silent, parameters.rate_GF_silent);
                     }
                     if (dumpEvents) {
@@ -444,6 +466,7 @@ int main(int argc, char* argv[]) {
                                    state.Identity_minus_outerProducts, state.old_points, parameters,
                                    parameters.rotationFromTiming ? noFlowUpdates : permutation, cEvent->coordinates[0], cEvent->coordinates[1]);
                     }
+                    state.EventTimeSurface(cEvent->coordinates[0], cEvent->coordinates[1]) = event->time;   // silence restarts
                     if (!parameters.rotationFromTiming && parameters.asyncFR) {
                         // F <- G and G <- F may have run after F -> R in this step; B must see the final F.
                         register_R_point(state.F, state.CCM, state.dCdx, state.dCdy, state.B, state.Identity_minus_outerProducts, state.old_points,
@@ -513,7 +536,12 @@ int main(int argc, char* argv[]) {
                         const Tensor3f F_now = !parameters.rotationFromTiming && parameters.asyncFR
                             ? relaxedFRCopy(state.F, state.CCM, state.dCdx, state.dCdy, state.R, state.FTimeSurface, event->time, parameters.rate_FR)
                             : state.F;
-                        const Tensor3f G_now = parameters.silentRelaxation
+                        const Tensor3f G_now = parameters.silentRelaxation && parameters.silentRule == "gradient"
+                            ? gradientCopy(MI_now)
+                            : parameters.silentRelaxation && parameters.silentRule == "bound"
+                            ? boundedSilentCopy(F_now, MI_now, state.EventTimeSurface, contrastSteps, event->time,
+                                                parameters.refractoryTime, parameters.silentSlack)
+                            : parameters.silentRelaxation
                             ? relaxedSilentCopy(state.G, F_now, MI_now, state.GTimeSurface, event->time, parameters.rate_GI_silent, parameters.rate_GF_silent)
                             : state.G;
                         float loss = VFG_check(state.V_Vis, F_now, G_now);

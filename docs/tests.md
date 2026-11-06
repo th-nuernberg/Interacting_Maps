@@ -6,7 +6,7 @@ There are three layers:
 
 | Layer | Checks | Ground truth | Where |
 |---|---|---|---|
-| **Unit tests** (57 Catch2 cases, 636 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
+| **Unit tests** (62 Catch2 cases, 661 assertions) | each relation, helper and default does what it should | analytic: hand-built states, limits, equivalences | `tests/` |
 | **Method experiments** (Python) | does an idea work on real data before it is ported? | gyro, DAVIS frames | `experiments/`, reports in `experiments/reports/` |
 | **End-to-end runs** (C++ binary) | does the whole network track the camera, how fast, and did a change break anything? | gyro (display/scoring only), earlier outputs | `output/<run>/`, `experiments/plot_r_vs_gyro.py` |
 
@@ -68,6 +68,11 @@ These check the closed-form "catch up on the time since the last event" rules ag
 | relaxSilentG without G ← F equals repeated update_GI steps | closed form = iterated steps (other relation) |
 | relaxSilentG: V = 0 removes only G's component along F | silence means "no brightness change along F", nothing more |
 | relaxSilentG: stale G at a pixel an edge has left goes to zero | replaces the G reset hack with a justified rule |
+| followGradientNeighbourhood is relaxSilentG in the limit of an infinite G ← I rate | the default `gradient` rule |
+| boundSilentG: without motion or silence G is grad I | `bound` rule, edge cases |
+| boundSilentG holds G's component along F to the thresholds over the distance travelled | asymmetric ON/OFF bound, slack |
+| boundSilentG: the bound is the change brightness constancy allows during the silence | ΔI = −(G·F)Δt at the threshold |
+| G follows grad I between events by default; the bound uses the measured refractory time | defaults |
 
 ### Event-driven F ← R `[async]` `[rotation]`
 
@@ -143,6 +148,7 @@ Each answers one question on `shapes_rotation` before anything is ported. Refere
 | [polarity-check.md](../experiments/reports/polarity-check.md) | Is the network's G good enough to predict event polarity, sign(−G·u)? | 84 % agreement (frames: 96 %); G points the right way (cos 0.92). Errors come from G, not from the motion. Without the I decay, I drifts into its clamp and agreement falls to 70 %. |
 | [contrast-steps.md](../experiments/reports/contrast-steps.md) | Do separate ON/OFF steps make the I decay unnecessary? | They remove the drift of the mean (−73 → −0.5 steps), but I still spreads like a random walk without forgetting (agreement 0.53). The decay forgets accumulated per-event error. With decay: 0.836 → 0.839. |
 | [forgetting.md](../experiments/reports/forgetting.md) | How much error does each event add to I, and how fast must I forget? | σ² = 1.9 steps² per event; per-pixel steps remove the quadratic drift. τ* = 1/(σ²·rate) = 0.06 s is the optimum of a sweep (0.850, was 0.836 at 0.1 s); now the default. |
+| [silent-bound.md](../experiments/reports/silent-bound.md) | What should a silent pixel do to G? | G = ∇I when read equals the inherited rate relaxation (0.850) and is now the default. The bound from silence is falsified at edge fronts (0.752). Refractory time measured: 1.2 ms. |
 
 ## 3. End-to-end runs (C++)
 

@@ -97,6 +97,18 @@ struct Parameters
     bool  silentRelaxation = true;
     float rate_GI_silent   = 22.314355f;
     float rate_GF_silent   = 22.314355f;
+    // What G does between events (docs/assumptions.md G4, experiments/reports/silent-bound.md):
+    // "gradient": G = grad I whenever it is read, its definition; no rates (default).
+    // "rate": relax towards grad I and remove the component along F at rate_GI_silent / rate_GF_silent (former default;
+    // same result in timing mode). "bound": no event for dt means the change of I
+    // stayed between the OFF and ON thresholds, so with dI = -G.F dt, G's component along F is bounded by the
+    // thresholds / (|F| dt). G follows grad I immediately. The silence counts from refractoryTime after the last
+    // event (the pixel cannot fire before; 1.2 ms is the smallest interval on shapes_rotation); silentSlack widens
+    // both thresholds (steps). Falsified at edge fronts: silence bounds G before the edge arrived, not the gradient
+    // that is arriving now, and applying it to the current grad I removes that edge (0.850 -> 0.752).
+    std::string silentRule  = "gradient";  // "gradient", "rate" or "bound"
+    float refractoryTime    = 1.2e-3f;     // s
+    float silentSlack       = 0.0f;        // steps
 
     // Event-driven F <- R: instead of updateIterationsFR global passes per time step, B relaxes in closed form at
     // every event and F is relaxed lazily where it is read. rate_FR [1/s] = -n ln(1 - w) / dt reproduces n synchronous
@@ -144,6 +156,7 @@ struct OpticalFlowState
     Tensor3f F;               // Optical flow
     Tensor3f G;               // Spatial gradient
     Tensor2f GTimeSurface;    // time up to which G's silent-time relaxation has been applied
+    Tensor2f EventTimeSurface;   // time of each pixel's latest event (start time if none)
     Tensor2f FTimeSurface;    // time up to which F's relaxation towards m32(R x C) has been applied
     float    BTime = 0.0f;    // time up to which B's relaxation towards A R has been applied
     Tensor3f delta_I;

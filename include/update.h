@@ -18,6 +18,7 @@
 
 #include <datatypes.h>
 #include <conversions.h>
+#include "contrast.h"
 #include <autodiff/forward/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
 #include <Eigen/src/LU/PartialPivLU.h>
@@ -378,6 +379,40 @@ void relaxSilentNeighbourhood(Tensor3f &G, const Tensor3f &F, const Tensor2f &I,
  * costs only
  */
 Tensor3f relaxedSilentCopy(const Tensor3f &G, const Tensor3f &F, const Tensor2f &I, const Tensor2f &GTimeSurface, const float time, const float rate_GI, const float rate_GF);
+
+/**
+ * G <- I as its definition (Parameters::silentRule = "gradient"): G = grad I at (y, x) and its 4 neighbours, the pixels
+ * event_step reads. The rate_GI -> infinity, rate_GF = 0 limit of relaxSilentG; I must already be decayed to time.
+ */
+void followGradientNeighbourhood(Tensor3f &G, const Tensor2f &I, Tensor3f &I_gradient, int y, int x);
+
+/**
+ * grad I at every pixel (I already decayed to the display time); the display copy of G for silentRule "gradient"
+ */
+Tensor3f gradientCopy(const Tensor2f &I);
+
+/**
+ * Silence as a bound on G (Parameters::silentRule = "bound"). No event at (y, x) for silentTime means the change of I
+ * there stayed between the OFF threshold (-1 step) and the ON threshold (+onStep). With brightness constancy,
+ * dI = -(G . F) dt, so G's component along F is bounded:
+ *     -(onStep + slack) / (|F| dt)  <  G_par  <  (1 + slack) / (|F| dt)
+ * G is set to grad I (its definition) and its component along F is then held to that interval.
+ * @param silentTime time without events, after the refractory time (s); <= 0 means no bound
+ * @param onStep c_ON / c_OFF at this pixel
+ * @param slack widens both thresholds (steps)
+ */
+void boundSilentG(Tensor3f &G, const Tensor3f &F, const Tensor3f &I_gradient, int y, int x, float silentTime, float onStep, float slack);
+
+/**
+ * boundSilentG at (y, x) and its 4 neighbours, each with its own silence since EventTimeSurface (minus the refractory
+ * time) and its own contrast step. I must already be decayed to time.
+ */
+void boundSilentNeighbourhood(Tensor3f &G, const Tensor3f &F, const Tensor2f &I, Tensor3f &I_gradient, const Tensor2f &EventTimeSurface, const ContrastSteps &contrast, int y, int x, float time, float refractoryTime, float slack);
+
+/**
+ * Copy of G with every pixel bounded by its silence up to time (I already decayed to time); for display only
+ */
+Tensor3f boundedSilentCopy(const Tensor3f &F, const Tensor2f &I, const Tensor2f &EventTimeSurface, const ContrastSteps &contrast, float time, float refractoryTime, float slack);
 
 /**
  * Copy of the image intensity with every pixel decayed to the given time; for display and costs only

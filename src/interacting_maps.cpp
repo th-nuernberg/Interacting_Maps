@@ -62,6 +62,8 @@ OpticalFlowState initOpticalFlowState(int height, int width, const Parameters& p
     s.G.setZero();
     s.GTimeSurface = Tensor2f(height, width);
     s.GTimeSurface.setConstant(parameters.startTime);
+    s.EventTimeSurface = Tensor2f(height, width);
+    s.EventTimeSurface.setConstant(parameters.startTime);
     s.FTimeSurface = Tensor2f(height, width);
     s.FTimeSurface.setConstant(parameters.startTime);
     s.BTime = parameters.startTime;

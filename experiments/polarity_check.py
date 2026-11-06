@@ -31,7 +31,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 SURFACE, TEXT, TEXT_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
-SERIES = ["#2a78d6", "#eb6834", "#1baf7a"]          # categorical slots 1-3, fixed order
+SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#8a5cd1", "#d1a21b"]   # categorical slots 1-5, fixed order
 
 DIAGNOSTICS = np.dtype([("t", "f8"), ("y", "f4"), ("x", "f4"), ("p", "f4"), ("G", "f4", 2), ("F", "f4", 2),
                         ("MR", "f4", 2), ("MRgyro", "f4", 2), ("Nvalid", "f4"), ("N", "f4", 2), ("Nspeed", "f4"),

@@ -30,6 +30,7 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 | W9 | **The IMU lags the events by 4 ms.** | measured | This lag maximises corr(event rate, \|ω\|) at 0.77 ([v-units](../experiments/reports/v-units.md)). Applied in plots and scoring only. |
 | W10 | **The gyro is the truth for rotation** (bias and noise ignored). | open | It is the reference for every R score. A bias would show as a constant offset; not checked. |
 | W11 | **Event timestamps are exact,** and the events are in time order. | open | The file is chronological. The C++ code stores times as `float` (see I1). |
+| W12 | **A pixel cannot fire twice within 1.2 ms** (refractory time). | measured | Only 2 in a million per-pixel intervals are shorter, all timestamp duplicates. Used by `--silentRule bound`. |
 
 ## 2. Representation and conventions
 
@@ -59,8 +60,8 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 | G1 | **G = ∇I** at the event pixel and its 4 neighbours after every event (G ← I with weight 1). | `weight_GI` = 1 | inherited ("weights 1") | G points the right way (median cos 0.92 with the frame gradient). It is wrong about 3.5× as often as the frames ([polarity-check](../experiments/reports/polarity-check.md)). Typical \|G\| corresponds to about one event step. |
 | G2 | **F and G are not clamped** (`--clamp` turns the old ±255 / 1e-5 back on). | off (was on) | **physics** since 2026-11-06 | Was inactive in timing mode (the largest \|G\| was 68). In the old pipeline it bounded F = −V/G in flat regions; that now shows as large F where \|G\| ≈ 0. |
 | G3 | **A pixel without events has V = 0**, an observation, not missing data (paper). Strictly, it means \|Δlog I\| < c. | — | physics, approximately | Replaced the G reset hack. Slow or low-contrast changes below c are treated as "no change". |
-| G4 | **Silent relaxation:** G ← I at `rate_GI_silent`, and G loses its component along F at `rate_GF_silent`. | 22.3 /s each | inherited values | The former weight 0.2 per 10 ms, converted to a rate. Open (sweep). In timing mode, only F's direction is used. |
-| G5 | **∇I and F stay constant over a pixel's silent time**, so the silent relaxation can be solved in closed form. | — | approximation | An event two pixels away can change ∇I in between. |
+| G4 | **Between events, G is ∇I** whenever it is read (`--silentRule gradient`). | no parameters (were two rates of 22.3 /s) | **physics** since 2026-11-06 | G's definition. Same result as the inherited rate relaxation in every silence bin (0.850). A bound on G from silence (thresholds / distance travelled) is falsified at edge fronts: it constrains G before the edge arrived, not the arriving edge (0.752) ([silent-bound](../experiments/reports/silent-bound.md)). |
+| G5 | **∇I and F stay constant over a pixel's silent time**, so the silent relaxation can be solved in closed form (`--silentRule rate` only). | — | approximation | Not needed by the default rule. |
 | G6 | G starts at 0. | — | convention | |
 
 ## 5. Old pipeline: F and R from V and G (default when `--rotationFromTiming` is off)

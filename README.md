@@ -97,6 +97,7 @@ Main options (`./InteractingMaps --help` lists all):
 | `--silentG` | true | time without events at a pixel counts as V = 0 for G |
 | `--contrastSteps`, `--contrastRatio` | `pixel`, 1 | step of an ON event relative to an OFF event, c_ON / c_OFF: `equal`, `fixed` (the ratio), `global` or `pixel` (estimated from the event counts) |
 | `--decay`, `--decayTime` | true, 0.06 | I forgets towards 0 with this time constant (s), derived from the error each event adds; see [forgetting.md](experiments/reports/forgetting.md) |
+| `--silentRule` | `gradient` | what G does between events: `gradient` (G = ∇I when read), `rate` (former relaxation), `bound` (silence bounds G along F; falsified at edge fronts), see [silent-bound.md](experiments/reports/silent-bound.md) |
 | `--clamp`, `--resetG` | false, false | deviations from the paper, see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--rotationFromTiming` | false | F and R (rad/s) from the arrival times of edges; see [docs/cpp-implementation.md](docs/cpp-implementation.md) |
 | `--onsetRule`, `--onsetTime` | `depression`, 0.02 | with `--rotationFromTiming`: arrival time per pixel (`latest`, `gap`, `depression`) and its time constant |
@@ -119,6 +120,7 @@ PYTHONPATH=experiments python/.venv/bin/python experiments/v_units.py
 | `experiments/polarity_check.py` | Does the network's G predict event polarity, sign(−G·u)? Needs a C++ run with `--dumpEvents` | [polarity-check.md](experiments/reports/polarity-check.md) |
 | `experiments/contrast_steps.py` | Do separate ON/OFF contrast steps (c_ON ≠ c_OFF) make the I decay unnecessary? | [contrast-steps.md](experiments/reports/contrast-steps.md) |
 | `experiments/forgetting.py` | How much error does each event add to I, and how fast must I forget? | [forgetting.md](experiments/reports/forgetting.md) |
+| `experiments/polarity_check.py` with `--silentRule` runs | What should a silent pixel do to G: relax with rates, follow ∇I, or obey the bound that silence gives? | [silent-bound.md](experiments/reports/silent-bound.md) |
 
 `experiments/event_maps.py` holds the shared maps and relations (event index, onset rules, normal flow) behind small interfaces, so rules can be swapped.
 
