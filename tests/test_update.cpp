@@ -314,6 +314,10 @@ TEST_CASE("F = m32(R x C) with R = -(camera rotation) reproduces projected pixel
     }
 }
 
+TEST_CASE("Timing mode is the default; the legacy pipeline is opt-in", "[deviations]") {
+    REQUIRE(initParameters(0.0f, 1.0f, 0.1f).rotationFromTiming);
+}
+
 TEST_CASE("F and R start at zero by default", "[determinism][deviations]") {
     const Parameters p = initParameters(0.0f, 1.0f, 0.1f);
     REQUIRE_FALSE(p.randomInitialState);

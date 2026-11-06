@@ -16,7 +16,7 @@ sign(-G . u_gyro) = p as a function of tau, for equal and per-pixel contrast ste
 
 Usage (repository root):
     for m in equal pixel; do for tau in 0.01 0.03 0.06 0.1 0.3 1.0; do
-        ./InteractingMaps --startTime 0 --endTime 60 --rotationFromTiming true --writeFrames false --dumpEvents 20 \
+        ./InteractingMaps --startTime 0 --endTime 60 --writeFrames false --dumpEvents 20 \
             --contrastSteps $m --decayTime $tau --resultsDirectory tau_${m}_${tau}; done; done
     python/.venv/bin/python experiments/forgetting.py --sweep 0.01 0.03 0.06 0.1 0.3 1.0
 """

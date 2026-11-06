@@ -83,7 +83,7 @@ struct ProgramArgs
     bool show;
     bool pace;
     bool writeFrames;
-    bool rotationFromTiming;
+    bool legacy;
     std::string onsetRule;
     double onsetTime;
     double evidenceLifetime;
@@ -132,7 +132,7 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .show              = vm["show"].as<bool>(),
         .pace              = vm["pace"].as<bool>(),
         .writeFrames       = vm["writeFrames"].as<bool>(),
-        .rotationFromTiming = vm["rotationFromTiming"].as<bool>(),
+        .legacy            = vm["legacy"].as<bool>(),
         .onsetRule         = vm["onsetRule"].as<std::string>(),
         .onsetTime         = vm["onsetTime"].as<double>(),
         .evidenceLifetime  = vm["evidenceLifetime"].as<double>(),
@@ -191,13 +191,13 @@ int main(int argc, char* argv[]) {
             ("show", po::value<bool>()->default_value(false), "IMAGES builds: stream the V/I/G/F frames to a live window")
             ("pace", po::value<bool>()->default_value(true), "With --show: play back in real time instead of as fast as possible")
             ("writeFrames", po::value<bool>()->default_value(true), "IMAGES builds: write the V/I/G/F frames as PNG files")
-            ("rotationFromTiming", po::value<bool>()->default_value(false), "F and R (rad/s) from the arrival times of edges instead of F <- G, V and the F <-> R loop")
-            ("onsetRule", po::value<std::string>()->default_value("depression"), "With rotationFromTiming: arrival time per pixel, latest | gap | depression")
-            ("onsetTime", po::value<double>()->default_value(0.02), "With rotationFromTiming: depression recovery time or burst gap (s)")
-            ("evidenceLifetime", po::value<double>()->default_value(0.01), "With rotationFromTiming: lifetime of flow measurements (s)")
-            ("evidenceAccumulate", po::value<bool>()->default_value(false), "With rotationFromTiming: add measurements at a pixel instead of replacing them")
-            ("plotRotation", po::value<bool>()->default_value(true), "IMAGES builds with rotationFromTiming: plot R against the gyro (display only) below the maps")
-            ("dumpEvents", po::value<int>()->default_value(0), "With rotationFromTiming: write the maps at every n-th event to event_diagnostics.bin (0 = off)")
+            ("legacy", po::value<bool>()->default_value(false), "Run the legacy pipeline (F <- G, V and the F <-> R loop; F and R without units) instead of timing mode (F in px/s and R in rad/s from the arrival times of edges)")
+            ("onsetRule", po::value<std::string>()->default_value("depression"), "Timing mode: arrival time per pixel, latest | gap | depression")
+            ("onsetTime", po::value<double>()->default_value(0.02), "Timing mode: depression recovery time or burst gap (s)")
+            ("evidenceLifetime", po::value<double>()->default_value(0.01), "Timing mode: lifetime of flow measurements (s)")
+            ("evidenceAccumulate", po::value<bool>()->default_value(false), "Timing mode: add measurements at a pixel instead of replacing them")
+            ("plotRotation", po::value<bool>()->default_value(true), "IMAGES builds, timing mode: plot R against the gyro (display only) below the maps")
+            ("dumpEvents", po::value<int>()->default_value(0), "Timing mode: write the maps at every n-th event to event_diagnostics.bin (0 = off)")
             ("contrastSteps", po::value<std::string>()->default_value("pixel"), "Step of an ON event relative to an OFF event (c_ON / c_OFF): equal | fixed | global | pixel")
             ("contrastRatio", po::value<double>()->default_value(1.0), "With contrastSteps fixed: c_ON / c_OFF")
             ("contrastPrior", po::value<double>()->default_value(100.0), "With contrastSteps pixel: pseudo-events of the global ratio per pixel")
@@ -263,7 +263,7 @@ int main(int argc, char* argv[]) {
     parameters.silentRelaxation = args->silentG;
     parameters.asyncFR = args->asyncFR;
     parameters.fps = args->fps;
-    parameters.rotationFromTiming = args->rotationFromTiming;
+    parameters.rotationFromTiming = !args->legacy;
     parameters.onsetRule = args->onsetRule;
     parameters.onsetTime = args->onsetTime;
     parameters.evidenceLifetime = args->evidenceLifetime;
@@ -320,7 +320,7 @@ int main(int argc, char* argv[]) {
     }
     if (!parameters.rotationFromTiming) {
         std::cout << "Legacy pipeline (F <- G, V and the F <-> R loop): V has no time unit, so F and R have none and R does "
-                     "not track the rotation. Use --rotationFromTiming true for F in px/s and R in rad/s." << std::endl;
+                     "not track the rotation. Without --legacy, timing mode gives F in px/s and R in rad/s." << std::endl;
     }
     if (parameters.rotationFromTiming) {
         state.R.setZero();

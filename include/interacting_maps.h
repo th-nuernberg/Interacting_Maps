@@ -53,7 +53,7 @@ struct Parameters
     int   updateIterationsFR = 4;
     int   event_steps = 1;
 
-    // Legacy pipeline (rotationFromTiming = false): F <- G, V, G <- F, V, the F <-> R loop and gyro fusion. V has no
+    // Legacy pipeline (rotationFromTiming = false, --legacy): F <- G, V, G <- F, V, the F <-> R loop and gyro fusion. V has no
     // time unit there, so F and R have none. Its values below (FR_updates_per_second, updateIterationsFR, event_steps,
     // weight_FG/GF/FR/RF, rate_FR, imuScale, lr) are inherited and are not being grounded; timing mode replaces them.
     // I <- V, I <-> G and G's rules are shared by both pipelines.
@@ -124,7 +124,7 @@ struct Parameters
     // Rotation from event timing (include/timing.h, docs/cpp-implementation.md). Replaces F <- G, V, G <- F, V and
     // the F <-> R loop: F gets evidence from the arrival times of edges, R (rad/s) is fitted to that evidence, and F's
     // stored value combines its evidence with R's prediction. All values are open (sweep on the simulator, M1).
-    bool        rotationFromTiming  = false;
+    bool        rotationFromTiming  = true;    // timing mode (default); false is the legacy pipeline (--legacy)
     std::string onsetRule           = "depression";   // "latest", "gap", "depression"
     double      onsetTime           = 0.02;           // s: depression recovery time constant, or the hard burst gap
     double      onsetUse            = 1.0;            // depression: fraction of the resource an event consumes

@@ -12,7 +12,7 @@ I/G update (src/main.cpp, EventDiagnostics). This script scores:
   4. how often I sits at its clamp bounds (0, 255) around the event.
 
 Usage (repository root):
-    ./InteractingMaps --startTime 0 --endTime 60 --resultsDirectory polarity_default --rotationFromTiming true \\
+    ./InteractingMaps --startTime 0 --endTime 60 --resultsDirectory polarity_default \\
         --writeFrames false --dumpEvents 20            # and e.g. --decay false into polarity_nodecay
     python/.venv/bin/python experiments/polarity_check.py default=output/polarity_default \\
         nodecay=output/polarity_nodecay --stride 20 [--i-bounds 0 255 for runs before I was unbounded]

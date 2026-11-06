@@ -155,7 +155,7 @@ Each answers one question on `shapes_rotation` before anything is ported. Refere
 
 | Check | How | Latest result |
 |---|---|---|
-| **Accuracy vs gyro**, events only (`--rotationFromTiming`) | `experiments/plot_r_vs_gyro.py output/<run>/R.txt`; live in the rotation plot | 60 s: cos median 0.992, mean 0.938; \|ω\| ratio 0.995 [0.86, 1.14]; per-axis corr 0.956 / 0.963 / 0.954 |
+| **Accuracy vs gyro**, events only (timing mode) | `experiments/plot_r_vs_gyro.py output/<run>/R.txt`; live in the rotation plot | 60 s: cos median 0.992, mean 0.938; \|ω\| ratio 0.995 [0.86, 1.14]; per-axis corr 0.956 / 0.963 / 0.954 |
 | Variants | same, with `--fuseR`, `--evidenceAccumulate`, `--onsetRule gap` | mean cos 0.941 / 0.918 / 0.933 |
 | **Regression when the new mode is off** | compare R.txt with the run before the change | bit-identical |
 | **Speed** | `Algorithm took … RTF` line, events loaded into memory first | timing mode RTF 0.26 (unpaced) |

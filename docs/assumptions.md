@@ -65,7 +65,7 @@ Parameter names refer to `Parameters` in [include/interacting_maps.h](../include
 | G5 | **∇I and F stay constant over a pixel's silent time**, so the silent relaxation can be solved in closed form (`--silentRule rate` only). | — | approximation | Not needed by the default rule. |
 | G6 | G starts at 0. | — | convention | |
 
-## 5. Legacy pipeline: F and R from V and G (when `--rotationFromTiming` is off)
+## 5. Legacy pipeline: F and R from V and G (`--legacy true`)
 
 This pipeline is **legacy**: V has no time unit, so F and R have none, and R does not follow the gyro (correlation 0.02). Its inherited values are listed for completeness but are not being grounded; timing mode (section 6) replaces it. It is kept for comparison with the paper.
 
@@ -79,7 +79,7 @@ This pipeline is **legacy**: V has no time unit, so F and R have none, and R doe
 | O6 | One event step per event, with relations in shuffled order; `lr` = 1. | — | legacy | |
 | O7 | Gyro → R needs a scale (`imuScale`). | 1 | legacy, undefined | Meaningless while R has no unit. |
 
-## 6. Timing pipeline (`--rotationFromTiming`)
+## 6. Timing pipeline (default)
 
 | # | Assumption | Value | Status | Evidence / effect |
 |---|---|---|---|---|

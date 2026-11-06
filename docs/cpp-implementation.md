@@ -78,9 +78,11 @@ Approximation: `relaxFR` uses the current R for a pixel's whole silent time, whi
 
 Output frames, the live window (`--show`) and `R.txt` samples run at `--fps` (default 60), independent of `timeStep`.
 
-## Rotation from event timing (`--rotationFromTiming`)
+## Rotation from event timing (timing mode, default)
 
-A switchable mode, off by default, that replaces the per-event F ← G, V and G ← F, V and the F ↔ R loop. The maps and relations live in `include/timing.h` / `src/timing.cpp`. Each map is a struct and each relation a function that takes only the maps it reads and writes, so relations can be swapped or added (e.g. a translation model next to the rotation model).
+The default since 2026-11-06; `--legacy true` runs the pipeline of the paper instead (formerly the default; `--rotationFromTiming true` selected this mode).
+
+The mode that replaces the per-event F ← G, V and G ← F, V and the F ↔ R loop. The maps and relations live in `include/timing.h` / `src/timing.cpp`. Each map is a struct and each relation a function that takes only the maps it reads and writes, so relations can be swapped or added (e.g. a translation model next to the rotation model).
 
 | Map / relation | Implementation | Default |
 |---|---|---|
@@ -100,5 +102,5 @@ On `shapes_rotation` (60 s, events only), R against the gyro, per 1/60 s frame (
 
 See M0 in `TASKS.md` for the full list and status, and [assumptions.md](assumptions.md) for every value the network rests on.
 
-- **Legacy pipeline (`--rotationFromTiming false`): R has no physical unit and does not track the camera rotation** (correlation with the gyro below 0.25). V is a step per event, not a temporal derivative, so F is in px per event; a pixel's event rate does not carry the speed on this sensor (`experiments/reports/v-units.md`). `update_RIMU`'s `imuScale` is therefore undefined. Timing mode solves this for F and R (rad/s, cos 0.99 against the gyro).
+- **Legacy pipeline (`--legacy true`): R has no physical unit and does not track the camera rotation** (correlation with the gyro below 0.25). V is a step per event, not a temporal derivative, so F is in px per event; a pixel's event rate does not carry the speed on this sensor (`experiments/reports/v-units.md`). `update_RIMU`'s `imuScale` is therefore undefined. Timing mode solves this for F and R (rad/s, cos 0.99 against the gyro).
 - **I drifts without the decay:** OFF events outnumber ON events 1.36 : 1 per pixel, i.e. c_ON ≈ 1.36 c_OFF; the decay (τ = 0.06 s, derived in `experiments/reports/forgetting.md`) forgets the error each event adds (`experiments/reports/polarity-check.md`).

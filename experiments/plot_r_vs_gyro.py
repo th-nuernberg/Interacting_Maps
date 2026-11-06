@@ -1,4 +1,4 @@
-"""Plot the network's R (R.txt, rad/s, from --rotationFromTiming) against the gyro (imu.txt).
+"""Plot the network's R (R.txt, rad/s, timing mode) against the gyro (imu.txt).
 
 R is stored as (y, x, z) with R = -(camera angular velocity), so omega = -(R_x, R_y, R_z). The IMU lags the
 events by about 4 ms (experiments/v_units.py).
@@ -37,7 +37,7 @@ def main():
     ap.add_argument("--out", type=Path, default=Path("experiments/results/r_vs_gyro"))
     ap.add_argument("--lag", type=float, default=0.004, help="IMU lag behind the events (s)")
     ap.add_argument("--window", type=float, nargs=2, default=[20.0, 30.0], help="time window of the axis plot (s)")
-    ap.add_argument("--label", default="C++ network, events only (--rotationFromTiming)")
+    ap.add_argument("--label", default="C++ network, events only (timing mode)")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
