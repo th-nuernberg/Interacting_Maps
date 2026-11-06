@@ -77,6 +77,11 @@ struct Parameters
     float minPotential      = -std::numeric_limits<float>::infinity();
     float maxPotential      = std::numeric_limits<float>::infinity();
     float neutralPotential  = 0.0f;
+    // ON and OFF events may stand for different contrasts (c_ON != c_OFF; docs/assumptions.md, W3). I is in units of
+    // c_OFF; an ON event adds c_ON / c_OFF. "equal", "fixed" (contrastRatio), "global" or "pixel" (include/contrast.h).
+    std::string contrastSteps = "equal";
+    double      contrastRatio = 1.0;     // c_ON / c_OFF for "fixed"
+    double      contrastPrior = 100.0;   // "pixel": pseudo-events of the global ratio
     int   vis_counter = -1;
 
     // Deviations from the paper (docs/cpp-implementation.md). Defaults keep the established behaviour.

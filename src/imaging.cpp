@@ -4,6 +4,8 @@
 #include "imaging.h"
 #include "datatypes.h"
 #include "conversions.h"
+#include <cmath>
+#include <sstream>
 
 
 #define PI 3.14159265
@@ -291,9 +293,18 @@ cv::Mat create_colorwheel(int grid_size) {
  * @param cutoff Events with intensity less than cutoff are not visualised
  * @return bgr image of the joined visualisation as opencv matrix
  */
-cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const Tensor3f &G, const Tensor3f &F, const std::string &path = "VIGF", const bool save = false, const float cutoff=0.1) {
+/**
+ * I in event steps to grey: 0 is mid grey, +range steps white, -range steps black (clipped for the display only)
+ */
+cv::Mat steps2grayscale(const MatrixXfRowMajor &I, const float range) {
+    cv::Mat output;
+    eigenToCvMat(I).convertTo(output, CV_8UC1, 127.5 / range, 127.5);
+    return output;
+}
+
+cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const Tensor3f &G, const Tensor3f &F, const std::string &path = "VIGF", const bool save = false, const float cutoff=0.1, const float iRange=5.0f) {
     cv::Mat V_img = V2image(V, cutoff);
-    cv::Mat I_img = frame2grayscale(I);
+    cv::Mat I_img = steps2grayscale(I, iRange);
     cv::Mat G_img = vector_field2image(G);
     cv::Mat F_img = vector_field2image(F);
 
@@ -348,6 +359,26 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
     cvtColor(I_img, I_img, cv::COLOR_GRAY2BGR);
     I_img.copyTo(image(cv::Rect(cols + 15 + colourwheel_size, 5, I_cols, I_rows)));
 
+    // Grey scale of I, in event steps, in the gap left of the I panel
+    const int barX = cols + 15 + colourwheel_size - 18, barTop = 15, barHeight = static_cast<int>(I_rows) - 20;
+    for (int k = 0; k < barHeight; ++k) {
+        const int grey = static_cast<int>(std::lround(255.0 * (barHeight - 1 - k) / (barHeight - 1)));
+        cv::line(image, {barX, barTop + k}, {barX + 9, barTop + k}, cv::Scalar(grey, grey, grey));
+    }
+    cv::rectangle(image, cv::Rect(barX - 1, barTop - 1, 11, barHeight + 2), cv::Scalar(90, 90, 90));
+    const auto label = [&](const std::string &s, int y) {
+        int base = 0;
+        const cv::Size size = cv::getTextSize(s, cv::FONT_HERSHEY_SIMPLEX, 0.32, 1, &base);
+        cv::putText(image, s, {barX - 4 - size.width, y + size.height / 2}, cv::FONT_HERSHEY_SIMPLEX, 0.32,
+                    cv::Scalar(200, 200, 200), 1, cv::LINE_AA);
+    };
+    std::ostringstream top;
+    top << "+" << iRange;
+    label(top.str(), barTop);
+    label("0", barTop + barHeight / 2);
+    label("-" + top.str().substr(1), barTop + barHeight);
+    label("I, events", barTop + barHeight + 12);
+
     // Place G image
     G_img.copyTo(image(cv::Rect(5, rows + 10, cols, rows)));
 
@@ -366,10 +397,10 @@ cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const 
     return image;
 }
 
-void saveImage(const MatrixXfRowMajor &Image, const std::string &path = "Image.png", const bool Imode = true) {
+void saveImage(const MatrixXfRowMajor &Image, const std::string &path = "Image.png", const bool Imode = true, const float iRange = 5.0f) {
     cv::Mat grayImage;
     if (Imode){
-        grayImage = frame2grayscale(Image);
+        grayImage = steps2grayscale(Image, iRange);
         cvtColor(grayImage, grayImage, cv::COLOR_GRAY2BGR);
     }
     else{

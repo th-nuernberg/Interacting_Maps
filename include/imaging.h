@@ -30,11 +30,13 @@ cv::Mat create_circular_band_mask(const cv::Size &image_size, float inner_radius
 
 cv::Mat create_colorwheel(int grid_size);
 
-void saveImage(const MatrixXfRowMajor &Image, const std::string &path, bool Imode);
+void saveImage(const MatrixXfRowMajor &Image, const std::string &path, bool Imode, float iRange);
 
 void saveImage(const Tensor3f &Image, const std::string &path);
 
-cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const Tensor3f &G, const Tensor3f &F, const std::string &path, bool save, float cutoff);
+cv::Mat steps2grayscale(const MatrixXfRowMajor &I, float range);
+
+cv::Mat create_VIGF(const MatrixXfRowMajor &V, const MatrixXfRowMajor &I, const Tensor3f &G, const Tensor3f &F, const std::string &path, bool save, float cutoff, float iRange);
 
 
 cv::Mat createColorbar(double globalMin, double globalMax, int height, int width, int colormapType);

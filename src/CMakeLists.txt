@@ -13,6 +13,7 @@ add_library(interacting_maps_lib
         cost.cpp
         timing.cpp
         rotation_plot.cpp
+        contrast.cpp
 )
 
 target_link_libraries(interacting_maps_lib

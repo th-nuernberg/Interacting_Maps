@@ -15,6 +15,7 @@
 #include "imaging.h"
 #include "timing.h"
 #include "rotation_plot.h"
+#include "contrast.h"
 #include <opencv2/highgui.hpp>
 #include <atomic>
 #include <mutex>
@@ -89,6 +90,9 @@ struct ProgramArgs
     bool evidenceAccumulate;
     bool plotRotation;
     int dumpEvents;
+    std::string contrastSteps;
+    double contrastRatio;
+    double contrastPrior;
 };
 
 std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_description& desc)
@@ -129,7 +133,10 @@ std::optional<ProgramArgs> parseArgs(int argc, char* argv[], const po::options_d
         .evidenceLifetime  = vm["evidenceLifetime"].as<double>(),
         .evidenceAccumulate = vm["evidenceAccumulate"].as<bool>(),
         .plotRotation      = vm["plotRotation"].as<bool>(),
-        .dumpEvents        = vm["dumpEvents"].as<int>()
+        .dumpEvents        = vm["dumpEvents"].as<int>(),
+        .contrastSteps     = vm["contrastSteps"].as<std::string>(),
+        .contrastRatio     = vm["contrastRatio"].as<double>(),
+        .contrastPrior     = vm["contrastPrior"].as<double>()
     };
 }
 
@@ -180,7 +187,10 @@ int main(int argc, char* argv[]) {
             ("evidenceLifetime", po::value<double>()->default_value(0.01), "With rotationFromTiming: lifetime of flow measurements (s)")
             ("evidenceAccumulate", po::value<bool>()->default_value(false), "With rotationFromTiming: add measurements at a pixel instead of replacing them")
             ("plotRotation", po::value<bool>()->default_value(true), "IMAGES builds with rotationFromTiming: plot R against the gyro (display only) below the maps")
-            ("dumpEvents", po::value<int>()->default_value(0), "With rotationFromTiming: write the maps at every n-th event to event_diagnostics.bin (0 = off)");
+            ("dumpEvents", po::value<int>()->default_value(0), "With rotationFromTiming: write the maps at every n-th event to event_diagnostics.bin (0 = off)")
+            ("contrastSteps", po::value<std::string>()->default_value("equal"), "Step of an ON event relative to an OFF event (c_ON / c_OFF): equal | fixed | global | pixel")
+            ("contrastRatio", po::value<double>()->default_value(1.0), "With contrastSteps fixed: c_ON / c_OFF")
+            ("contrastPrior", po::value<double>()->default_value(100.0), "With contrastSteps pixel: pseudo-events of the global ratio per pixel");
 
     auto args = parseArgs(argc, argv, desc);
     if (!args) return 0;
@@ -234,6 +244,9 @@ int main(int argc, char* argv[]) {
     parameters.onsetTime = args->onsetTime;
     parameters.evidenceLifetime = args->evidenceLifetime;
     parameters.evidenceAccumulate = args->evidenceAccumulate;
+    parameters.contrastSteps = args->contrastSteps;
+    parameters.contrastRatio = args->contrastRatio;
+    parameters.contrastPrior = args->contrastPrior;
     OpticalFlowState state = initOpticalFlowState(res.height, res.width, parameters, calibration_data);
 
     // Rotation from event timing: maps O, F evidence and R's sums; relations in include/timing.h
@@ -246,7 +259,11 @@ int main(int argc, char* argv[]) {
     timing::FlowEvidence flowEvidence(res.height, res.width, parameters.evidenceLifetime, parameters.evidenceAccumulate);
     timing::RotationFromFlow rotationFromFlow(parameters.evidenceLifetime);
     const double flowPriorKappa = 1.0 / (parameters.flowPriorSigma * parameters.flowPriorSigma);
-    std::vector<int> noFlowUpdates;   // with rotationFromTiming the event step only updates I and G
+    std::vector<int> noFlowUpdates;
+    ContrastSteps contrastSteps(parameters.contrastSteps, res.height, res.width, parameters.contrastRatio, parameters.contrastPrior);
+    if (parameters.contrastSteps != "equal") {
+        std::cout << "Contrast steps: " << parameters.contrastSteps << " (c_ON / c_OFF)" << std::endl;
+    }   // with rotationFromTiming the event step only updates I and G
 
     // Plot of R against the gyro, for the display only: the gyro never reaches the network unless --fuseR.
     const bool plotRotation = args->plotRotation && parameters.rotationFromTiming && fs::exists(imuPath);
@@ -255,6 +272,9 @@ int main(int argc, char* argv[]) {
     RotationPlot rotationPlot(parameters.startTime, parameters.endTime);
     const double imuLag = 0.004;   // s, IMU behind the events (experiments/v_units.py)
     const int plotHeight = 400;
+    // I is shown from -displayIRange (black) to +displayIRange (white) event steps, the same in every frame; 99.9 % of
+    // event pixels have |I| < 4.6 steps on shapes_rotation (experiments/results/polarity_check).
+    const float displayIRange = 5.0f;
 
     // Diagnostics for experiments/polarity_check.py: the maps at an event pixel just before the event's I/G update
     struct EventDiagnostics {
@@ -359,7 +379,7 @@ int main(int argc, char* argv[]) {
 
                 if (auto* cEvent = dynamic_cast<CameraEvent*>(event.get())) {
                     PROFILE_SCOPE("CAMERA_EVENT");
-                    state.V = static_cast<float>(cEvent->polarity) * parameters.eventContribution;
+                    state.V = contrastSteps.step(cEvent->coordinates[0], cEvent->coordinates[1], cEvent->polarity) * parameters.eventContribution;
 
                     // For Showing the events as an image increase the intensity
                     state.V_Vis(cEvent->coordinates[0], cEvent->coordinates[1]) = state.V;
@@ -503,10 +523,7 @@ int main(int argc, char* argv[]) {
 
                         std::string image_name = "VIGF_" + filename.str() + ".png";
                         fs::path image_path = folder_path / image_name;
-                        // I is in event steps around an unobservable offset; show 0 as mid grey, 10 grey levels per step
-                        const float displayGreyPerEvent = 10.0f;
-                        const Tensor2f I_display = MI_now * displayGreyPerEvent + 128.0f;
-                        cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(I_display), G_now, F_now, image_path, false, 0.1);
+                        cv::Mat vigf = create_VIGF(Tensor2Matrix(state.V_Vis), Tensor2Matrix(MI_now), G_now, F_now, image_path, false, 0.1, displayIRange);
                         if (plotRotation) {
                             // omega = -R, from (y, x, z) storage to (x, y, z)
                             const Eigen::Vector3f omega(-state.R(1), -state.R(0), -state.R(2));
@@ -537,7 +554,7 @@ int main(int argc, char* argv[]) {
                         cost3 = costGI(G_now, state.delta_I);
                         std::cout << "Costs: " << cost1 << " " << cost2 << " " << cost3 << std::endl;
                         if (args->writeFrames) {
-                            saveImage(Tensor2Matrix(MI_now), folder_path / ("frame_" + filename.str() + ".png"), true);
+                            saveImage(Tensor2Matrix(MI_now), folder_path / ("frame_" + filename.str() + ".png"), true, displayIRange);
                         }
                         state.V_Vis.setZero();
                         //randomInit(F, -1, 1);
