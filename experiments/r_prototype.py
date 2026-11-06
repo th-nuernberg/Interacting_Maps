@@ -95,8 +95,11 @@ def normal_flow_all(t, x, y, p, radius=2, horizon=0.03, burst_gap=0.01, chunk=1_
 
 # ----------------------------------------------------------------------------------------------------------------
 
-def basis_flows(calib):
-    """J for every pixel: flow (px/s) for unit angular velocity about x, y, z. Shape (H*W, 2, 3)."""
+def basis_flows(calib, pinhole=False):
+    """J for every pixel: flow (px/s) for unit angular velocity about x, y, z. Shape (H*W, 2, 3).
+    pinhole=True ignores lens distortion, as the C++ model does."""
+    if pinhole:
+        calib = dict(calib, k1=0.0, k2=0.0, p1=0.0, p2=0.0, k3=0.0)
     yy, xx = np.mgrid[0:HEIGHT, 0:WIDTH]
     u, v = xx.ravel().astype(float), yy.ravel().astype(float)
     J = np.zeros((len(u), 2, 3))
@@ -131,7 +134,8 @@ def estimate(t, pix, nx, ny, s, var, J, kappa, tau, t_eval, max_speed):
         age = te - last_t
         active = age < 8 * tau
         w = last_w0[active] * np.exp(-age[active] / tau)
-        we = w / (w + kappa)                      # loop step weight; the steady-state weight is kappa * we
+        # loop step weight; the steady-state weight is kappa * we (just w for kappa = inf, F following omega fully)
+        we = w if np.isinf(kappa) else w / (w + kappa)
         a = last_a[active]
         Hs.append(np.einsum("p,pi,pj->ij", we, a, a))
         bs.append(np.einsum("p,pi,p->i", we, a, last_s[active]))
@@ -189,6 +193,8 @@ def main():
     ap.add_argument("--cache", type=Path, default=Path("experiments/results/v_units/events_cache.npz"))
     ap.add_argument("--max-speed", type=float, default=5000.0, help="discard normal speeds above this (px/s)")
     ap.add_argument("--imu-lag", type=float, default=0.004, help="s, from experiments/v_units.py")
+    ap.add_argument("--step0", action="store_true",
+                    help="only compare the steady state for kappa in {median precision, inf} x J {distorted, pinhole}")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -208,6 +214,22 @@ def main():
     kappa = 1.0 / np.median(sigma_s) ** 2       # model precision = typical measurement precision (open)
     print(f"normal flow for {ok.mean():.0%} of events; median s {np.median(s[ok]):.0f} px/s, "
           f"median sigma_s {np.median(sigma_s):.0f} px/s -> kappa = 1 / ({np.median(sigma_s):.0f} px/s)^2")
+
+    if args.step0:
+        t_eval = np.arange(1.0, t[-1], 1.0 / EVAL_RATE)
+        tau, rows = 0.01, {}
+        for j_label, pinhole in [("distorted", False), ("pinhole", True)]:
+            Jv = basis_flows(calib, pinhole=pinhole)
+            for k_label, k in [("median precision", kappa), ("inf", np.inf)]:
+                H, b, _ = estimate(t, pix, nx, ny, s, var, Jv, k, tau, t_eval, args.max_speed)
+                direct = np.array([np.linalg.lstsq(h, v, rcond=None)[0] for h, v in zip(H, b)])
+                d = gyro_metrics(t_eval, direct, imu, args.imu_lag)
+                rows[f"J {j_label}, kappa {k_label}"] = d
+                print(f"J {j_label:9s} kappa {k_label:16s}: cos median {d['cos_median']:+.3f} mean {d['cos_mean']:+.3f}, "
+                      f"|omega| ratio {d['speed_ratio_median']:.3f} [{d['speed_ratio_iqr'][0]:.2f}, "
+                      f"{d['speed_ratio_iqr'][1]:.2f}], axis corr {np.round(d['axis_corr'], 3)}")
+        (args.out / "step0.json").write_text(json.dumps(dict(tau=tau, kappa=float(kappa), results=rows), indent=2))
+        return
 
     J = basis_flows(calib)
     A_all = np.einsum("pki,pkj->ij", J, J)

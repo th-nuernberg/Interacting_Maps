@@ -49,6 +49,18 @@ Loop with τ = 10 ms, by trips per 1/60 s window:
 4. **Short lifetimes are better here** (τ = 10 ms beats 30 and 100 ms). Old measurements describe a rotation that has already changed. τ trades noise against lag and depends on how fast the motion changes.
 5. **The mean cos (0.92) is below the median (0.99)**, so a few windows are poor. Which ones (slow segments? translation?) is still to be examined.
 
+## Step 0 checks for the C++ port (2026-11-06, `--step0`, τ = 10 ms, steady state)
+
+| J | κ | cos median / mean | \|ω\| ratio median [IQR] |
+|---|---|---|---|
+| with lens distortion | median precision | 0.989 / 0.919 | 0.999 [0.86, 1.16] |
+| with lens distortion | ∞ | 0.991 / 0.933 | 0.978 [0.85, 1.12] |
+| pinhole (as in C++) | median precision | 0.988 / 0.915 | 0.928 [0.78, 1.09] |
+| pinhole (as in C++) | ∞ | 0.990 / 0.927 | 0.901 [0.77, 1.05] |
+
+- **κ = ∞** (F follows R fully) costs nothing measurable. The weights then fade exactly exponentially, so the C++ running sums can be decayed in O(1).
+- **Pinhole J** leaves the direction intact but underestimates |ω| by 7–10 %. The lens has barrel distortion (k1 = −0.37), which compresses the image towards the border, so real pixels there move less than the pinhole model predicts.
+
 ## For the C++ network
 
 - **The trip budget is set by how fast unmeasured pixels follow R.** At the current 644/s, a trip takes about 1.6 ms, which allows about 10 trips per window: cos 0.72 and a ratio of 0.72, i.e. the estimate lags.
