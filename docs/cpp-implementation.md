@@ -80,6 +80,8 @@ Output frames, the live window (`--show`) and `R.txt` samples run at `--fps` (de
 
 ## Rotation from event timing (timing mode, default)
 
+![Maps and relations in timing mode](figures/network_graph.png)
+
 The default since 2026-11-06; `--legacy true` runs the pipeline of the paper instead (formerly the default; `--rotationFromTiming true` selected this mode).
 
 The mode that replaces the per-event F ← G, V and G ← F, V and the F ↔ R loop. The maps and relations live in `include/timing.h` / `src/timing.cpp`. Each map is a struct and each relation a function that takes only the maps it reads and writes, so relations can be swapped or added (e.g. a translation model next to the rotation model).

@@ -4,6 +4,10 @@ An event-based C++ implementation of the Interacting Maps algorithm (Cook et al.
 
 The original algorithm works on frames of accumulated events. This implementation updates the maps **per event** and treats the time between events at a pixel in closed form, so there are no time bins. No code was published with the paper; the implementation follows its description. Deliberate deviations from the paper are switchable and documented in [docs/cpp-implementation.md](docs/cpp-implementation.md).
 
+![Maps and relations of the network in timing mode](docs/figures/network_graph.png)
+
+The maps of the current network and the relations between them, by scope: pixel, regional (a neighbourhood) or global. Drawn by [docs/figures/network_graph.py](docs/figures/network_graph.py).
+
 ## Status
 
 - **Milestone M0** (rework of the C++ implementation, see [TASKS.md](TASKS.md)) is largely done: known implementation flaws are fixed one commit at a time, each with a Catch2 regression test. The network now runs faster than real time (RTF ≈ 0.11 on `shapes_rotation`).
