@@ -5,6 +5,7 @@ res/shapes_rotation/events.txt
 
 # Build artefacts
 build/
+build-*/
 /InteractingMaps
 
 # Experiment results (see docs/validation.md)
